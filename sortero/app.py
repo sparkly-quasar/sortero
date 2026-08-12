@@ -3,11 +3,14 @@ import os, sys, queue, threading, traceback, collections, subprocess
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-from . import library, organize, dupes, fixtags, importer, journal, playlists, auth, paths
+from . import (library, organize, dupes, fixtags, importer, journal, playlists,
+               auth, paths, settings, updates, wizard)
 from .common import human_size
 
 APP = "Sortero"
 PREF = paths.prefs_file()
+
+from .version import __version__
 
 
 # ---------------------------------------------------------------- worker glue
@@ -84,23 +87,95 @@ class Sortero(tk.Tk):
         self.health = None
         self.task = Task(self)
 
+        self._build_menu()
         self._build_header()
         self._build_tabs()
         self._build_footer()
-        if self.root_dir.get() and os.path.isdir(self.root_dir.get()):
-            self.after(300, self.scan)
+        self.after(250, self._first_run)
 
     # -- prefs ------------------------------------------------------------
     def _load_pref(self):
-        try:
-            return open(PREF).read().strip()
-        except OSError:
-            return ""
+        return settings.get("root") or ""
 
     def _save_pref(self):
-        os.makedirs(os.path.dirname(PREF), exist_ok=True)
-        with open(PREF, "w") as fh:
-            fh.write(self.root_dir.get())
+        settings.set("root", self.root_dir.get())
+
+    # -- menus / first run -------------------------------------------------
+    def _build_menu(self):
+        menubar = tk.Menu(self)
+
+        filem = tk.Menu(menubar, tearoff=0)
+        filem.add_command(label="Choose Collection Folder…", command=self.choose)
+        filem.add_command(label="Rescan", accelerator="Cmd-R" if paths.IS_MAC else "Ctrl+R",
+                          command=self.scan)
+        filem.add_separator()
+        filem.add_command(label="Open App Data Folder",
+                          command=lambda: paths.reveal(paths.data_dir()))
+        menubar.add_cascade(label="File", menu=filem)
+
+        helpm = tk.Menu(menubar, tearoff=0, name="help")
+        helpm.add_command(label="Setup Wizard…", command=self.run_wizard)
+        helpm.add_separator()
+        helpm.add_command(label="Check for Updates…",
+                          command=lambda: self.check_updates(quiet=False))
+        self.auto_update = tk.BooleanVar(value=bool(settings.get("check_updates_on_launch")))
+        helpm.add_checkbutton(label="Check Automatically on Launch",
+                              variable=self.auto_update,
+                              command=lambda: settings.set("check_updates_on_launch",
+                                                           self.auto_update.get()))
+        helpm.add_separator()
+        helpm.add_command(label=f"Sortero {__version__}", state="disabled")
+        menubar.add_cascade(label="Help", menu=helpm)
+
+        self.config(menu=menubar)
+        self.bind_all("<Command-r>" if paths.IS_MAC else "<Control-r>",
+                      lambda e: self.scan())
+
+    def _first_run(self):
+        def after_wizard(root_dir):
+            if root_dir:
+                self.root_dir.set(root_dir)
+                self.scan()
+            self._maybe_auto_update()
+
+        w = wizard.maybe_run(self, on_finish=after_wizard)
+        if w is None:
+            if self.root_dir.get() and os.path.isdir(self.root_dir.get()):
+                self.scan()
+            self._maybe_auto_update()
+
+    def run_wizard(self):
+        wizard.Wizard(self, on_finish=lambda d: (self.root_dir.set(d), self.scan())
+                      if d else None)
+
+    def _maybe_auto_update(self):
+        if settings.get("check_updates_on_launch") and updates.due():
+            self.after(2500, lambda: self.check_updates(quiet=True))
+
+    def check_updates(self, quiet=True):
+        """quiet=True only speaks up when there is actually an update."""
+        def work(progress, log):
+            return updates.check()
+
+        def done(res):
+            state = res["state"]
+            if state == "update":
+                if messagebox.askyesno(APP, res["message"] + "\n\nOpen the download page?"):
+                    import webbrowser
+                    webbrowser.open(res["url"])
+            elif not quiet:
+                if state == "private":
+                    if messagebox.askyesno(APP, res["message"] + "\n\nOpen Releases now?"):
+                        import webbrowser
+                        webbrowser.open(res["url"])
+                else:
+                    messagebox.showinfo(APP, res["message"])
+            else:
+                self.log(f"update check: {res['message']}")
+
+        if quiet and self.task.running:
+            return
+        self.task.run(work, done, "Checking for updates")
 
     # -- chrome -----------------------------------------------------------
     def _build_header(self):

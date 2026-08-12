@@ -92,6 +92,21 @@ usually also reaches `TKEY`, but the energy half is stranded somewhere no DJ
 software can sort on. Sortero copies it to **Grouping** as `5A - Energy 6`
 (Camelot + energy), which rekordbox and Mixxx expose as a sortable column.
 
+## First run
+
+A setup wizard walks you through choosing your collection folder, reads it, and
+explains the analysis loop. It appears once; after that Sortero opens straight
+into your library. Reopen it any time from **Help → Setup Wizard…**.
+
+**Help → Check for Updates…** compares your version against the latest GitHub
+release and offers to open the download page. It can also check automatically
+on launch (at most once a day) — toggle that in the same menu.
+
+> While the repository is private, the update check can't read the release list
+> anonymously and will say so. Either make the repo public, or add a GitHub
+> token with `repo` scope to `settings.json` in the app data folder
+> (**File → Open App Data Folder**).
+
 ## Running it
 
 Build the app, then open `Sortero.app` and point it at your collection.

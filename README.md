@@ -1,5 +1,7 @@
 # Sortero
 
+[![License: GPL v3+](https://img.shields.io/badge/License-GPLv3+-blue.svg)](LICENSE)
+
 A macOS app for getting a DJ collection under control: one canonical copy of
 every track, playlists that preserve your curation, clean tags, and an intake
 lane for new music.
@@ -151,10 +153,40 @@ interpreter — see `.github/workflows/release.yml`.
 ./.venv/bin/python run.py
 ```
 
+## Testing mode
+
+For a first big reorganisation, turn on **Testing → Start Testing Session**.
+Everything you do from then on is recorded into a single restore point, saved
+continuously as a `.bak` file, and a banner keeps count of what has changed.
+
+- **Keep All Changes** — make it permanent and delete the backup. Individual
+  operations stay in History and can still be undone one at a time.
+- **Undo Everything in This Session** — put the collection back as it was.
+- **Save Backup As… / Load Backup and Undo…** — the `.bak` is portable and
+  self-contained, so it can undo the work from a different machine or after
+  reinstalling.
+
+The backup holds no audio, only the log: every move, and every tag change with
+its previous value. That's enough to reverse everything, because none of these
+operations ever delete a file.
+
+Reverting restores the folder structure exactly and puts every tag value back.
+Files whose tags were edited won't be byte-identical afterwards — rewriting an
+ID3 tag rebuilds the tag container's padding and frame order. The audio streams
+are bit-identical; verified with a decode-and-compare.
+
 ## Safety
 
 - Dry-run previews on every destructive tab; nothing moves until you confirm.
 - Journals live alongside your other app data: `~/Library/Application Support/Sortero`
   on macOS, `%APPDATA%\\Sortero` on Windows, `$XDG_DATA_HOME/sortero` on Linux.
 - Duplicate removal is quarantine-only — Sortero never calls `unlink` on your music.
-- Back up before the first big reorganisation anyway.
+- Back up before the first big reorganisation anyway — or use Testing mode.
+
+## License
+
+GPL-3.0-or-later — see [LICENSE](LICENSE).
+
+Sortero links [mutagen](https://mutagen.readthedocs.io/), which is GPL-2.0-or-later,
+so distributed builds have to be GPL-compatible. keyring is MIT, and PyInstaller
+is GPLv2 with a linking exception that does not constrain the bundled app.

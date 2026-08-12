@@ -4,7 +4,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 from . import (library, organize, dupes, fixtags, importer, journal, playlists,
-               auth, paths, settings, updates, wizard)
+               auth, paths, settings, updates, wizard, session)
 from .common import human_size
 
 APP = "Sortero"
@@ -90,6 +90,7 @@ class Sortero(tk.Tk):
         self._build_menu()
         self._build_header()
         self._build_tabs()
+        self._build_banner()
         self._build_footer()
         self.after(250, self._first_run)
 
@@ -113,6 +114,19 @@ class Sortero(tk.Tk):
                           command=lambda: paths.reveal(paths.data_dir()))
         menubar.add_cascade(label="File", menu=filem)
 
+        testm = tk.Menu(menubar, tearoff=0)
+        testm.add_command(label="Start Testing Session…", command=self.testing_start)
+        testm.add_separator()
+        testm.add_command(label="Keep All Changes (delete backup)…",
+                          command=self.testing_commit)
+        testm.add_command(label="Undo Everything in This Session…",
+                          command=self.testing_revert)
+        testm.add_separator()
+        testm.add_command(label="Save Backup As…", command=self.testing_export)
+        testm.add_command(label="Load Backup and Undo…", command=self.testing_load)
+        menubar.add_cascade(label="Testing", menu=testm)
+        self.testm = testm
+
         helpm = tk.Menu(menubar, tearoff=0, name="help")
         helpm.add_command(label="Setup Wizard…", command=self.run_wizard)
         helpm.add_separator()
@@ -130,6 +144,141 @@ class Sortero(tk.Tk):
         self.config(menu=menubar)
         self.bind_all("<Command-r>" if paths.IS_MAC else "<Control-r>",
                       lambda e: self.scan())
+
+    # -- testing mode ------------------------------------------------------
+    def _build_banner(self):
+        self.banner = tk.Frame(self, bg="#8a5a00")
+        self.banner_label = tk.Label(self.banner, bg="#8a5a00", fg="white",
+                                     font=("Helvetica", 12, "bold"), pady=6)
+        self.banner_label.pack(side="left", padx=12)
+        tk.Button(self.banner, text="Keep changes", command=self.testing_commit,
+                  highlightbackground="#8a5a00").pack(side="right", padx=6, pady=4)
+        tk.Button(self.banner, text="Undo everything", command=self.testing_revert,
+                  highlightbackground="#8a5a00").pack(side="right", pady=4)
+        self.refresh_banner()
+
+    def refresh_banner(self):
+        sess = session.active()
+        if not sess:
+            self.banner.pack_forget()
+            return
+        s = session.summary(sess)
+        self.banner_label.configure(
+            text=f"TESTING MODE — {s['operations']} operations recorded "
+                 f"({s['moves']} moves, {s['tags']} tag edits). "
+                 f"Nothing is permanent until you keep it.")
+        self.banner.pack(fill="x", before=self.nb)
+
+    def testing_start(self):
+        d = self.require_root()
+        if not d:
+            return
+        if session.active():
+            messagebox.showinfo(APP, "A testing session is already running.")
+            return
+        if not messagebox.askyesno(
+                APP, "Start a testing session?\n\n"
+                     "Everything you do from now on is recorded into one restore "
+                     "point, saved continuously as a .bak file. You can undo the "
+                     "whole lot in one go, or keep it all when you're happy."):
+            return
+        sess = session.start(d)
+        session.export(sess)
+        self.refresh_banner()
+        self.log(f"testing session started: {sess['id']}")
+        messagebox.showinfo(APP, "Testing mode is on.\n\nBackup: "
+                                 f"{session.default_bak_path(sess)}")
+
+    def testing_commit(self):
+        sess = session.active()
+        if not sess:
+            messagebox.showinfo(APP, "No testing session is running.")
+            return
+        s = session.summary(sess)
+        if not messagebox.askyesno(
+                APP, f"Keep all {s['operations']} operations "
+                     f"({s['moves']} moves, {s['tags']} tag edits)?\n\n"
+                     "The combined backup file is deleted. Individual operations "
+                     "stay in History and can still be undone one at a time."):
+            return
+        session.commit(sess, log=self.log)
+        self.refresh_banner()
+        self.tab_history.refresh()
+        messagebox.showinfo(APP, "Changes kept. Testing mode is off.")
+
+    def testing_revert(self):
+        sess = session.active()
+        if not sess:
+            messagebox.showinfo(APP, "No testing session is running.")
+            return
+        s = session.summary(sess)
+        if not messagebox.askyesno(
+                APP, f"Undo everything in this session?\n\n"
+                     f"{s['moves']} moves and {s['tags']} tag edits will be reversed, "
+                     "putting your collection back as it was when testing started."):
+            return
+
+        def work(progress, log):
+            return session.revert_active(log=log)
+
+        def done(res):
+            ok, fail = res
+            self.refresh_banner()
+            self.tab_history.refresh()
+            messagebox.showinfo(APP, f"Reverted {ok} operations."
+                                     + (f"\n{fail} failed." if fail else ""))
+            self.scan()
+
+        self.task.run(work, done, "Undoing session")
+
+    def testing_export(self):
+        sess = session.active()
+        if not sess:
+            messagebox.showinfo(APP, "No testing session is running.")
+            return
+        p = filedialog.asksaveasfilename(
+            title="Save Sortero backup", defaultextension=".bak",
+            initialfile=f"sortero-{sess['id']}.bak",
+            filetypes=[("Sortero backup", "*.bak")])
+        if p:
+            session.export(sess, p)
+            self.log(f"backup saved: {p}")
+            messagebox.showinfo(APP, f"Backup saved to\n{p}")
+
+    def testing_load(self):
+        p = filedialog.askopenfilename(title="Load a Sortero backup",
+                                       filetypes=[("Sortero backup", "*.bak"),
+                                                  ("All files", "*")])
+        if not p:
+            return
+        try:
+            data = session.load(p)
+        except Exception as e:
+            messagebox.showerror(APP, str(e))
+            return
+        d = session.describe(data)
+        import time as _t
+        when = _t.strftime("%Y-%m-%d %H:%M", _t.localtime(d["started"])) if d["started"] else "unknown"
+        if not messagebox.askyesno(
+                APP, f"Undo everything in this backup?\n\n"
+                     f"Recorded: {when}\nCollection: {d['root']}\n"
+                     f"{d['operations']} operations — {d['moves']} moves, "
+                     f"{d['tags']} tag edits.\n\n"
+                     "Files are moved back and tags restored to their old values."):
+            return
+
+        def work(progress, log):
+            return session.revert_backup(data, log=log)
+
+        def done(res):
+            ok, fail = res
+            self.refresh_banner()
+            self.tab_history.refresh()
+            messagebox.showinfo(APP, f"Reverted {ok} operations."
+                                     + (f"\n{fail} failed." if fail else ""))
+            self.scan()
+
+        self.task.run(work, done, "Restoring from backup")
 
     def _first_run(self):
         def after_wizard(root_dir):
@@ -252,6 +401,7 @@ class Sortero(tk.Tk):
                       self.tab_import, self.tab_needs, self.tab_playlists):
                 t.invalidate()
             self.log(f"Scanned {len(self.recs)} files in {d}")
+            self.refresh_banner()
 
         self.task.run(work, done, "Scanning library")
 

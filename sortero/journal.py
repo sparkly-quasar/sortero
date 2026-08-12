@@ -42,6 +42,14 @@ class Journal:
             json.dump({"id": self.id, "kind": self.kind, "root": self.root,
                        "started": self.started, "finished": time.time(),
                        "entries": self.entries}, fh, indent=1)
+        # If testing mode is running, this operation joins its restore point.
+        try:
+            from . import session
+            session.record(self.path)
+            if session.active():
+                session.export()
+        except Exception:
+            pass
         return self.path
 
 

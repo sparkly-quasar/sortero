@@ -27,6 +27,7 @@ class Track:
             a = mutagen.File(path)
         except Exception:
             a = None
+        self._mf = a            # kept so length/bitrate don't reopen the file
         if isinstance(a, (FLAC, OggVorbis)):
             self.kind, self.audio = "vorbis", a
         elif isinstance(a, MP4):
@@ -46,14 +47,18 @@ class Track:
         return self.audio is not None
 
     @property
+    def bitrate(self):
+        """Nominal bitrate in bits/sec, or 0 when unavailable."""
+        try:
+            return int(getattr(self._mf.info, "bitrate", 0) or 0)
+        except Exception:
+            return 0
+
+    @property
     def length(self):
         """Duration in seconds, or 0.0 when unavailable."""
         try:
-            if self.kind in ("vorbis", "mp4") and self.audio is not None:
-                return float(self.audio.info.length)
-            import mutagen
-            a = mutagen.File(self.path)
-            return float(a.info.length) if a is not None else 0.0
+            return float(self._mf.info.length)
         except Exception:
             return 0.0
 

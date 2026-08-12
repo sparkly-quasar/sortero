@@ -296,6 +296,36 @@ def write_playlists(root, playlists, journal=None, dry=False):
     return written
 
 
+def stage_for_analysis(root, recs, log=print, progress=None):
+    """Move chosen tracks into 'To Be Processed' for Platinum Notes / Mixed In Key."""
+    j = Journal("stage-for-analysis", root)
+    dest_dir = os.path.join(root, "To Be Processed")
+    total = len(recs) or 1
+    n = 0
+    for i, r in enumerate(recs):
+        if progress and i % 10 == 0:
+            progress(i, total)
+        try:
+            os.makedirs(dest_dir, exist_ok=True)
+            dest = os.path.join(dest_dir, target_filename(r))
+            stem, ext = os.path.splitext(dest)
+            c = 1
+            while os.path.exists(dest):
+                c += 1
+                dest = f"{stem} ({c}){ext}"
+            shutil.move(r.path, dest)
+            j.moved(r.path, dest)
+            n += 1
+        except Exception as e:
+            log(f"  ! {os.path.basename(r.path)}: {e}")
+    prune_empty(root, keep=PROTECTED)
+    if progress:
+        progress(total, total)
+    path = j.save()
+    log(f"staged {n} tracks in 'To Be Processed' | journal: {path}")
+    return path, n
+
+
 def apply(root, moves, playlists, log=print, progress=None):
     """Execute the plan. Returns the saved journal path."""
     j = Journal("organize", root)

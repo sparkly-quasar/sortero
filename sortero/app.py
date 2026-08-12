@@ -122,12 +122,13 @@ class Sortero(tk.Tk):
         self.tab_tags = TagsTab(self.nb, self)
         self.tab_dupes = DupesTab(self.nb, self)
         self.tab_import = ImportTab(self.nb, self)
+        self.tab_needs = NeedsWorkTab(self.nb, self)
         self.tab_playlists = PlaylistTab(self.nb, self)
         self.tab_history = HistoryTab(self.nb, self)
         for t, n in [(self.tab_overview, "Overview"), (self.tab_organize, "Organise"),
                      (self.tab_tags, "Tags"), (self.tab_dupes, "Duplicates"),
-                     (self.tab_import, "Import"), (self.tab_playlists, "Playlists"),
-                     (self.tab_history, "History")]:
+                     (self.tab_import, "Import"), (self.tab_needs, "Needs Work"),
+                     (self.tab_playlists, "Playlists"), (self.tab_history, "History")]:
             self.nb.add(t, text=n)
 
     def _build_footer(self):
@@ -173,7 +174,7 @@ class Sortero(tk.Tk):
             self.recs, self.health = res
             self.tab_overview.render(self.health)
             for t in (self.tab_organize, self.tab_tags, self.tab_dupes,
-                      self.tab_import, self.tab_playlists):
+                      self.tab_import, self.tab_needs, self.tab_playlists):
                 t.invalidate()
             self.log(f"Scanned {len(self.recs)} files in {d}")
 
@@ -673,6 +674,150 @@ class ImportTab(BaseTab):
             self.app.scan()
 
         self.app.task.run(work, done, "Importing")
+
+
+class NeedsWorkTab(BaseTab):
+    """Find and act on tracks whose metadata still needs outside help."""
+
+    FILTERS = [
+        ("Missing key or BPM — needs Platinum Notes + Mixed In Key",
+         lambda r: not r.analyzed),
+        ("Missing key only", lambda r: not r.key),
+        ("Missing BPM only", lambda r: not r.bpm),
+        ("No energy rating", lambda r: r.energy is None),
+        ("Missing genre", lambda r: not r.genre),
+        ("Missing artist", lambda r: not r.artist),
+        ("Low bitrate (under 192 kbps)", lambda r: 0 < getattr(r, "bitrate", 0) < 192000),
+    ]
+
+    def build(self):
+        ttk.Label(self, foreground="#666", wraplength=980, justify="left",
+                  text="Everything here needs something Sortero can't compute itself. "
+                       "Pick a filter, select the tracks you want, then stage them in "
+                       "'To Be Processed' — drop that folder into Platinum Notes and "
+                       "Mixed In Key, and when they land in 'Processed' the Import tab "
+                       "files them automatically."
+                  ).pack(anchor="w", pady=(0, 8))
+
+        row = ttk.Frame(self)
+        row.pack(fill="x", pady=(0, 8))
+        ttk.Label(row, text="Show").pack(side="left")
+        self.filter_var = tk.StringVar(value=self.FILTERS[0][0])
+        box = ttk.Combobox(row, textvariable=self.filter_var, width=52, state="readonly",
+                           values=[f[0] for f in self.FILTERS])
+        box.pack(side="left", padx=6)
+        box.bind("<<ComboboxSelected>>", lambda e: self.refresh())
+        ttk.Button(row, text="Select all", command=self.select_all).pack(side="left", padx=6)
+        ttk.Button(row, text="Reveal selected",
+                   command=self.reveal).pack(side="left")
+        self.count = ttk.Label(row, text="", foreground="#444")
+        self.count.pack(side="left", padx=12)
+
+        row0 = ttk.Frame(self)
+        row0.pack(fill="x", pady=(0, 6))
+        self.skip_mixes = tk.BooleanVar(value=True)
+        ttk.Checkbutton(row0, text="Hide your set recordings "
+                                   "(the Recorded Mixes folder, and anything over 20 minutes)",
+                        variable=self.skip_mixes,
+                        command=self.refresh).pack(side="left")
+
+        row2 = ttk.Frame(self)
+        row2.pack(fill="x", pady=(0, 8))
+        self.stage_btn = ttk.Button(row2, text="Stage selected in 'To Be Processed'",
+                                    command=self.stage, state="disabled")
+        self.stage_btn.pack(side="left")
+        ttk.Button(row2, text="Copy list", command=self.copy).pack(side="left", padx=8)
+
+        f, self.tv = tree(self, ("Track", "Key", "BPM", "Energy", "Genre", "Where"),
+                          (330, 60, 60, 60, 150, 300), height=15)
+        f.pack(fill="both", expand=True)
+        self.tv.bind("<<TreeviewSelect>>", lambda e: self._sync())
+        self.rows = []
+
+    def invalidate(self):
+        self.refresh()
+
+    def _predicate(self):
+        for label, fn in self.FILTERS:
+            if label == self.filter_var.get():
+                return fn
+        return self.FILTERS[0][1]
+
+    def refresh(self):
+        self.tv.delete(*self.tv.get_children())
+        self.rows = []
+        if not self.app.recs:
+            self.count.configure(text="")
+            return
+        pred = self._predicate()
+        skip_mixes = self.skip_mixes.get()
+        for r in self.app.recs:
+            if r.protected or not pred(r):
+                continue
+            # Your own set recordings are never candidates for analysis.
+            if skip_mixes and (r.is_recording or
+                               (r.duration and r.duration >= organize.MIX_MIN_SECONDS)):
+                continue
+            self.rows.append(r)
+            self.tv.insert("", "end", values=(
+                r.display[:80], r.camelot or r.key or "—", r.bpm or "—",
+                r.energy if r.energy is not None else "—",
+                (r.genre or "—")[:28], os.path.dirname(r.rel) or "(root)"))
+        self.count.configure(text=f"{len(self.rows)} tracks")
+        self._sync()
+
+    def _sync(self):
+        n = len(self.tv.selection())
+        self.stage_btn.configure(state="normal" if n else "disabled")
+        if n:
+            self.count.configure(text=f"{len(self.rows)} tracks · {n} selected")
+        else:
+            self.count.configure(text=f"{len(self.rows)} tracks")
+
+    def select_all(self):
+        self.tv.selection_set(self.tv.get_children())
+        self._sync()
+
+    def _selected_recs(self):
+        return [self.rows[self.tv.index(i)] for i in self.tv.selection()]
+
+    def reveal(self):
+        recs = self._selected_recs()
+        if not recs:
+            messagebox.showinfo(APP, "Select a track first.")
+            return
+        paths.reveal(recs[0].path)
+
+    def copy(self):
+        recs = self._selected_recs() or self.rows
+        if not recs:
+            return
+        self.clipboard_clear()
+        self.clipboard_append("\n".join(r.display for r in recs))
+        messagebox.showinfo(APP, f"Copied {len(recs)} track names.")
+
+    def stage(self):
+        recs = self._selected_recs()
+        if not recs:
+            return
+        if not messagebox.askyesno(
+                APP, f"Move {len(recs)} tracks into 'To Be Processed'?\n\n"
+                     "Run them through Platinum Notes and Mixed In Key, save the "
+                     "results into 'Processed', then use Import → \"Sort the "
+                     "'Processed' folder\".\n\nReversible from History."):
+            return
+        root = self.app.root_dir.get()
+
+        def work(progress, log):
+            return organize.stage_for_analysis(root, recs, log=log, progress=progress)
+
+        def done(res):
+            path, n = res
+            messagebox.showinfo(APP, f"Staged {n} tracks in 'To Be Processed'.")
+            self.app.tab_history.refresh()
+            self.app.scan()
+
+        self.app.task.run(work, done, "Staging tracks")
 
 
 class PlaylistTab(BaseTab):

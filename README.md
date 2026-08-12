@@ -45,7 +45,20 @@ DJ Collection/
 | **Tags** | Strips download-site spam from Genre/Comment, infers missing Artist/Title from filenames, normalises Genre, and promotes Mixed In Key energy into the sortable Grouping field. |
 | **Duplicates** | Exact (identical audio) and Likely (same artist/title/version, same length). Different remixes are never grouped. Extras move to `_Quarantine`. |
 | **Import** | Add files or folders. Analysed tracks go straight to `Tracks/<Genre>`; anything missing key/BPM lands in `To Be Processed`. Tracks already in the library are flagged, not copied. **"Sort the 'Processed' folder"** files everything you've already run through PN and MIK. |
+| **Needs Work** | Everything Sortero can't fix by itself, filtered by what's missing (key/BPM, energy, genre, artist, low bitrate). Select tracks and stage them in `To Be Processed` for Platinum Notes and Mixed In Key. Your own set recordings are excluded. |
+| **Playlists** | Rebuild a Spotify or TIDAL playlist against your local files, or rebuild the folder playlists. |
 | **History** | Every operation, with one-click undo. |
+
+## The analysis loop
+
+Sortero can compute genre, artist and titles, but not key, BPM or energy —
+those need Mixed In Key and Platinum Notes. The **Needs Work** tab closes that
+loop:
+
+1. Filter by *Missing key or BPM* and select what you want.
+2. **Stage selected in 'To Be Processed'.**
+3. Run that folder through Platinum Notes and Mixed In Key, saving into `Processed`.
+4. **Import → "Sort the 'Processed' folder"** files them by genre automatically.
 
 ## Streaming playlists
 

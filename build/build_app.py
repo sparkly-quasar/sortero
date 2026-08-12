@@ -89,7 +89,11 @@ def main():
         # Ad-hoc signature so Gatekeeper will run it locally.
         subprocess.run(["codesign", "--force", "--deep", "--sign", "-", app],
                        capture_output=True)
-        arch = "-".join(mac_arches(os.path.join(app, "Contents", "MacOS", "Sortero"))) or "unknown"
+        arches = mac_arches(os.path.join(app, "Contents", "MacOS", "Sortero"))
+        if "x86_64" in arches and "arm64" in arches:
+            arch = "universal2"
+        else:
+            arch = "-".join(arches) or "unknown"
         zip_path = os.path.join(DIST, f"Sortero-macOS-{arch}.zip")
         print("==> zipping (ditto preserves the bundle)")
         subprocess.run(["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent",

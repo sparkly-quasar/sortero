@@ -8,8 +8,9 @@ from .tagio import Track
 # areas, plus Sortero's own quarantine.
 PROTECTED = {"To Be Processed", "Processed", "_Quarantine", "_Playlists"}
 
-# Folders that hold full releases / recordings rather than individual DJ tracks.
-NON_TRACK_HINTS = re.compile(r"(?i)^(recorded mixes|renaissance|compilations)")
+# Folders holding your own recordings rather than tracks to play. Nothing in
+# here ever needs Mixed In Key / Platinum Notes analysis.
+RECORDING_DIRS = {"Recorded Mixes", "Mixes", "Recordings"}
 
 
 @dataclass
@@ -27,6 +28,7 @@ class Rec:
     comment: str = None
     album: str = None
     duration: float = 0.0
+    bitrate: int = 0
     protected: bool = False
 
     @property
@@ -45,6 +47,11 @@ class Rec:
                 if m:
                     return int(m.group(1))
         return None
+
+    @property
+    def is_recording(self):
+        """A recording of a set, not a track to mix with."""
+        return any(p in RECORDING_DIRS for p in self.rel.split(os.sep))
 
     @property
     def analyzed(self):
@@ -101,6 +108,7 @@ def scan(root, progress=None):
             r.comment = _clean(t.get("comment"))
             r.album = _clean(t.get("album"))
             r.duration = t.length or 0.0
+            r.bitrate = t.bitrate or 0
         if not r.artist or not r.title:
             a, ti = split_artist_title(clean_stem(p))
             r.artist = r.artist or a
@@ -136,7 +144,7 @@ def health(recs):
         "spam_genre": spam_genre,
         "spam_comment": spam_comment,
         "no_energy": [r for r in live if r.energy is None],
-        "low_bitrate": [],
+        "low_bitrate": [r for r in live if 0 < r.bitrate < 192000],
         "genres": collections.Counter(r.genre for r in live if r.genre and not is_spam(r.genre)),
         "keys": collections.Counter(r.camelot for r in live if r.camelot),
         "tops": collections.Counter(r.top for r in recs),

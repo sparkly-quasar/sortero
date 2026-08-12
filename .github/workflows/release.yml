@@ -1,0 +1,87 @@
+name: Build and release
+
+# Push a tag like v0.1.0 to build all three platforms and attach them to a
+# GitHub release. Also runnable by hand from the Actions tab.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and release (e.g. v0.1.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            name: macOS-universal2
+            args: "--universal2"
+          - os: windows-latest
+            name: windows-x86_64
+            args: ""
+          - os: ubuntu-22.04
+            name: linux-x86_64
+            args: ""
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # setup-python ships the python.org macOS build, which is universal2 -
+      # that is what makes the universal Mac app possible.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Tk (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y python3-tk
+
+      - name: Create venv and install deps
+        shell: bash
+        run: |
+          python -m venv .venv
+          if [ "$RUNNER_OS" = "Windows" ]; then PY=.venv/Scripts/python.exe; else PY=.venv/bin/python; fi
+          $PY -m pip install -q --upgrade pip
+          $PY -m pip install -q mutagen keyring pyinstaller
+
+      - name: Build
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then PY=.venv/Scripts/python.exe; else PY=.venv/bin/python; fi
+          $PY build/build_app.py ${{ matrix.args }}
+
+      - name: Verify macOS binary is universal
+        if: runner.os == 'macOS'
+        run: |
+          BIN=build/dist/Sortero.app/Contents/MacOS/Sortero
+          lipo -archs "$BIN"
+          lipo -archs "$BIN" | grep -q x86_64 && lipo -archs "$BIN" | grep -q arm64 \
+            || { echo "not universal"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Sortero-${{ matrix.name }}
+          path: build/dist/*.zip
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: Sortero ${{ github.event.inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          files: artifacts/**/*.zip

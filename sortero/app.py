@@ -3,11 +3,11 @@ import os, sys, queue, threading, traceback, collections, subprocess
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-from . import library, organize, dupes, fixtags, importer, journal
+from . import library, organize, dupes, fixtags, importer, journal, playlists, auth, paths
 from .common import human_size
 
 APP = "Sortero"
-PREF = os.path.expanduser("~/Library/Application Support/Sortero/prefs.txt")
+PREF = paths.prefs_file()
 
 
 # ---------------------------------------------------------------- worker glue
@@ -122,10 +122,12 @@ class Sortero(tk.Tk):
         self.tab_tags = TagsTab(self.nb, self)
         self.tab_dupes = DupesTab(self.nb, self)
         self.tab_import = ImportTab(self.nb, self)
+        self.tab_playlists = PlaylistTab(self.nb, self)
         self.tab_history = HistoryTab(self.nb, self)
         for t, n in [(self.tab_overview, "Overview"), (self.tab_organize, "Organise"),
                      (self.tab_tags, "Tags"), (self.tab_dupes, "Duplicates"),
-                     (self.tab_import, "Import"), (self.tab_history, "History")]:
+                     (self.tab_import, "Import"), (self.tab_playlists, "Playlists"),
+                     (self.tab_history, "History")]:
             self.nb.add(t, text=n)
 
     def _build_footer(self):
@@ -170,7 +172,8 @@ class Sortero(tk.Tk):
         def done(res):
             self.recs, self.health = res
             self.tab_overview.render(self.health)
-            for t in (self.tab_organize, self.tab_tags, self.tab_dupes, self.tab_import):
+            for t in (self.tab_organize, self.tab_tags, self.tab_dupes,
+                      self.tab_import, self.tab_playlists):
                 t.invalidate()
             self.log(f"Scanned {len(self.recs)} files in {d}")
 
@@ -555,8 +558,18 @@ class ImportTab(BaseTab):
         ttk.Checkbutton(btns, text="Move (uncheck to copy)", variable=self.move_var).pack(side="left", padx=12)
         self.apply_btn = ttk.Button(btns, text="Import", command=self.apply, state="disabled")
         self.apply_btn.pack(side="left", padx=8)
-        self.summary = ttk.Label(btns, text="", foreground="#444")
-        self.summary.pack(side="left", padx=10)
+
+        pl = ttk.Frame(self)
+        pl.pack(fill="x", pady=(0, 8))
+        ttk.Label(pl, text="Add imported tracks to playlist").pack(side="left")
+        self.playlist_var = tk.StringVar()
+        self.playlist_box = ttk.Combobox(pl, textvariable=self.playlist_var, width=44)
+        self.playlist_box.pack(side="left", padx=6)
+        ttk.Label(pl, foreground="#666",
+                  text="optional — pick an existing playlist or type a new name").pack(side="left")
+
+        self.summary = ttk.Label(self, text="", foreground="#444")
+        self.summary.pack(anchor="w", pady=(0, 4))
 
         f, self.tv = tree(self, ("Action", "Track", "Destination", "Why"),
                           (100, 300, 330, 260), height=16)
@@ -565,7 +578,9 @@ class ImportTab(BaseTab):
         self.exclude = None      # library folder being intaken, if any
 
     def invalidate(self):
-        pass
+        root = self.app.root_dir.get()
+        if root and os.path.isdir(root):
+            self.playlist_box.configure(values=playlists.existing(root))
 
     def clear(self):
         self.sources, self.results, self.exclude = [], None, None
@@ -634,18 +649,245 @@ class ImportTab(BaseTab):
             return
         root = self.app.root_dir.get()
         results, move = self.results, self.move_var.get()
+        plname = self.playlist_var.get().strip()
 
         def work(progress, log):
-            return importer.apply(root, results, move=move, log=log, progress=progress)
+            path, n = importer.apply(root, results, move=move, log=log, progress=progress)
+            added = 0
+            if plname:
+                # the importer may rename on collision, so use what landed on disk
+                dests = [x["dest"] for x in results if x["dest"]]
+                dests = [d for d in dests if os.path.exists(d)]
+                _, added = playlists.append(root, plname, dests)
+                log(f"added {added} tracks to playlist '{plname}'")
+            return path, n, added
 
         def done(res):
-            path, n = res
-            messagebox.showinfo(APP, f"Imported {n} files.")
+            path, n, added = res
+            msg = f"Imported {n} files."
+            if plname:
+                msg += f"\nAdded {added} to '{plname}'."
+            messagebox.showinfo(APP, msg)
             self.clear()
             self.app.tab_history.refresh()
             self.app.scan()
 
         self.app.task.run(work, done, "Importing")
+
+
+class PlaylistTab(BaseTab):
+    """Rebuild a curated streaming playlist against the local collection."""
+
+    def build(self):
+        ttk.Label(self, foreground="#666", wraplength=980, justify="left",
+                  text="Paste a Spotify or TIDAL playlist link. Sortero matches each "
+                       "track to a file you already have and writes an .m3u8 you can "
+                       "import into rekordbox or Mixxx. Connect an account below to "
+                       "read full playlists of any length; without it, Spotify links "
+                       "fall back to a public preview capped at 50 tracks and TIDAL "
+                       "links need connecting. Pasting a tracklist always works."
+                  ).pack(anchor="w", pady=(0, 8))
+
+        conn = ttk.LabelFrame(self, text="Accounts", padding=8)
+        conn.pack(fill="x", pady=(0, 8))
+        ttk.Label(conn, foreground="#666", wraplength=960, justify="left",
+                  text=f"One-time setup: create a free app at developer.tidal.com or "
+                       f"developer.spotify.com/dashboard, add the redirect URI "
+                       f"{auth.REDIRECT_URI} to it, and paste its Client ID here. You sign "
+                       f"in on their website — Sortero never sees your password, and tokens "
+                       f"are kept in your macOS Keychain."
+                  ).pack(anchor="w", pady=(0, 6))
+        self.client_ids, self.conn_labels = {}, {}
+        for pid in ("tidal", "spotify"):
+            cfg = auth.PROVIDERS[pid]
+            r = ttk.Frame(conn)
+            r.pack(fill="x", pady=2)
+            ttk.Label(r, text=cfg["label"], width=9).pack(side="left")
+            v = tk.StringVar()
+            self.client_ids[pid] = v
+            ttk.Entry(r, textvariable=v, width=42).pack(side="left", padx=4)
+            ttk.Label(r, text="Client ID", foreground="#888").pack(side="left")
+            ttk.Button(r, text=f"Connect {cfg['label']}…",
+                       command=lambda p=pid: self.connect(p)).pack(side="left", padx=8)
+            ttk.Button(r, text="Disconnect",
+                       command=lambda p=pid: self.disconnect(p)).pack(side="left")
+            lab = ttk.Label(r, text="", foreground="#666")
+            lab.pack(side="left", padx=8)
+            self.conn_labels[pid] = lab
+        self._refresh_conn()
+
+        row = ttk.Frame(self)
+        row.pack(fill="x", pady=(0, 6))
+        ttk.Label(row, text="Link").pack(side="left")
+        self.url = tk.StringVar()
+        ttk.Entry(row, textvariable=self.url).pack(side="left", fill="x", expand=True, padx=6)
+        ttk.Button(row, text="Fetch", command=self.fetch_url).pack(side="left")
+        ttk.Button(row, text="Load CSV…", command=self.load_csv).pack(side="left", padx=6)
+
+        ttk.Label(self, text="…or paste a tracklist, one per line",
+                  foreground="#666").pack(anchor="w")
+        self.paste = tk.Text(self, height=5, font=("Menlo", 10), wrap="none")
+        self.paste.pack(fill="x", pady=(2, 6))
+
+        row2 = ttk.Frame(self)
+        row2.pack(fill="x", pady=(0, 8))
+        ttk.Button(row2, text="Match pasted list", command=self.fetch_text).pack(side="left")
+        ttk.Label(row2, text="   Playlist name").pack(side="left")
+        self.name = tk.StringVar()
+        ttk.Entry(row2, textvariable=self.name, width=32).pack(side="left", padx=6)
+        self.create_btn = ttk.Button(row2, text="Create playlist",
+                                     command=self.create, state="disabled")
+        self.create_btn.pack(side="left", padx=6)
+        ttk.Button(row2, text="Rebuild folder playlists",
+                   command=self.rebuild).pack(side="right")
+
+        self.summary = ttk.Label(self, text="", foreground="#444")
+        self.summary.pack(anchor="w", pady=(0, 4))
+        f, self.tv = tree(self, ("Match", "From playlist", "Matched file"),
+                          (110, 380, 470), height=13)
+        f.pack(fill="both", expand=True)
+        self.results = None
+
+    def invalidate(self):
+        self.results = None
+        self.create_btn.configure(state="disabled")
+
+    # -- accounts ----------------------------------------------------------
+    def _refresh_conn(self):
+        for pid, lab in self.conn_labels.items():
+            tok = auth.load_tokens(pid)
+            lab.configure(text="connected" if tok else "not connected",
+                          foreground="#3a3" if tok else "#888")
+            if tok and tok.get("client_id") and not self.client_ids[pid].get():
+                self.client_ids[pid].set(tok["client_id"])
+
+    def connect(self, pid):
+        cid = self.client_ids[pid].get().strip()
+        label = auth.PROVIDERS[pid]["label"]
+
+        def work(progress, log):
+            try:
+                auth.connect(pid, cid, log=log)
+                return ("ok", None)
+            except auth.AuthError as e:
+                return ("error", str(e))
+
+        def done(res):
+            if res[0] == "error":
+                messagebox.showwarning(APP, res[1])
+            else:
+                messagebox.showinfo(APP, f"Connected to {label}.")
+            self._refresh_conn()
+
+        self.app.task.run(work, done, f"Waiting for {label} sign-in")
+
+    def disconnect(self, pid):
+        auth.forget(pid)
+        self._refresh_conn()
+        self.app.log(f"disconnected {auth.PROVIDERS[pid]['label']}")
+
+    # -- loading -----------------------------------------------------------
+    def _load(self, getter, label):
+        if self.need_scan():
+            return
+
+        def work(progress, log):
+            try:
+                name, entries = getter(log)
+            except playlists.SourceError as e:
+                return ("error", str(e))
+            except auth.AuthError as e:
+                return ("error", str(e))
+            return ("ok", name, playlists.match(entries, self.app.recs))
+
+        def done(res):
+            if res[0] == "error":
+                messagebox.showwarning(APP, res[1])
+                return
+            _, name, results = res
+            self.results = results
+            if name and not self.name.get().strip():
+                self.name.set(name)
+            self.tv.delete(*self.tv.get_children())
+            for x in results:
+                got = os.path.relpath(x["rec"].path, self.app.root_dir.get()) if x["rec"] else ""
+                self.tv.insert("", "end", values=(
+                    x["how"], f"{x['artist']} - {x['title']}"[:110], got))
+            c = collections.Counter(x["how"] for x in results)
+            found = sum(1 for x in results if x["rec"])
+            notes = []
+            if len(results) == playlists.EMBED_CAP:
+                notes.append("50 is Spotify's embed limit — paste the full list if it's longer")
+            staged = sum(1 for r in self.app.recs if r.protected)
+            if staged and found < len(results):
+                notes.append(f"{staged} files are still in Processed/To Be Processed and "
+                             "aren't matched — file them first")
+            self.summary.configure(
+                text=f"{found}/{len(results)} matched · " +
+                     " · ".join(f"{v} {k}" for k, v in c.most_common()) +
+                     ("   — " + "; ".join(notes) if notes else ""))
+            self.create_btn.configure(state="normal" if found else "disabled")
+
+        self.app.task.run(work, done, label)
+
+    def fetch_url(self):
+        u = self.url.get().strip()
+        if not u:
+            messagebox.showinfo(APP, "Paste a playlist link first.")
+            return
+        self._load(lambda log: playlists.from_url(u, log=log), "Fetching playlist")
+
+    def fetch_text(self):
+        t = self.paste.get("1.0", "end")
+        if not t.strip():
+            messagebox.showinfo(APP, "Paste a tracklist first.")
+            return
+        self._load(lambda log: playlists.from_text(t), "Matching tracks")
+
+    def load_csv(self):
+        p = filedialog.askopenfilename(title="Choose a playlist CSV",
+                                       filetypes=[("CSV", "*.csv"), ("All files", "*")])
+        if p:
+            self._load(lambda log: playlists.from_csv(p), "Reading CSV")
+
+    # -- writing -----------------------------------------------------------
+    def create(self):
+        if not self.results:
+            return
+        name = self.name.get().strip()
+        if not name:
+            messagebox.showinfo(APP, "Give the playlist a name.")
+            return
+        paths = [x["rec"].path for x in self.results if x["rec"]]
+        missing = len(self.results) - len(paths)
+        if not messagebox.askyesno(
+                APP, f"Write '{name}.m3u8' with {len(paths)} tracks?" +
+                     (f"\n\n{missing} tracks aren't in your collection and will be left out."
+                      if missing else "")):
+            return
+        fp = playlists.write(self.app.root_dir.get(), name, paths)
+        messagebox.showinfo(APP, f"Wrote {os.path.basename(fp)} to _Playlists.")
+        self.app.log(f"playlist: {fp} ({len(paths)} tracks, {missing} missing)")
+
+    def rebuild(self):
+        """Regenerate the folder-derived playlists against the library as it stands."""
+        if self.need_scan():
+            return
+        if not messagebox.askyesno(APP, "Rebuild the folder playlists from the current "
+                                        "library layout?\n\nExisting files with the same "
+                                        "names are overwritten."):
+            return
+        root = self.app.root_dir.get()
+        recs = self.app.recs
+
+        def work(progress, log):
+            pls = organize.playlists_from_current(root, recs)
+            return organize.write_playlists(root, pls)
+
+        def done(written):
+            messagebox.showinfo(APP, f"Wrote {len(written)} playlists to _Playlists.")
+
+        self.app.task.run(work, done, "Rebuilding playlists")
 
 
 class HistoryTab(BaseTab):
@@ -711,7 +953,7 @@ class HistoryTab(BaseTab):
     def reveal(self):
         d = self._selected()
         if d:
-            subprocess.run(["open", "-R", d["_file"]], check=False)
+            paths.reveal(d["_file"])
 
 
 def main():

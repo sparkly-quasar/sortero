@@ -257,6 +257,25 @@ def plan(root, recs, keep_sets=True, min_genre=8, route_unanalyzed=False,
     return moves, dict(playlists), stats
 
 
+def playlists_from_current(root, recs):
+    """Playlists mirroring where files actually are right now.
+
+    Unlike plan(), this points at real current paths, so it is safe to call
+    whether or not the library has been reorganised.
+    """
+    pls = collections.defaultdict(list)
+    for r in recs:
+        if r.protected:
+            continue
+        folder = os.path.dirname(r.rel)
+        if not folder:
+            continue
+        name = safe(folder.replace(os.sep, " - "), 100)
+        if r.path not in pls[name]:
+            pls[name].append(r.path)
+    return dict(pls)
+
+
 def write_playlists(root, playlists, journal=None, dry=False):
     out = os.path.join(root, PLAYLIST_DIR)
     written = []

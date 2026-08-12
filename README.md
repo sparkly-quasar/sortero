@@ -47,6 +47,23 @@ DJ Collection/
 | **Import** | Add files or folders. Analysed tracks go straight to `Tracks/<Genre>`; anything missing key/BPM lands in `To Be Processed`. Tracks already in the library are flagged, not copied. **"Sort the 'Processed' folder"** files everything you've already run through PN and MIK. |
 | **History** | Every operation, with one-click undo. |
 
+## Streaming playlists
+
+Paste a Spotify or TIDAL playlist link on the **Playlists** tab and Sortero
+matches each track against files you already own, then writes an `.m3u8`.
+
+Connect an account (Playlists → Accounts) to read playlists of any length. It
+uses OAuth 2.0 with PKCE: you sign in on Spotify's or TIDAL's own website, so
+Sortero never sees your password, and the tokens are stored in your OS
+credential store. One-time setup is creating a free app at
+[developer.tidal.com](https://developer.tidal.com) or the
+[Spotify dashboard](https://developer.spotify.com/dashboard) and adding
+`http://127.0.0.1:8899/callback` as a redirect URI.
+
+Without connecting, Spotify links fall back to a public preview capped at 50
+tracks, and TIDAL links need a connection. Pasting a tracklist as
+`Artist - Title` lines, or loading a CSV export, always works.
+
 ## Why energy ends up in Grouping
 
 Mixed In Key writes `Cm - Energy 6` into the **comment** field. The key half
@@ -58,15 +75,39 @@ software can sort on. Sortero copies it to **Grouping** as `5A - Energy 6`
 
 Build the app, then open `Sortero.app` and point it at your collection.
 
+Sortero runs on **macOS, Windows and Linux**. Grab the build for your platform
+from the [Releases page](../../releases):
+
+| Platform | Artifact |
+|---|---|
+| macOS (Intel + Apple Silicon) | `Sortero-macOS-universal2.zip` |
+| Windows | `Sortero-windows-x86_64.zip` |
+| Linux | `Sortero-linux-x86_64.zip` |
+
+macOS builds are ad-hoc signed, not notarised, so the first launch needs
+right-click → Open.
+
 ### Building from source
 
 ```bash
 python3.12 -m venv .venv
-./.venv/bin/pip install -U pip mutagen pyinstaller
-./build/build_app.sh          # -> build/dist/Sortero.app
+./.venv/bin/pip install -U pip mutagen keyring pyinstaller
+./.venv/bin/python build/build_app.py
 ```
 
-Requires Python 3.12 with Tk (`brew install python-tk@3.12`).
+Requires Python 3.12 with Tk — `brew install python-tk@3.12` on macOS,
+`apt install python3-tk` on Debian/Ubuntu; the Windows installer includes it.
+
+A **universal2** macOS build needs a universal2 Python (the python.org
+installer ships one; Homebrew's is single-architecture):
+
+```bash
+./.venv/bin/python build/build_app.py --universal2
+```
+
+The script checks the interpreter first and tells you if it can't. Release
+builds run in GitHub Actions, where `setup-python` provides a universal2
+interpreter — see `.github/workflows/release.yml`.
 
 ### Running without building
 
@@ -77,6 +118,7 @@ Requires Python 3.12 with Tk (`brew install python-tk@3.12`).
 ## Safety
 
 - Dry-run previews on every destructive tab; nothing moves until you confirm.
-- Journals in `~/Library/Application Support/Sortero/journals/`.
+- Journals live alongside your other app data: `~/Library/Application Support/Sortero`
+  on macOS, `%APPDATA%\\Sortero` on Windows, `$XDG_DATA_HOME/sortero` on Linux.
 - Duplicate removal is quarantine-only — Sortero never calls `unlink` on your music.
 - Back up before the first big reorganisation anyway.

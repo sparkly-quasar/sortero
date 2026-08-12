@@ -1,11 +1,11 @@
 """Undo journal. Every mutating operation records what it did, so it can be reversed."""
 import json, os, shutil, time, uuid
 
-JOURNAL_DIR = os.path.expanduser("~/Library/Application Support/Sortero/journals")
+from . import paths
 
 
 def _ensure():
-    os.makedirs(JOURNAL_DIR, exist_ok=True)
+    return paths.journals_dir()
 
 
 class Journal:
@@ -32,7 +32,7 @@ class Journal:
     # -- persist ------------------------------------------------------------
     @property
     def path(self):
-        return os.path.join(JOURNAL_DIR, f"{self.id}-{self.kind}.json")
+        return os.path.join(paths.journals_dir(), f"{self.id}-{self.kind}.json")
 
     def save(self):
         if not self.entries:
@@ -48,13 +48,14 @@ class Journal:
 def list_journals():
     _ensure()
     out = []
-    for fn in sorted(os.listdir(JOURNAL_DIR), reverse=True):
+    d = paths.journals_dir()
+    for fn in sorted(os.listdir(d), reverse=True):
         if not fn.endswith(".json"):
             continue
         try:
-            d = json.load(open(os.path.join(JOURNAL_DIR, fn)))
-            d["_file"] = os.path.join(JOURNAL_DIR, fn)
-            out.append(d)
+            rec = json.load(open(os.path.join(d, fn)))
+            rec["_file"] = os.path.join(d, fn)
+            out.append(rec)
         except Exception:
             continue
     return out

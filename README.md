@@ -60,6 +60,14 @@ loop:
 3. Run that folder through Platinum Notes and Mixed In Key, saving into `Processed`.
 4. **Import → "Sort the 'Processed' folder"** files them by genre automatically.
 
+Staging a track out of a set or vibe folder does **not** cost you that
+curation. Before anything moves, Sortero writes the folder out as a playlist
+and records which playlists each staged track belonged to. When the track is
+filed back out of `Processed`, it rejoins exactly those playlists at its new
+location. Matching is on artist and title, so it survives Platinum Notes
+renaming the file *and* changing its format — an MP3 that comes back as FLAC
+still lands back in its set.
+
 ## Streaming playlists
 
 Paste a Spotify or TIDAL playlist link on the **Playlists** tab and Sortero

@@ -276,11 +276,11 @@ def playlists_from_current(root, recs):
     return dict(pls)
 
 
-def write_playlists(root, playlists, journal=None, dry=False):
+def write_playlists(root, playlists, journal=None, dry=False, min_tracks=2):
     out = os.path.join(root, PLAYLIST_DIR)
     written = []
     for name, paths in sorted(playlists.items()):
-        if len(paths) < 2:
+        if len(paths) < min_tracks:
             continue
         fp = os.path.join(out, f"{name}.m3u8")
         written.append(fp)
@@ -296,10 +296,47 @@ def write_playlists(root, playlists, journal=None, dry=False):
     return written
 
 
-def stage_for_analysis(root, recs, log=print, progress=None):
-    """Move chosen tracks into 'To Be Processed' for Platinum Notes / Mixed In Key."""
+def folder_playlist_name(rec):
+    """The playlist name a track's current folder maps to, or None at the root."""
+    folder = os.path.dirname(rec.rel)
+    if not folder:
+        return None
+    return safe(folder.replace(os.sep, " - "), 100)
+
+
+def stage_for_analysis(root, recs, all_recs=None, log=print, progress=None):
+    """Move chosen tracks into 'To Be Processed' for Platinum Notes / Mixed In Key.
+
+    Their current folder membership is written to playlists first and recorded
+    as pending, so filing them back out of 'Processed' restores them to the
+    sets and vibe playlists they were curated into.
+    """
+    from . import membership
+
     j = Journal("stage-for-analysis", root)
     dest_dir = os.path.join(root, "To Be Processed")
+
+    # Capture curation before anything moves.
+    staged_paths = {r.path for r in recs}
+    owed = [(r, [n]) for r in recs if (n := folder_playlist_name(r))]
+    if owed:
+        pool = all_recs if all_recs is not None else recs
+        by_name = collections.defaultdict(list)
+        for r in pool:
+            if r.protected or r.path in staged_paths:
+                continue
+            n = folder_playlist_name(r)
+            if n:
+                by_name[n].append(r.path)
+        affected = {n for _, names in owed for n in names}
+        # min_tracks=1: keep even a nearly-empty playlist alive so the staged
+        # track has something to rejoin.
+        write_playlists(root, {n: by_name.get(n, []) for n in affected},
+                        journal=j, min_tracks=1)
+        membership.remember(owed)
+        log(f"recorded playlist membership for {len(owed)} tracks "
+            f"across {len(affected)} playlists")
+
     total = len(recs) or 1
     n = 0
     for i, r in enumerate(recs):

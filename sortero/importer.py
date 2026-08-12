@@ -13,6 +13,8 @@ from .organize import resolve_genre, target_filename, safe, TRACKS_DIR, MIX_MIN_
 from .dupes import _sig, ident
 from .journal import Journal
 from .tagio import Track
+from . import membership
+from . import playlists as pl
 
 TO_PROCESS = "To Be Processed"
 PROCESSED = "Processed"
@@ -122,6 +124,7 @@ def apply(root, results, move=True, clean_spam=True, log=print, progress=None):
     todo = [x for x in results if x["dest"]]
     total = len(todo) or 1
     n = 0
+    restored = []
     for i, x in enumerate(todo):
         if progress and i % 10 == 0:
             progress(i, total)
@@ -151,10 +154,22 @@ def apply(root, results, move=True, clean_spam=True, log=print, progress=None):
                             t.set(field, None)
                     if ch and t.save():
                         j.tagged(final, ch)
+
+            # If this track was staged out of a set/vibe folder, put it back
+            # into the playlists it came from - now pointing at its new home.
+            owed = membership.claim(x["rec"])
+            for name in owed:
+                pl.append(root, name, [final])
+            if owed:
+                restored.append(x["rec"])
+                log(f"  restored to {len(owed)} playlist(s): {os.path.basename(final)}")
         except Exception as e:
             log(f"  ! {os.path.basename(src)}: {e}")
     if progress:
         progress(total, total)
+    if restored:
+        membership.release(restored)
+        log(f"restored {len(restored)} tracks to their original playlists")
     path = j.save()
     log(f"imported {n} files | journal: {path}")
     return path, n

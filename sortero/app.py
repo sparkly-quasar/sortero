@@ -808,8 +808,13 @@ class NeedsWorkTab(BaseTab):
             return
         root = self.app.root_dir.get()
 
+        all_recs = self.app.recs
+
         def work(progress, log):
-            return organize.stage_for_analysis(root, recs, log=log, progress=progress)
+            # all_recs matters: the folder's *other* tracks are what the
+            # playlist is rebuilt from before these ones leave.
+            return organize.stage_for_analysis(root, recs, all_recs=all_recs,
+                                               log=log, progress=progress)
 
         def done(res):
             path, n = res

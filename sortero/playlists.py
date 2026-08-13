@@ -232,16 +232,30 @@ def from_text(text):
 
 
 # ---------------------------------------------------------------- matching
+def _title_forms(title, artist):
+    """Normalised titles to index/query under.
+
+    Tags are inconsistent about whether the artist is repeated in the title
+    ('Josh Butler - Keep It Hot' as the *title*, with artist 'Josh Butler').
+    Indexing both forms means either spelling finds the track.
+    """
+    from .organize import _strip_artist_prefix
+    forms = {norm_title(title or "")}
+    stripped = _strip_artist_prefix(title or "", artist or "")
+    forms.add(norm_title(stripped))
+    return {f for f in forms if f}
+
+
 def _index(recs):
     exact, by_title = {}, collections.defaultdict(list)
     for r in recs:
         if r.protected:
             continue
-        t = norm_title(r.title or "")
-        if not t:
-            continue
-        exact.setdefault(norm_artist(r.artist or "") + "|" + t, r)
-        by_title[t].append(r)
+        na = norm_artist(r.artist or "")
+        for t in _title_forms(r.title, r.artist):
+            exact.setdefault(na + "|" + t, r)
+            if r not in by_title[t]:
+                by_title[t].append(r)
     return exact, by_title
 
 
@@ -258,10 +272,24 @@ def match(entries, recs, cutoff=0.86):
     titles = list(by_title.keys())
     results = []
     for artist, title in entries:
-        na, nt = norm_artist(artist), norm_title(title)
+        na = norm_artist(artist)
+        forms = sorted(_title_forms(title, artist), key=len)
+        nt = forms[-1] if forms else ""
         rec, how = None, "missing"
 
-        if nt:
+        # try every spelling of the title before giving up
+        for cand in forms:
+            r = exact.get(na + "|" + cand)
+            if r:
+                rec, how, nt = r, "exact", cand
+                break
+        if rec is None:
+            for cand in forms:
+                if cand in by_title:
+                    nt = cand
+                    break
+
+        if rec is None and nt:
             r = exact.get(na + "|" + nt)
             if r:
                 rec, how = r, "exact"
@@ -323,6 +351,70 @@ def write(root, name, paths, journal=None):
     if journal:
         journal.created(fp)
     return fp
+
+
+def repair(root, recs, dry=True, log=print):
+    """Re-link playlist entries whose file has moved or been re-encoded.
+
+    A track that goes away for analysis comes back renamed, in a new format, at
+    a new path - every playlist that referenced it is left pointing at nothing.
+    Rather than guess from paths, this matches the old filename's artist/title
+    against the library as it stands now, which survives both the rename and the
+    format change.
+
+    Returns (fixed, unresolved, per_playlist) without writing when dry=True.
+    """
+    from .common import clean_stem, split_artist_title
+    from .library import Rec
+
+    d = playlist_dir(root)
+    if not os.path.isdir(d):
+        return 0, 0, {}
+
+    exact, by_title = _index(recs)
+    fixed = unresolved = 0
+    per = {}
+
+    for fn in sorted(os.listdir(d)):
+        if not fn.endswith(".m3u8"):
+            continue
+        fp = os.path.join(d, fn)
+        with open(fp, encoding="utf-8") as fh:
+            lines = [l.rstrip("\n") for l in fh]
+
+        out, changed, gone = [], 0, 0
+        for line in lines:
+            s = line.strip()
+            if not s or s.startswith("#"):
+                out.append(line)
+                continue
+            target = os.path.normpath(os.path.join(d, s))
+            if os.path.exists(target):
+                out.append(line)
+                continue
+
+            stem = clean_stem(target)
+            a, t = split_artist_title(stem)
+            probe = Rec(path=target, rel=os.path.basename(target), artist=a, title=t)
+            hit = match([(a or "", t or stem)], recs)[0]
+            if hit["rec"]:
+                out.append(os.path.relpath(hit["rec"].path, d))
+                changed += 1
+            else:
+                out.append(line)          # leave it; better than dropping it
+                gone += 1
+
+        fixed += changed
+        unresolved += gone
+        if changed or gone:
+            per[fn] = (changed, gone)
+        if changed and not dry:
+            with open(fp, "w", encoding="utf-8") as fh:
+                fh.write("\n".join(out) + "\n")
+
+    log(f"{'would re-link' if dry else 're-linked'} {fixed} entries; "
+        f"{unresolved} still unmatched")
+    return fixed, unresolved, per
 
 
 def append(root, name, paths):

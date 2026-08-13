@@ -184,6 +184,32 @@ class Sortero(tk.Tk):
                  f"waiting to be filed into your library.")
         self.notice.pack(fill="x", before=self.nb)
 
+    def offer_playlist_repair(self):
+        """After filing, a returning track's old playlist entries are stale."""
+        root = self.root_dir.get()
+        if not root or not self.recs:
+            return
+
+        def work(progress, log):
+            return playlists.repair(root, self.recs, dry=True, log=lambda m: None)
+
+        def done(res):
+            fixed, gone, _ = res
+            if not fixed:
+                return
+            if messagebox.askyesno(
+                    APP, f"{fixed} playlist entries point at tracks that came back "
+                         "under a new name or format.\n\nRe-link them so your sets "
+                         "and vibe playlists are whole again?"):
+                def work2(progress, log):
+                    return playlists.repair(root, self.recs, dry=False, log=log)
+
+                def done2(r2):
+                    messagebox.showinfo(APP, f"Re-linked {r2[0]} entries.")
+                self.task.run(work2, done2, "Repairing playlists")
+
+        self.task.run(work, done, "Checking playlists")
+
     def _file_processed_now(self):
         self.nb.select(self.tab_import)
         self.tab_import.intake_processed()
@@ -540,6 +566,15 @@ class OrganizeTab(BaseTab):
                         variable=self.route_unan).pack(side="left")
         ttk.Checkbutton(opts2, text="Save current folders as playlists",
                         variable=self.make_pl).pack(side="left", padx=12)
+        ttk.Label(opts2, text="   Genre detail").pack(side="left")
+        self.detail = tk.StringVar(value=settings.get("genre_detail") or "broad")
+        box = ttk.Combobox(opts2, textvariable=self.detail, width=34, state="readonly",
+                           values=["broad — fewer, wider folders",
+                                   "fine — keep subgenres apart"])
+        box.set("fine — keep subgenres apart" if self.detail.get() == "fine"
+                else "broad — fewer, wider folders")
+        box.pack(side="left", padx=6)
+        self._detail_box = box
 
         ttk.Label(self, foreground="#666", wraplength=980, justify="left",
                   text="Each track ends up as one file at Tracks/<Genre>/Artist - Title. "
@@ -638,6 +673,8 @@ class OrganizeTab(BaseTab):
         keep_sets = self.keep_sets.get()
         route = self.route_unan.get()
         exclude = self._excluded_paths()
+        detail = "fine" if self._detail_box.get().startswith("fine") else "broad"
+        settings.set("genre_detail", detail)
 
         def work(progress, log):
             canonical = {}
@@ -652,7 +689,7 @@ class OrganizeTab(BaseTab):
                     f"{len(set(canonical.values()))} canonical files")
             return organize.plan(root, self.app.recs, keep_sets=keep_sets,
                                  route_unanalyzed=route, canonical=canonical,
-                                 exclude=exclude)
+                                 exclude=exclude, detail=detail)
 
         def done(res):
             moves, pls, st = res
@@ -995,6 +1032,7 @@ class ImportTab(BaseTab):
             messagebox.showinfo(APP, msg)
             self.clear()
             self.app.tab_history.refresh()
+            self.app.after(400, self.app.offer_playlist_repair)
             self.app.scan()
 
         self.app.task.run(work, done, "Importing")
@@ -1229,6 +1267,8 @@ class PlaylistTab(BaseTab):
         self.create_btn.pack(side="left", padx=6)
         ttk.Button(row2, text="Rebuild folder playlists",
                    command=self.rebuild).pack(side="right")
+        ttk.Button(row2, text="Repair broken links",
+                   command=self.repair).pack(side="right", padx=6)
 
         self.summary = ttk.Label(self, text="", foreground="#444")
         self.summary.pack(anchor="w", pady=(0, 4))
@@ -1357,6 +1397,39 @@ class PlaylistTab(BaseTab):
         fp = playlists.write(self.app.root_dir.get(), name, paths)
         messagebox.showinfo(APP, f"Wrote {os.path.basename(fp)} to _Playlists.")
         self.app.log(f"playlist: {fp} ({len(paths)} tracks, {missing} missing)")
+
+    def repair(self):
+        """Re-link playlist entries whose file moved or was re-encoded."""
+        if self.need_scan():
+            return
+        root = self.app.root_dir.get()
+        recs = self.app.recs
+
+        def work(progress, log):
+            return playlists.repair(root, recs, dry=True, log=log)
+
+        def done(res):
+            fixed, gone, per = res
+            if not fixed and not gone:
+                messagebox.showinfo(APP, "Every playlist entry points at a real file.")
+                return
+            if not messagebox.askyesno(
+                    APP, f"{fixed + gone} playlist entries point at files that aren't "
+                         f"there any more.\n\n{fixed} can be re-linked by matching "
+                         f"artist and title.\n{gone} can't be matched and will be left "
+                         "untouched rather than dropped.\n\nRe-link them?"):
+                return
+
+            def work2(progress, log):
+                return playlists.repair(root, recs, dry=False, log=log)
+
+            def done2(res2):
+                f2, g2, _ = res2
+                messagebox.showinfo(APP, f"Re-linked {f2} entries."
+                                         + (f"\n{g2} still unmatched." if g2 else ""))
+            self.app.task.run(work2, done2, "Repairing playlists")
+
+        self.app.task.run(work, done, "Checking playlists")
 
     def rebuild(self):
         """Regenerate the folder-derived playlists against the library as it stands."""

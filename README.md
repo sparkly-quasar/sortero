@@ -38,6 +38,13 @@ DJ Collection/
 
 `To Be Processed` and `Processed` are never reorganised.
 
+**Genre detail** is a choice on the Organise tab. *Broad* gives a handful of wide
+folders; *fine* keeps subgenres apart — `Techno (Peak Time)` separate from
+`Techno (Hypnotic)`, `Deep House` from `Tech House`. Either way the layout stays
+one flat level. Labels Sortero picked always get their own folder; a raw tag
+value that matched no rule needs at least 8 tracks to earn one, so oddities like
+`Mainstage` don't litter the tree.
+
 ## Tabs
 
 | Tab | What it does |
@@ -48,7 +55,7 @@ DJ Collection/
 | **Duplicates** | Exact (identical audio) and Likely (same artist/title/version, same length). Different remixes are never grouped. Extras move to `_Quarantine`. |
 | **Import** | Add files or folders. Analysed tracks go straight to `Tracks/<Genre>`; anything missing key/BPM lands in `To Be Processed`. Tracks already in the library are flagged, not copied. **"Sort the 'Processed' folder"** files everything you've already run through PN and MIK. |
 | **Needs Work** | Everything Sortero can't fix by itself, filtered by what's missing (key/BPM, energy, genre, artist, low bitrate). Select tracks and stage them in `To Be Processed` for whichever analysis tool you use. Your own set recordings are excluded. |
-| **Playlists** | Rebuild a Spotify or TIDAL playlist against your local files, or rebuild the folder playlists. |
+| **Playlists** | Rebuild a Spotify or TIDAL playlist against your local files, rebuild the folder playlists, or **repair broken links** when tracks come back from analysis renamed or re-encoded. |
 | **History** | Every operation, with one-click undo. |
 
 ## The analysis loop

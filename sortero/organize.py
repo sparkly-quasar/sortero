@@ -52,6 +52,44 @@ GENRE_RULES = [
     (r"\bpop\b|dance|electro", "Dance & Pop"),
 ]
 
+# Finer vocabulary: still one flat level of folders, but keeps the distinctions
+# a DJ actually reaches for - peak-time vs hypnotic techno, deep vs tech house.
+FINE_RULES = [
+    (r"peak.?time|driving", "Techno (Peak Time)"),
+    (r"hypnotic|deep techno|dub techno", "Techno (Hypnotic)"),
+    (r"hard.?techno|industrial|schranz", "Techno (Hard)"),
+    (r"melodic (house|techno)", "Melodic House & Techno"),
+    (r"raw|hypnotic|\btechno\b", "Techno"),
+    (r"minimal.*deep tech|deep tech|\bminimal\b", "Minimal & Deep Tech"),
+    (r"afro.?house|afro.?tech", "Afro House"),
+    (r"tech.?house", "Tech House"),
+    (r"organic house|downtempo|\bethnic\b", "Organic House & Downtempo"),
+    (r"ambient|drone|lounge", "Ambient & Drone"),
+    (r"progressive|\bprog\b", "Progressive House"),
+    (r"deep house", "Deep House"),
+    (r"soulful|jackin|disco house|funky house", "Funky & Soulful House"),
+    (r"nu.?disco|indie dance", "Nu Disco & Indie Dance"),
+    (r"\bdisco\b", "Disco"),
+    (r"bass house|future house|\bbassline\b", "Bass House"),
+    (r"\bhouse\b", "House"),
+    (r"idm|intelligent|experimental", "Electronica & IDM"),
+    (r"electronica", "Electronica"),
+    (r"breaks|breakbeat|\bukg\b|garage|dubstep|drum.?&.?bass|\bdnb\b", "Breaks & Bass"),
+    (r"trance|psy", "Trance"),
+    (r"hip.?hop|\brap\b|trap", "Hip-Hop"),
+    (r"chill|lo.?fi|study|beats", "Chill & Lo-fi"),
+    (r"\bjazz\b|\bsoul\b|\bfunk\b", "Jazz, Soul & Funk"),
+    (r"\bpop\b|dance|electro", "Dance & Pop"),
+]
+
+DETAIL_RULES = {"broad": None, "fine": FINE_RULES}   # None = use GENRE_RULES
+
+# Labels Sortero chose itself. These always get their own folder; a raw tag
+# value that matched no rule ("Warp", "Mainstage") has to be common enough to
+# be worth a folder, or it lands in Unsorted.
+CANONICAL = {lab for _, lab in GENRE_RULES} | {lab for _, lab in FINE_RULES}
+RAW_GENRE_MIN = 8
+
 # Folder names that name a genre even though no GENRE_RULES pattern catches them.
 FOLDER_HINTS = [
     (r"(?i)smooth vibes", "Chill & Funk"),
@@ -62,16 +100,17 @@ FOLDER_HINTS = [
 ILLEGAL = re.compile(r'[/:\x00-\x1f]')
 
 
-def canon_genre(value, strict=False):
+def canon_genre(value, strict=False, detail="broad"):
     """Map a genre string onto the canonical vocabulary.
 
     strict=True is used for *folder names*, where an unrecognised value is just
     a folder name ("Rew Import", "Compilations") and must never become a genre.
+    detail="fine" keeps subgenres apart; the layout stays one flat level either way.
     """
     if not value or is_spam(value):
         return None
     low = value.lower()
-    for pat, canon in GENRE_RULES:
+    for pat, canon in (DETAIL_RULES.get(detail) or GENRE_RULES):
         if re.search(pat, low):
             return canon
     if strict:
@@ -80,7 +119,7 @@ def canon_genre(value, strict=False):
     return v if len(v) <= 40 else None
 
 
-def genre_from_folders(rel):
+def genre_from_folders(rel, detail="broad"):
     """Infer a genre from the folders a track currently lives in.
 
     Walks deepest-first: 'Compilations/Beatport Best New House' should resolve
@@ -90,15 +129,16 @@ def genre_from_folders(rel):
         for pat, canon in FOLDER_HINTS:
             if re.search(pat, part):
                 return canon
-        c = canon_genre(part, strict=True)
+        c = canon_genre(part, strict=True, detail=detail)
         if c:
             return c
     return None
 
 
-def resolve_genre(r):
+def resolve_genre(r, detail="broad"):
     """Tag genre wins; otherwise infer from the folder it currently sits in."""
-    return canon_genre(r.genre) or genre_from_folders(r.rel) or UNSORTED
+    return (canon_genre(r.genre, detail=detail)
+            or genre_from_folders(r.rel, detail=detail) or UNSORTED)
 
 
 def safe(name, maxlen=120):
@@ -137,7 +177,7 @@ def target_filename(r):
     return f"{safe(artist, 60)} - {safe(title, 90)}{r.ext}"
 
 
-def classify(r, keep_sets=True, route_unanalyzed=False):
+def classify(r, keep_sets=True, route_unanalyzed=False, detail="broad"):
     """Return (category, subfolder) for a record."""
     top = r.top
     if r.protected:
@@ -154,12 +194,12 @@ def classify(r, keep_sets=True, route_unanalyzed=False):
         return ("mix", None)
     if re.match(r"(?i)^(renaissance|compilations)", top) and r.album:
         return ("album", safe(r.album, 80))
-    return ("track", resolve_genre(r))
+    return ("track", resolve_genre(r, detail))
 
 
 # --------------------------------------------------------------------------
-def plan(root, recs, keep_sets=True, min_genre=8, route_unanalyzed=False,
-         canonical=None, exclude=None):
+def plan(root, recs, keep_sets=True, min_genre=None, route_unanalyzed=False,
+         canonical=None, exclude=None, detail="broad"):
     """Build the list of moves. Returns (moves, playlists, stats).
 
     moves: list of (rec, dest_abs)
@@ -176,6 +216,9 @@ def plan(root, recs, keep_sets=True, min_genre=8, route_unanalyzed=False,
     """
     canonical = canonical or {}
     exclude = exclude or set()
+    # finer buckets are smaller by nature, so don't fold them away as eagerly
+    if min_genre is None:
+        min_genre = 4 if detail == "fine" else 8
 
     # First pass: classify and count genres so tiny genres can be folded away.
     prelim = {}
@@ -187,12 +230,13 @@ def plan(root, recs, keep_sets=True, min_genre=8, route_unanalyzed=False,
         if canonical.get(r.path, r.path) != r.path:
             prelim[r.path] = ("duplicate", None)
             continue
-        cat, sub = classify(r, keep_sets, route_unanalyzed)
+        cat, sub = classify(r, keep_sets, route_unanalyzed, detail)
         prelim[r.path] = (cat, sub)
         if cat == "track":
             gcount[sub] += 1
 
-    small = {g for g, c in gcount.items() if c < min_genre and g != UNSORTED}
+    small = {g for g, c in gcount.items()
+             if g != UNSORTED and g not in CANONICAL and c < RAW_GENRE_MIN}
 
     moves, used = [], {}
     for r in recs:
@@ -313,7 +357,7 @@ def folder_playlist_name(rec):
     return safe(folder.replace(os.sep, " - "), 100)
 
 
-def stage_for_analysis(root, recs, all_recs=None, log=print, progress=None):
+def stage_for_analysis(root, recs, all_recs=None, detail="broad", log=print, progress=None):
     """Move chosen tracks into 'To Be Processed' for key/BPM analysis.
 
     Their current folder membership is written to playlists first and recorded
@@ -336,7 +380,7 @@ def stage_for_analysis(root, recs, all_recs=None, log=print, progress=None):
         # store the canonical genre either way, so it comes back as a real
         # folder name rather than a raw tag like "Techno, Electronic, Minimal"
         owed.append((r, [] if from_genre_folder else ([n] if n else []),
-                     resolve_genre(r)))
+                     resolve_genre(r, detail)))
     if any(names or genre for _, names, genre in owed):
         pool = all_recs if all_recs is not None else recs
         by_name = collections.defaultdict(list)

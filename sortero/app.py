@@ -476,7 +476,7 @@ class OverviewTab(BaseTab):
 
         self.issues.delete(0, "end")
         for label, items, hint in [
-            ("missing key/BPM", h["needs_analysis"], "run Platinum Notes + Mixed In Key"),
+            ("missing key/BPM", h["needs_analysis"], "Platinum Notes 1st, Mixed In Key 2nd"),
             ("missing genre", h["no_genre"], "Tags tab can normalise what exists"),
             ("missing artist", h["no_artist"], "Tags tab can infer from filename"),
             ("spam in genre", h["spam_genre"], "Tags tab clears these"),
@@ -773,7 +773,7 @@ class ImportTab(BaseTab):
                    command=self.intake_processed).pack(side="left")
         ttk.Label(pf, foreground="#666",
                   text="  — file everything you have already run through "
-                       "Platinum Notes and Mixed In Key").pack(side="left")
+                       "Platinum Notes then Mixed In Key").pack(side="left")
 
         btns = ttk.Frame(self)
         btns.pack(fill="x", pady=(0, 8))
@@ -919,9 +919,16 @@ class NeedsWorkTab(BaseTab):
         ttk.Label(self, foreground="#666", wraplength=980, justify="left",
                   text="Everything here needs something Sortero can't compute itself. "
                        "Pick a filter, select the tracks you want, then stage them in "
-                       "'To Be Processed' — drop that folder into Platinum Notes and "
-                       "Mixed In Key, and when they land in 'Processed' the Import tab "
-                       "files them automatically."
+                       "'To Be Processed', then run that folder through Platinum Notes "
+                       "FIRST and Mixed In Key SECOND. When they land in 'Processed' "
+                       "the Import tab files them automatically."
+                  ).pack(anchor="w", pady=(0, 4))
+        ttk.Label(self, foreground="#8a5a00", font=("Helvetica", 12, "bold"),
+                  text="Order matters:  1. Platinum Notes  →  2. Mixed In Key"
+                  ).pack(anchor="w", pady=(0, 2))
+        ttk.Label(self, foreground="#666", wraplength=980, justify="left",
+                  text="Platinum Notes re-encodes the audio, so running it after "
+                       "Mixed In Key throws the analysis away."
                   ).pack(anchor="w", pady=(0, 8))
 
         row = ttk.Frame(self)
@@ -1027,9 +1034,12 @@ class NeedsWorkTab(BaseTab):
             return
         if not messagebox.askyesno(
                 APP, f"Move {len(recs)} tracks into 'To Be Processed'?\n\n"
-                     "Run them through Platinum Notes and Mixed In Key, save the "
-                     "results into 'Processed', then use Import → \"Sort the "
-                     "'Processed' folder\".\n\nReversible from History."):
+                     "Then, in this order:\n"
+                     "  1. Platinum Notes  (re-encodes the audio)\n"
+                     "  2. Mixed In Key    (reads the final audio)\n\n"
+                     "Save the results into 'Processed', then use Import → "
+                     "\"Sort the 'Processed' folder\".\n\n"
+                     "Reversible from History."):
             return
         root = self.app.root_dir.get()
 
@@ -1043,7 +1053,14 @@ class NeedsWorkTab(BaseTab):
 
         def done(res):
             path, n = res
-            messagebox.showinfo(APP, f"Staged {n} tracks in 'To Be Processed'.")
+            messagebox.showinfo(
+                APP, f"Staged {n} tracks in 'To Be Processed'.\n\n"
+                     "Remember the order:\n"
+                     "  1. Platinum Notes  FIRST\n"
+                     "  2. Mixed In Key    SECOND\n\n"
+                     "Platinum Notes re-encodes the audio, so running it second "
+                     "would discard the Mixed In Key analysis.\n\n"
+                     "Save the results into 'Processed'.")
             self.app.tab_history.refresh()
             self.app.scan()
 

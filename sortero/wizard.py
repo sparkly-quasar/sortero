@@ -459,6 +459,13 @@ class Wizard(tk.Toplevel):
                       "Sortero works out genre, artist and title itself, but key, BPM "
                       "and energy need Mixed In Key and Platinum Notes. It can gather "
                       "those tracks into 'To Be Processed' ready for you to run them.")
+        ttk.Label(self.body, foreground="#8a5a00", font=("Helvetica", 13, "bold"),
+                  text="Order matters:  1. Platinum Notes  →  2. Mixed In Key"
+                  ).pack(anchor="w", pady=(0, 2))
+        ttk.Label(self.body, foreground="#666", wraplength=690, justify="left",
+                  text="Platinum Notes re-encodes the audio, so running it after Mixed "
+                       "In Key throws that analysis away."
+                  ).pack(anchor="w", pady=(0, 10))
         if not self.recs:
             ttk.Label(self.body, text="Nothing scanned yet.").pack(anchor="w")
             return
@@ -473,10 +480,10 @@ class Wizard(tk.Toplevel):
         if not pending:
             self.an_btn.configure(state="disabled")
         ttk.Label(self.body, foreground="#666", wraplength=690, justify="left",
-                  text="\nAfterwards: run that folder through Platinum Notes and Mixed "
-                       "In Key, save the results into 'Processed', then use "
-                       "Import → \"Sort the 'Processed' folder\". Tracks staged out of "
-                       "a set rejoin its playlist automatically when they come back."
+                  text="\nAfterwards: Platinum Notes first, then Mixed In Key, saving "
+                       "into 'Processed'. Then use Import → \"Sort the 'Processed' "
+                       "folder\". Tracks staged out of a set rejoin its playlist "
+                       "automatically when they come back."
                   ).pack(anchor="w", pady=(10, 0))
 
     def _apply_stage(self):

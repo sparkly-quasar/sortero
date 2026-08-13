@@ -95,10 +95,46 @@ def main():
         else:
             arch = "-".join(arches) or "unknown"
         zip_path = os.path.join(DIST, f"Sortero-macOS-{arch}.zip")
+
+        # Ship the first-run helper beside the app. Downloading the zip stamps
+        # com.apple.quarantine on every file inside the bundle, and approving
+        # the app in System Settings only clears the outer one - the loader
+        # then stalls on the nested libraries and no window appears.
+        helper_src = os.path.join(BUILD, "Sortero-first-run.command")
+        payload = os.path.join(DIST, "Sortero")
+        # --windowed also leaves a onedir build at dist/Sortero. The .app is
+        # self-contained, so that folder is dead weight - drop it before reusing
+        # the name for the zip payload, or it ships twice.
+        if os.path.isdir(payload):
+            shutil.rmtree(payload)
+        os.makedirs(payload)
+        shutil.move(app, os.path.join(payload, "Sortero.app"))
+        if os.path.exists(helper_src):
+            helper_dst = os.path.join(payload, "Sortero-first-run.command")
+            shutil.copy2(helper_src, helper_dst)
+            os.chmod(helper_dst, 0o755)
+        readme = os.path.join(payload, "READ ME FIRST.txt")
+        with open(readme, "w") as fh:
+            fh.write(
+                "Sortero for macOS\n"
+                "=================\n\n"
+                "Sortero is signed ad-hoc, not notarised, so macOS quarantines every\n"
+                "file inside the app when you download it. Approving the app in System\n"
+                "Settings only clears the outer bundle, and the app will bounce in the\n"
+                "Dock without ever opening a window.\n\n"
+                "To fix that, once:\n\n"
+                "  1. Drag Sortero.app wherever you want it (Applications is fine).\n"
+                "  2. Double-click 'Sortero-first-run.command'.\n\n"
+                "Or run this in Terminal:\n\n"
+                "  xattr -dr com.apple.quarantine /Applications/Sortero.app\n\n"
+                "After that, open Sortero normally. You only need to do this once per\n"
+                "download.\n")
+
         print("==> zipping (ditto preserves the bundle)")
         subprocess.run(["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent",
-                        app, zip_path], check=True)
-        print(f"\nbuilt {app}\nzip:  {zip_path}  ({os.path.getsize(zip_path)/1e6:.1f} MB)")
+                        payload, zip_path], check=True)
+        print(f"\nbuilt {payload}/Sortero.app\nzip:  {zip_path}  "
+              f"({os.path.getsize(zip_path)/1e6:.1f} MB)")
     else:
         target = os.path.join(DIST, "Sortero")
         plat = "windows" if IS_WIN else "linux"

@@ -60,7 +60,7 @@ jobs:
       - name: Verify macOS binary is universal
         if: runner.os == 'macOS'
         run: |
-          BIN=build/dist/Sortero.app/Contents/MacOS/Sortero
+          BIN=build/dist/Sortero/Sortero.app/Contents/MacOS/Sortero
           lipo -archs "$BIN"
           lipo -archs "$BIN" | grep -q x86_64 && lipo -archs "$BIN" | grep -q arm64 \
             || { echo "not universal"; exit 1; }
@@ -85,3 +85,27 @@ jobs:
           name: Sortero ${{ github.event.inputs.tag || github.ref_name }}
           generate_release_notes: true
           files: artifacts/**/*.zip
+          body: |
+            ## Installing
+
+            **macOS** — the app is signed ad-hoc, not notarised (notarising needs a
+            paid Apple Developer account). macOS therefore quarantines every file
+            inside the bundle on download. Approving the app in System Settings only
+            clears the outer one, so it will **bounce in the Dock and never open a
+            window** until the flag is cleared from the whole bundle.
+
+            Unzip, then either double-click `Sortero-first-run.command` (included), or
+            run once:
+
+            ```
+            xattr -dr com.apple.quarantine /Applications/Sortero.app
+            ```
+
+            Then open it normally. Only needed once per download.
+
+            **Windows** — unzip and run `Sortero.exe`. SmartScreen may warn about an
+            unknown publisher; choose More info → Run anyway.
+
+            **Linux** — unzip and run `./Sortero`. Needs Tk (`apt install python3-tk`).
+
+            ---

@@ -2,9 +2,9 @@
 
 [![License: GPL v3+](https://img.shields.io/badge/License-GPLv3+-blue.svg)](LICENSE)
 
-A macOS app for getting a DJ collection under control: one canonical copy of
-every track, playlists that preserve your curation, clean tags, and an intake
-lane for new music.
+A cross-platform desktop app for getting a DJ collection under control: one
+canonical copy of every track, playlists that preserve your curation, clean
+tags, and an intake lane for new music. Runs on macOS, Windows and Linux.
 
 ![tabs: Overview, Organise, Tags, Duplicates, Import, History](build/icon_1024.png)
 
@@ -122,8 +122,27 @@ from the [Releases page](../../releases):
 | Windows | `Sortero-windows-x86_64.zip` |
 | Linux | `Sortero-linux-x86_64.zip` |
 
-macOS builds are ad-hoc signed, not notarised, so the first launch needs
-right-click → Open.
+### macOS: clear the quarantine flag first
+
+Builds are signed ad-hoc, not notarised — notarising requires a paid Apple
+Developer account. macOS stamps a quarantine flag on the app **and on every one
+of the ~450 files inside it** when you download the zip. Approving the app in
+System Settings only clears the outer bundle, so the dynamic loader stalls on
+the nested libraries: **the app bounces in the Dock and no window ever appears.**
+Right-click → Open does not fix this.
+
+Unzip, then either double-click the included `Sortero-first-run.command`, or run:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Sortero.app
+```
+
+Then open Sortero normally. Only needed once per download. If Sortero is in
+`/Applications`, macOS may ask permission before another program can modify apps
+there — approve it, or run the app from `~/Downloads` instead.
+
+**Windows** — SmartScreen may warn about an unknown publisher; More info → Run anyway.
+**Linux** — needs Tk (`apt install python3-tk`).
 
 ### Building from source
 

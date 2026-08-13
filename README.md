@@ -55,7 +55,7 @@ value that matched no rule needs at least 8 tracks to earn one, so oddities like
 | **Duplicates** | Exact (identical audio) and Likely (same artist/title/version, same length). Different remixes are never grouped. Extras move to `_Quarantine`. |
 | **Import** | Add files or folders. Analysed tracks go straight to `Tracks/<Genre>`; anything missing key/BPM lands in `To Be Processed`. Tracks already in the library are flagged, not copied. **"Sort the 'Processed' folder"** files everything you've already run through PN and MIK. |
 | **Needs Work** | Everything Sortero can't fix by itself, filtered by what's missing (key/BPM, energy, genre, artist, low bitrate). Select tracks and stage them in `To Be Processed` for whichever analysis tool you use. Your own set recordings are excluded. |
-| **Genres** | Assign genres in bulk. Filter to tracks with none, sort by artist or folder, select a group and set it — or look them up on Discogs, whose *styles* are the subgenre detail you want. Every write is undoable. |
+| **Genres** | Assign genres in bulk. **Use folder name** fills the tag in from the genre folder a track already sits in. Filter to tracks with none, sort by artist or folder, select a group and set it — or look them up on Discogs, whose *styles* are the subgenre detail you want. Every write is undoable. |
 | **Playlists** | Rebuild a Spotify or TIDAL playlist against your local files, rebuild the folder playlists, or **repair broken links** when tracks come back from analysis renamed or re-encoded. |
 | **History** | Every operation, with one-click undo. |
 
@@ -101,6 +101,11 @@ filed back out of `Processed`, it rejoins exactly those playlists at its new
 location. Matching is on artist and title, so it survives Platinum Notes
 renaming the file *and* changing its format — an MP3 that comes back as FLAC
 still lands back in its set.
+
+Filing a track into `Tracks/<Genre>` also **writes that genre into the file**.
+Without it the folder knew the genre and the tag didn't, so rekordbox, Mixxx and
+Sortero's own Genres tab all still saw the track as untagged. An existing genre
+tag is never overwritten.
 
 ## When there's no genre to infer
 

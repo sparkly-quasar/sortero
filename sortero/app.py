@@ -1286,6 +1286,8 @@ class GenresTab(BaseTab):
         self.genre_box.pack(side="left", padx=6)
         ttk.Button(row2, text="Apply to selected",
                    command=self.apply_manual).pack(side="left")
+        ttk.Button(row2, text="Use folder name",
+                   command=self.apply_from_folder).pack(side="left", padx=6)
         ttk.Button(row2, text="Look up selected on Discogs",
                    command=self.lookup).pack(side="left", padx=(16, 0))
         self.stop_btn = ttk.Button(row2, text="Stop", command=self.stop_lookup,
@@ -1374,6 +1376,24 @@ class GenresTab(BaseTab):
             return
         self._write([(r, genre) for r in recs],
                     f"Set {len(recs)} tracks to '{genre}'?")
+
+    def apply_from_folder(self):
+        """Tracks already filed under Tracks/<Genre> know their genre already."""
+        recs = self._selected() or self.rows
+        pairs = []
+        for r in recs:
+            parts = r.rel.split(os.sep)
+            if (len(parts) > 2 and parts[0] == organize.TRACKS_DIR
+                    and parts[1] != organize.UNSORTED):
+                pairs.append((r, parts[1]))
+        if not pairs:
+            messagebox.showinfo(
+                APP, "None of these sit in a genre folder to copy from.\n\n"
+                     "This fills the tag in from the folder a track is already "
+                     "filed under — it doesn't help for anything in Unsorted.")
+            return
+        self._write(pairs, f"Set {len(pairs)} tracks to the genre of the folder "
+                           "they're already in?")
 
     def apply_suggested(self):
         recs = self._selected() or self.rows

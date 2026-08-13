@@ -21,6 +21,7 @@ import os, re, shutil, collections, unicodedata
 from .common import is_spam, clean_stem
 from .library import PROTECTED, Rec
 from .journal import Journal, prune_empty
+from .tagio import Track
 
 TRACKS_DIR = "Tracks"
 SETS_DIR = "Sets"
@@ -446,6 +447,19 @@ def apply(root, moves, playlists, log=print, progress=None):
             j.moved(r.path, final)
             if final != dest:
                 remap[dest] = final
+
+            # Filing a track into Tracks/<Genre> is a decision; write it into the
+            # file too. Otherwise the folder knows the genre and the tag doesn't,
+            # and every other tool - including Sortero's own Genres tab - still
+            # sees the track as untagged.
+            parts = os.path.relpath(final, root).split(os.sep)
+            if (len(parts) > 2 and parts[0] == TRACKS_DIR
+                    and parts[1] != UNSORTED and not (r.genre or "").strip()):
+                t = Track(final)
+                if t.ok and not (t.get("genre") or "").strip():
+                    t.set("genre", parts[1])
+                    if t.save():
+                        j.tagged(final, {"genre": {"old": None, "new": parts[1]}})
         except Exception as e:
             log(f"  ! {os.path.basename(r.path)}: {e}")
     # playlists reference post-move paths; honour any collision renames

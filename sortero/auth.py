@@ -16,7 +16,7 @@ Setup, once per provider:
 import base64, hashlib, http.server, json, os, secrets, socket, stat
 import subprocess, threading, time, urllib.parse, urllib.request, urllib.error, webbrowser
 
-from . import paths
+from . import paths, net
 
 REDIRECT_PORT = 8899
 REDIRECT_URI = f"http://127.0.0.1:{REDIRECT_PORT}/callback"
@@ -171,7 +171,7 @@ def _post_form(url, fields):
         "Content-Type": "application/x-www-form-urlencoded",
         "Accept": "application/json"})
     try:
-        with urllib.request.urlopen(req, timeout=30) as r:
+        with net.urlopen(req, timeout=30) as r:
             return json.loads(r.read().decode())
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", "replace")[:400]
@@ -278,7 +278,7 @@ def api_get(provider, path, params=None, log=print):
         "Authorization": f"Bearer {access_token(provider, log)}",
         "Accept": "application/vnd.api+json, application/json"})
     try:
-        with urllib.request.urlopen(req, timeout=30) as r:
+        with net.urlopen(req, timeout=30) as r:
             return json.loads(r.read().decode())
     except urllib.error.HTTPError as e:
         raise AuthError(f"{cfg['label']} API {e.code}: "

@@ -6,7 +6,7 @@ either make the repo public, or paste a token with `repo` scope into Settings.
 """
 import json, re, time, urllib.error, urllib.request
 
-from . import settings
+from . import settings, net
 from .version import __version__
 
 REPO = "sparkly-quasar/sortero"
@@ -38,7 +38,7 @@ def check(token=None, timeout=15):
     if token:
         req.add_header("Authorization", f"Bearer {token}")
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with net.urlopen(req, timeout=timeout) as r:
             data = json.loads(r.read().decode())
     except urllib.error.HTTPError as e:
         if e.code in (401, 403, 404):
@@ -52,8 +52,9 @@ def check(token=None, timeout=15):
         return {"state": "error", "latest": None, "url": RELEASES_URL,
                 "message": f"GitHub returned {e.code}."}
     except Exception as e:
+        hint = net.describe_ssl_error(e)
         return {"state": "error", "latest": None, "url": RELEASES_URL,
-                "message": f"Couldn't reach GitHub: {e}"}
+                "message": hint or f"Couldn't reach GitHub: {e}"}
 
     settings.set("last_update_check", time.time())
     latest = data.get("tag_name") or data.get("name") or ""

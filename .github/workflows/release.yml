@@ -49,7 +49,7 @@ jobs:
           python -m venv .venv
           if [ "$RUNNER_OS" = "Windows" ]; then PY=.venv/Scripts/python.exe; else PY=.venv/bin/python; fi
           $PY -m pip install -q --upgrade pip
-          $PY -m pip install -q mutagen keyring pyinstaller
+          $PY -m pip install -q mutagen keyring certifi pyinstaller
 
       - name: Build
         shell: bash

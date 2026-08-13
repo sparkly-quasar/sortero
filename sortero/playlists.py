@@ -10,6 +10,7 @@ bare Tidal URL cannot be resolved; the UI says so and points at the fallbacks.
 """
 import os, re, csv, json, difflib, urllib.request, urllib.error, collections
 
+from . import net
 from .dupes import norm_artist, norm_title
 from .organize import PLAYLIST_DIR, safe
 
@@ -29,7 +30,7 @@ class SourceError(Exception):
 def _get(url, timeout=25):
     req = urllib.request.Request(url, headers={"User-Agent": UA,
                                                "Accept-Language": "en-US,en;q=0.9"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with net.urlopen(req, timeout=timeout) as r:
         return r.read().decode("utf-8", "replace")
 
 

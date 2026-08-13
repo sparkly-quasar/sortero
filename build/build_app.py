@@ -63,7 +63,8 @@ def main():
            "--name", "Sortero",
            "--distpath", DIST, "--workpath", WORK, "--specpath", BUILD,
            "--hidden-import", "mutagen", "--collect-submodules", "mutagen",
-           "--hidden-import", "keyring", "--collect-submodules", "keyring"]
+           "--hidden-import", "keyring", "--collect-submodules", "keyring",
+           "--hidden-import", "certifi", "--collect-data", "certifi"]
     if icon and os.path.exists(icon):
         cmd += ["--icon", icon]
     if IS_MAC:

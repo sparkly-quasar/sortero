@@ -89,19 +89,17 @@ jobs:
             ## Installing
 
             **macOS** — the app is signed ad-hoc, not notarised (notarising needs a
-            paid Apple Developer account). macOS therefore quarantines every file
-            inside the bundle on download. Approving the app in System Settings only
-            clears the outer one, so it will **bounce in the Dock and never open a
-            window** until the flag is cleared from the whole bundle.
+            paid Apple Developer account), so macOS blocks the first launch.
 
-            Unzip, then either double-click `Sortero-first-run.command` (included), or
-            run once:
+            1. Drag `Sortero.app` where you want it; Applications is fine.
+            2. Open it once — macOS refuses, and it may bounce in the Dock with no
+               window.
+            3. **System Settings → Privacy & Security**, scroll to Security, click
+               **Open Anyway**.
+            4. **Quit the bouncing icon if it's still there**, then open it again.
 
-            ```
-            xattr -dr com.apple.quarantine /Applications/Sortero.app
-            ```
-
-            Then open it normally. Only needed once per download.
+            Step 4 matters: the blocked launch leaves a stuck process behind, and
+            opening the app again just brings that one to the front. Once per download.
 
             **Windows** — unzip and run `Sortero.exe`. SmartScreen may warn about an
             unknown publisher; choose More info → Run anyway.

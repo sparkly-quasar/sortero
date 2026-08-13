@@ -96,11 +96,6 @@ def main():
             arch = "-".join(arches) or "unknown"
         zip_path = os.path.join(DIST, f"Sortero-macOS-{arch}.zip")
 
-        # Ship the first-run helper beside the app. Downloading the zip stamps
-        # com.apple.quarantine on every file inside the bundle, and approving
-        # the app in System Settings only clears the outer one - the loader
-        # then stalls on the nested libraries and no window appears.
-        helper_src = os.path.join(BUILD, "Sortero-first-run.command")
         payload = os.path.join(DIST, "Sortero")
         # --windowed also leaves a onedir build at dist/Sortero. The .app is
         # self-contained, so that folder is dead weight - drop it before reusing
@@ -109,26 +104,24 @@ def main():
             shutil.rmtree(payload)
         os.makedirs(payload)
         shutil.move(app, os.path.join(payload, "Sortero.app"))
-        if os.path.exists(helper_src):
-            helper_dst = os.path.join(payload, "Sortero-first-run.command")
-            shutil.copy2(helper_src, helper_dst)
-            os.chmod(helper_dst, 0o755)
         readme = os.path.join(payload, "READ ME FIRST.txt")
         with open(readme, "w") as fh:
             fh.write(
                 "Sortero for macOS\n"
                 "=================\n\n"
-                "Sortero is signed ad-hoc, not notarised, so macOS quarantines every\n"
-                "file inside the app when you download it. Approving the app in System\n"
-                "Settings only clears the outer bundle, and the app will bounce in the\n"
-                "Dock without ever opening a window.\n\n"
-                "To fix that, once:\n\n"
-                "  1. Drag Sortero.app wherever you want it (Applications is fine).\n"
-                "  2. Double-click 'Sortero-first-run.command'.\n\n"
-                "Or run this in Terminal:\n\n"
-                "  xattr -dr com.apple.quarantine /Applications/Sortero.app\n\n"
-                "After that, open Sortero normally. You only need to do this once per\n"
-                "download.\n")
+                "Sortero is signed ad-hoc rather than notarised (notarising needs a paid\n"
+                "Apple Developer account), so macOS blocks the first launch.\n\n"
+                "  1. Drag Sortero.app wherever you want it - Applications is fine.\n"
+                "  2. Open it once. macOS will refuse, and the icon may bounce in the\n"
+                "     Dock without a window appearing.\n"
+                "  3. Go to System Settings > Privacy & Security, scroll to Security,\n"
+                "     and click 'Open Anyway' next to Sortero.\n"
+                "  4. Quit the bouncing icon if it is still there, then open Sortero\n"
+                "     again. It will start normally.\n\n"
+                "Step 4 matters: the blocked launch leaves a stuck process behind, and\n"
+                "while it is running, opening the app again just brings it to the front\n"
+                "instead of starting a working copy.\n\n"
+                "You only need this once per download.\n")
 
         print("==> zipping (ditto preserves the bundle)")
         subprocess.run(["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent",

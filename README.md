@@ -122,24 +122,21 @@ from the [Releases page](../../releases):
 | Windows | `Sortero-windows-x86_64.zip` |
 | Linux | `Sortero-linux-x86_64.zip` |
 
-### macOS: clear the quarantine flag first
+### macOS: first launch
 
 Builds are signed ad-hoc, not notarised — notarising requires a paid Apple
-Developer account. macOS stamps a quarantine flag on the app **and on every one
-of the ~450 files inside it** when you download the zip. Approving the app in
-System Settings only clears the outer bundle, so the dynamic loader stalls on
-the nested libraries: **the app bounces in the Dock and no window ever appears.**
-Right-click → Open does not fix this.
+Developer account — so macOS blocks the first launch.
 
-Unzip, then either double-click the included `Sortero-first-run.command`, or run:
+1. Drag `Sortero.app` wherever you want it; Applications is fine.
+2. Open it once. macOS refuses, and the icon may bounce in the Dock without a
+   window appearing.
+3. **System Settings → Privacy & Security**, scroll to Security, click
+   **Open Anyway** next to Sortero.
+4. **Quit the bouncing icon if it's still there**, then open Sortero again.
 
-```bash
-xattr -dr com.apple.quarantine /Applications/Sortero.app
-```
-
-Then open Sortero normally. Only needed once per download. If Sortero is in
-`/Applications`, macOS may ask permission before another program can modify apps
-there — approve it, or run the app from `~/Downloads` instead.
+Step 4 matters: the blocked launch leaves a stuck process behind, and while it's
+running, opening the app again just brings that stuck copy to the front rather
+than starting a working one. Only needed once per download.
 
 **Windows** — SmartScreen may warn about an unknown publisher; More info → Run anyway.
 **Linux** — needs Tk (`apt install python3-tk`).

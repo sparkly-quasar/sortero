@@ -4,12 +4,12 @@ from dataclasses import dataclass, field
 from .common import AUDIO_EXTS, is_spam, clean_stem, split_artist_title, to_camelot
 from .tagio import Track
 
-# Folders Sortero never touches. The user's Platinum Notes / Mixed In Key staging
-# areas, plus Sortero's own quarantine.
+# Folders Sortero never touches: the user's analysis staging lanes, plus
+# Sortero's own quarantine.
 PROTECTED = {"To Be Processed", "Processed", "_Quarantine", "_Playlists"}
 
 # Folders holding your own recordings rather than tracks to play. Nothing in
-# here ever needs Mixed In Key / Platinum Notes analysis.
+# here ever needs key/BPM analysis.
 RECORDING_DIRS = {"Recorded Mixes", "Mixes", "Recordings"}
 
 

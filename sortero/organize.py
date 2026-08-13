@@ -305,7 +305,7 @@ def folder_playlist_name(rec):
 
 
 def stage_for_analysis(root, recs, all_recs=None, log=print, progress=None):
-    """Move chosen tracks into 'To Be Processed' for Platinum Notes / Mixed In Key.
+    """Move chosen tracks into 'To Be Processed' for key/BPM analysis.
 
     Their current folder membership is written to playlists first and recorded
     as pending, so filing them back out of 'Processed' restores them to the

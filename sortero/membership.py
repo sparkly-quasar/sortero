@@ -1,6 +1,6 @@
 """Remember which playlists a track belonged to while it is away being analysed.
 
-Staging a track for Platinum Notes / Mixed In Key moves it out of the folder it
+Staging a track for analysis moves it out of the folder it
 was curated in, and it comes back renamed, in a different place. Without a
 record of where it came from, that track would quietly fall out of the set or
 vibe playlist it belonged to.

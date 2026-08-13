@@ -32,7 +32,7 @@ DJ Collection/
   Mixes/                               recordings over 20 minutes
   _Playlists/*.m3u8                    every folder you had, as a playlist
   _Quarantine/                         duplicates and rejects, never deleted
-  To Be Processed/                     your Platinum Notes / Mixed In Key stage
+  To Be Processed/                     tracks waiting to be analysed
   Processed/                           analysed and ready to file
 ```
 
@@ -47,25 +47,37 @@ DJ Collection/
 | **Tags** | Strips download-site spam from Genre/Comment, infers missing Artist/Title from filenames, normalises Genre, and promotes Mixed In Key energy into the sortable Grouping field. |
 | **Duplicates** | Exact (identical audio) and Likely (same artist/title/version, same length). Different remixes are never grouped. Extras move to `_Quarantine`. |
 | **Import** | Add files or folders. Analysed tracks go straight to `Tracks/<Genre>`; anything missing key/BPM lands in `To Be Processed`. Tracks already in the library are flagged, not copied. **"Sort the 'Processed' folder"** files everything you've already run through PN and MIK. |
-| **Needs Work** | Everything Sortero can't fix by itself, filtered by what's missing (key/BPM, energy, genre, artist, low bitrate). Select tracks and stage them in `To Be Processed` for Platinum Notes (first) then Mixed In Key (second). Your own set recordings are excluded. |
+| **Needs Work** | Everything Sortero can't fix by itself, filtered by what's missing (key/BPM, energy, genre, artist, low bitrate). Select tracks and stage them in `To Be Processed` for whichever analysis tool you use. Your own set recordings are excluded. |
 | **Playlists** | Rebuild a Spotify or TIDAL playlist against your local files, or rebuild the folder playlists. |
 | **History** | Every operation, with one-click undo. |
 
 ## The analysis loop
 
-Sortero can compute genre, artist and titles, but not key, BPM or energy —
-those need Mixed In Key and Platinum Notes. The **Needs Work** tab closes that
+Sortero works out genre, artist and title on its own, but not key, BPM or
+energy — those come from an analysis tool. The **Needs Work** tab closes that
 loop:
 
 1. Filter by *Missing key or BPM* and select what you want.
 2. **Stage selected in 'To Be Processed'.**
-3. Run that folder through **Platinum Notes first**, then **Mixed In Key second**,
-   saving the results into `Processed`.
+3. Run that folder through your analysis tool, saving the results into `Processed`.
 4. **Import → "Sort the 'Processed' folder"** files them by genre automatically.
 
-> **Order matters.** Platinum Notes re-encodes the audio. Run it *after* Mixed In
-> Key and you throw that analysis away — the key and energy tags won't match the
-> file you end up with. Sortero repeats this reminder when you stage tracks.
+Sortero doesn't care which tool wrote the tags — only that key and BPM are there.
+Any of these work:
+
+| Tool | Notes |
+|---|---|
+| **rekordbox / Serato / Traktor** | Already analyse on import. Free, and you probably have one. |
+| **[Mixxx](https://mixxx.org)** | Free and open source on every platform. Built-in key and BPM detection. |
+| **[Mixed In Key](https://mixedinkey.com)** | Paid. Widely considered the most accurate for key, and the source of the 1–10 energy rating. |
+| **KeyFinder** | Open source, key detection only. |
+
+> **If you use Platinum Notes, run it *before* analysing.** It re-encodes the
+> audio, so mastering afterwards leaves key and energy tags describing a file
+> that no longer exists — silently, with no error. Platinum Notes is entirely
+> optional; it improves audio quality and writes no tags Sortero needs. For the
+> loudness part alone, [MP3Gain](https://alternativeto.net/software/mp3gain/) or
+> your DJ software's auto-gain is a free substitute.
 
 Staging a track out of a set or vibe folder does **not** cost you that
 curation. Before anything moves, Sortero writes the folder out as a playlist

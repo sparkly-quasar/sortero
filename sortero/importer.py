@@ -2,7 +2,7 @@
 
 Rules, in order:
   1. Already in the library (same content signature) -> flagged as duplicate.
-  2. No key/BPM               -> 'To Be Processed'  (your Platinum Notes / MIK stage).
+  2. No key/BPM               -> 'To Be Processed'  (your analysis staging lane).
   3. Otherwise               -> Tracks/<Genre>/Artist - Title.ext
 Spam tags are stripped on the way in so junk never enters the library.
 """
@@ -108,7 +108,7 @@ def plan(root, sources, library_recs, progress=None):
         elif not (r.key and r.bpm):
             dest = os.path.join(root, TO_PROCESS, target_filename(r))
             results.append({"rec": r, "dest": dest, "action": "to-process",
-                            "reason": "missing key/BPM - run Platinum Notes + Mixed In Key"})
+                            "reason": "missing key/BPM - needs analysing"})
         else:
             g = resolve_genre(r)
             dest = os.path.join(root, TRACKS_DIR, safe(g, 60), target_filename(r))

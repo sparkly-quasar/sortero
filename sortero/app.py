@@ -476,7 +476,7 @@ class OverviewTab(BaseTab):
 
         self.issues.delete(0, "end")
         for label, items, hint in [
-            ("missing key/BPM", h["needs_analysis"], "Platinum Notes 1st, Mixed In Key 2nd"),
+            ("missing key/BPM", h["needs_analysis"], "run through your analysis tool"),
             ("missing genre", h["no_genre"], "Tags tab can normalise what exists"),
             ("missing artist", h["no_artist"], "Tags tab can infer from filename"),
             ("spam in genre", h["spam_genre"], "Tags tab clears these"),
@@ -764,8 +764,8 @@ class ImportTab(BaseTab):
     def build(self):
         ttk.Label(self, foreground="#666", wraplength=980, justify="left",
                   text="Add new music. Tracks with key and BPM go straight to Tracks/<Genre>. "
-                       "Anything missing analysis lands in 'To Be Processed' for Platinum Notes "
-                       "and Mixed In Key. Tracks already in the library are flagged, not copied."
+                       "Anything missing analysis lands in 'To Be Processed' for your "
+                       "analysis tool. Tracks already in the library are flagged, not copied."
                   ).pack(anchor="w", pady=(0, 8))
         pf = ttk.Frame(self)
         pf.pack(fill="x", pady=(0, 8))
@@ -773,7 +773,7 @@ class ImportTab(BaseTab):
                    command=self.intake_processed).pack(side="left")
         ttk.Label(pf, foreground="#666",
                   text="  — file everything you have already run through "
-                       "Platinum Notes then Mixed In Key").pack(side="left")
+                       "your analysis tool").pack(side="left")
 
         btns = ttk.Frame(self)
         btns.pack(fill="x", pady=(0, 8))
@@ -905,7 +905,7 @@ class NeedsWorkTab(BaseTab):
     """Find and act on tracks whose metadata still needs outside help."""
 
     FILTERS = [
-        ("Missing key or BPM — needs Platinum Notes + Mixed In Key",
+        ("Missing key or BPM — needs analysing",
          lambda r: not r.analyzed),
         ("Missing key only", lambda r: not r.key),
         ("Missing BPM only", lambda r: not r.bpm),
@@ -917,18 +917,21 @@ class NeedsWorkTab(BaseTab):
 
     def build(self):
         ttk.Label(self, foreground="#666", wraplength=980, justify="left",
-                  text="Everything here needs something Sortero can't compute itself. "
-                       "Pick a filter, select the tracks you want, then stage them in "
-                       "'To Be Processed', then run that folder through Platinum Notes "
-                       "FIRST and Mixed In Key SECOND. When they land in 'Processed' "
-                       "the Import tab files them automatically."
+                  text="Everything here needs something Sortero can't work out itself. "
+                       "Pick a filter, select the tracks you want, and stage them in "
+                       "'To Be Processed'. Run that folder through your analysis tool — "
+                       "Mixed In Key, rekordbox, Mixxx, or whatever you use — and when "
+                       "the results land in 'Processed', the Import tab files them "
+                       "automatically."
                   ).pack(anchor="w", pady=(0, 4))
         ttk.Label(self, foreground="#8a5a00", font=("Helvetica", 12, "bold"),
-                  text="Order matters:  1. Platinum Notes  →  2. Mixed In Key"
+                  text="If you use Platinum Notes: run it BEFORE your key/BPM analysis"
                   ).pack(anchor="w", pady=(0, 2))
         ttk.Label(self, foreground="#666", wraplength=980, justify="left",
-                  text="Platinum Notes re-encodes the audio, so running it after "
-                       "Mixed In Key throws the analysis away."
+                  text="Platinum Notes re-encodes the audio, so analysing first and "
+                       "mastering second leaves the tags describing a file that no "
+                       "longer exists. Skip this if you don't use it — Sortero only "
+                       "needs the key and BPM tags, whatever wrote them."
                   ).pack(anchor="w", pady=(0, 8))
 
         row = ttk.Frame(self)
@@ -1034,11 +1037,10 @@ class NeedsWorkTab(BaseTab):
             return
         if not messagebox.askyesno(
                 APP, f"Move {len(recs)} tracks into 'To Be Processed'?\n\n"
-                     "Then, in this order:\n"
-                     "  1. Platinum Notes  (re-encodes the audio)\n"
-                     "  2. Mixed In Key    (reads the final audio)\n\n"
-                     "Save the results into 'Processed', then use Import → "
-                     "\"Sort the 'Processed' folder\".\n\n"
+                     "Run them through your analysis tool, save the results into "
+                     "'Processed', then use Import → \"Sort the 'Processed' folder\".\n\n"
+                     "If you use Platinum Notes, run it BEFORE analysing — it "
+                     "re-encodes the audio.\n\n"
                      "Reversible from History."):
             return
         root = self.app.root_dir.get()
@@ -1055,12 +1057,10 @@ class NeedsWorkTab(BaseTab):
             path, n = res
             messagebox.showinfo(
                 APP, f"Staged {n} tracks in 'To Be Processed'.\n\n"
-                     "Remember the order:\n"
-                     "  1. Platinum Notes  FIRST\n"
-                     "  2. Mixed In Key    SECOND\n\n"
-                     "Platinum Notes re-encodes the audio, so running it second "
-                     "would discard the Mixed In Key analysis.\n\n"
-                     "Save the results into 'Processed'.")
+                     "Run that folder through your analysis tool — Mixed In Key, "
+                     "rekordbox, Mixxx — and save the results into 'Processed'.\n\n"
+                     "If you use Platinum Notes, run it FIRST. It re-encodes the "
+                     "audio, so mastering after analysing discards the analysis.")
             self.app.tab_history.refresh()
             self.app.scan()
 

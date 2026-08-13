@@ -4,7 +4,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 from . import (library, organize, dupes, fixtags, importer, journal, playlists,
-               auth, paths, settings, updates, wizard, session, updater)
+               auth, paths, settings, updates, wizard, session, updater, genres)
 from .common import human_size
 
 APP = "Sortero"
@@ -440,12 +440,14 @@ class Sortero(tk.Tk):
         self.tab_dupes = DupesTab(self.nb, self)
         self.tab_import = ImportTab(self.nb, self)
         self.tab_needs = NeedsWorkTab(self.nb, self)
+        self.tab_genres = GenresTab(self.nb, self)
         self.tab_playlists = PlaylistTab(self.nb, self)
         self.tab_history = HistoryTab(self.nb, self)
         for t, n in [(self.tab_overview, "Overview"), (self.tab_organize, "Organise"),
                      (self.tab_tags, "Tags"), (self.tab_dupes, "Duplicates"),
                      (self.tab_import, "Import"), (self.tab_needs, "Needs Work"),
-                     (self.tab_playlists, "Playlists"), (self.tab_history, "History")]:
+                     (self.tab_genres, "Genres"), (self.tab_playlists, "Playlists"),
+                     (self.tab_history, "History")]:
             self.nb.add(t, text=n)
 
     def _build_footer(self):
@@ -491,7 +493,8 @@ class Sortero(tk.Tk):
             self.recs, self.health = res
             self.tab_overview.render(self.health)
             for t in (self.tab_organize, self.tab_tags, self.tab_dupes,
-                      self.tab_import, self.tab_needs, self.tab_playlists):
+                      self.tab_import, self.tab_needs, self.tab_genres,
+                      self.tab_playlists):
                 t.invalidate()
             self.log(f"Scanned {len(self.recs)} files in {d}")
             self.refresh_banner()
@@ -664,12 +667,19 @@ class OrganizeTab(BaseTab):
             return
         counts = collections.Counter(r.top for r in self.app.recs if not r.protected)
         keep = dict(self.folder_vars)
+        remembered = set(settings.get("excluded_folders") or [])
         self.folder_vars = {}
         for i, (name, n) in enumerate(sorted(counts.items(), key=lambda x: -x[1])):
-            v = tk.BooleanVar(value=keep[name].get() if name in keep else True)
+            default = name not in remembered
+            v = tk.BooleanVar(value=keep[name].get() if name in keep else default)
+            v.trace_add("write", lambda *a: self._remember_folders())
             self.folder_vars[name] = v
             ttk.Checkbutton(self.folder_wrap, text=f"{name} ({n})", variable=v
                             ).grid(row=i // 4, column=i % 4, sticky="w", padx=(0, 14))
+
+    def _remember_folders(self):
+        settings.set("excluded_folders",
+                     sorted(n for n, v in self.folder_vars.items() if not v.get()))
 
     def _excluded_paths(self):
         """Paths to leave alone: whole unticked folders, plus individual rows."""
@@ -1236,6 +1246,167 @@ class NeedsWorkTab(BaseTab):
             self.app.scan()
 
         self.app.task.run(work, done, "Staging tracks")
+
+
+class GenresTab(BaseTab):
+    """Assign genres in bulk, by hand or from Discogs."""
+
+    def build(self):
+        ttk.Label(self, foreground="#666", wraplength=980, justify="left",
+                  text="Sortero can only infer a genre from what a file already "
+                       "carries, and plenty carry nothing. Select tracks and set one "
+                       "directly, or look them up on Discogs — its styles are the "
+                       "subgenre detail you want. Sorting by artist or folder makes "
+                       "whole groups selectable at once."
+                  ).pack(anchor="w", pady=(0, 8))
+
+        row = ttk.Frame(self)
+        row.pack(fill="x", pady=(0, 6))
+        ttk.Label(row, text="Show").pack(side="left")
+        self.filter_var = tk.StringVar(value="Missing or unusable genre")
+        fb = ttk.Combobox(row, textvariable=self.filter_var, width=30, state="readonly",
+                          values=["Missing or unusable genre", "Everything"])
+        fb.pack(side="left", padx=6)
+        fb.bind("<<ComboboxSelected>>", lambda e: self.refresh())
+        ttk.Label(row, text="Sort by").pack(side="left", padx=(10, 0))
+        self.sort_var = tk.StringVar(value="Artist")
+        sb = ttk.Combobox(row, textvariable=self.sort_var, width=14, state="readonly",
+                          values=["Artist", "Folder", "Title"])
+        sb.pack(side="left", padx=6)
+        sb.bind("<<ComboboxSelected>>", lambda e: self.refresh())
+        ttk.Button(row, text="Select all", command=self.select_all).pack(side="left", padx=6)
+        self.count = ttk.Label(row, text="", foreground="#444")
+        self.count.pack(side="left", padx=10)
+
+        row2 = ttk.Frame(self)
+        row2.pack(fill="x", pady=(0, 8))
+        ttk.Label(row2, text="Set genre to").pack(side="left")
+        self.genre_var = tk.StringVar()
+        self.genre_box = ttk.Combobox(row2, textvariable=self.genre_var, width=30)
+        self.genre_box.pack(side="left", padx=6)
+        ttk.Button(row2, text="Apply to selected",
+                   command=self.apply_manual).pack(side="left")
+        ttk.Button(row2, text="Look up selected on Discogs",
+                   command=self.lookup).pack(side="left", padx=(16, 0))
+        ttk.Button(row2, text="Accept suggestions",
+                   command=self.apply_suggested).pack(side="left", padx=6)
+
+        f, self.tv = tree(self, ("Track", "Artist", "Genre", "Suggested", "Where"),
+                          (300, 190, 150, 170, 200), height=15)
+        f.pack(fill="both", expand=True)
+        self.tv.bind("<<TreeviewSelect>>", lambda e: self._sync())
+        self.rows, self.suggested = [], {}
+
+    def invalidate(self):
+        vocab = sorted({lab for _, lab in organize.GENRE_RULES} |
+                       {lab for _, lab in organize.FINE_RULES})
+        self.genre_box.configure(values=vocab)
+        self.suggested = {}
+        self.refresh()
+
+    def _needs(self, r):
+        return not organize.canon_genre(r.genre) and not (r.genre or "").strip()
+
+    def refresh(self):
+        self.tv.delete(*self.tv.get_children())
+        self.rows = []
+        if not self.app.recs:
+            self.count.configure(text="")
+            return
+        only_missing = self.filter_var.get().startswith("Missing")
+        rows = [r for r in self.app.recs
+                if not r.protected and not r.is_recording
+                and (self._needs(r) if only_missing else True)]
+        keys = {"Artist": lambda r: (r.artist or "").lower(),
+                "Folder": lambda r: r.rel.lower(),
+                "Title": lambda r: (r.title or "").lower()}
+        rows.sort(key=keys.get(self.sort_var.get(), keys["Artist"]))
+        for r in rows:
+            self.rows.append(r)
+            sug = self.suggested.get(r.path, (None, []))[0] or ""
+            self.tv.insert("", "end", values=(
+                (r.title or os.path.basename(r.path))[:60], (r.artist or "")[:38],
+                (r.genre or "—")[:26], sug[:28], os.path.dirname(r.rel)[:34] or "(root)"))
+        self.count.configure(text=f"{len(self.rows)} tracks")
+        self._sync()
+
+    def _sync(self):
+        n = len(self.tv.selection())
+        self.count.configure(text=f"{len(self.rows)} tracks"
+                                  + (f" · {n} selected" if n else ""))
+
+    def select_all(self):
+        self.tv.selection_set(self.tv.get_children())
+        self._sync()
+
+    def _selected(self):
+        return [self.rows[self.tv.index(i)] for i in self.tv.selection()]
+
+    def apply_manual(self):
+        recs = self._selected()
+        genre = self.genre_var.get().strip()
+        if not recs:
+            messagebox.showinfo(APP, "Select some tracks first.")
+            return
+        if not genre:
+            messagebox.showinfo(APP, "Pick or type a genre first.")
+            return
+        self._write([(r, genre) for r in recs],
+                    f"Set {len(recs)} tracks to '{genre}'?")
+
+    def apply_suggested(self):
+        recs = self._selected() or self.rows
+        pairs = [(r, self.suggested[r.path][0]) for r in recs
+                 if self.suggested.get(r.path, (None,))[0]]
+        if not pairs:
+            messagebox.showinfo(APP, "No suggestions yet — run a Discogs lookup first.")
+            return
+        self._write(pairs, f"Accept {len(pairs)} suggested genres?")
+
+    def _write(self, pairs, question):
+        if not messagebox.askyesno(APP, question + "\n\nUndoable from History."):
+            return
+        root = self.app.root_dir.get()
+
+        def work(progress, log):
+            return genres.apply_genres(root, pairs, log=log, progress=progress)
+
+        def done(res):
+            _, n, failed = res
+            messagebox.showinfo(APP, f"Updated {n} tracks."
+                                     + (f"\n{failed} failed." if failed else ""))
+            self.app.tab_history.refresh()
+            self.app.scan()
+
+        self.app.task.run(work, done, "Writing genres")
+
+    def lookup(self):
+        recs = self._selected()
+        if not recs:
+            messagebox.showinfo(APP, "Select the tracks you want looked up.")
+            return
+        mins = max(1, round(len(recs) * genres.MIN_INTERVAL / 60))
+        if not messagebox.askyesno(
+                APP, f"Look up {len(recs)} tracks on Discogs?\n\n"
+                     f"Discogs rate-limits free use, so this is paced and takes "
+                     f"roughly {mins} minute(s). Results are cached, so re-running "
+                     "never asks twice.\n\nArtist and title are sent to Discogs; "
+                     "nothing else leaves your machine."):
+            return
+
+        def work(progress, log):
+            return genres.bulk_lookup(recs, progress=progress, log=log)
+
+        def done(found):
+            self.suggested.update(found)
+            got = sum(1 for v in found.values() if v[0])
+            self.refresh()
+            messagebox.showinfo(
+                APP, f"Discogs matched {len(found)} tracks; {got} map to a genre "
+                     "Sortero recognises.\n\nReview the Suggested column, then "
+                     "'Accept suggestions'.")
+
+        self.app.task.run(work, done, "Asking Discogs")
 
 
 class PlaylistTab(BaseTab):

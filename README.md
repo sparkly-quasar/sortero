@@ -55,6 +55,7 @@ value that matched no rule needs at least 8 tracks to earn one, so oddities like
 | **Duplicates** | Exact (identical audio) and Likely (same artist/title/version, same length). Different remixes are never grouped. Extras move to `_Quarantine`. |
 | **Import** | Add files or folders. Analysed tracks go straight to `Tracks/<Genre>`; anything missing key/BPM lands in `To Be Processed`. Tracks already in the library are flagged, not copied. **"Sort the 'Processed' folder"** files everything you've already run through PN and MIK. |
 | **Needs Work** | Everything Sortero can't fix by itself, filtered by what's missing (key/BPM, energy, genre, artist, low bitrate). Select tracks and stage them in `To Be Processed` for whichever analysis tool you use. Your own set recordings are excluded. |
+| **Genres** | Assign genres in bulk. Filter to tracks with none, sort by artist or folder, select a group and set it — or look them up on Discogs, whose *styles* are the subgenre detail you want. Every write is undoable. |
 | **Playlists** | Rebuild a Spotify or TIDAL playlist against your local files, rebuild the folder playlists, or **repair broken links** when tracks come back from analysis renamed or re-encoded. |
 | **History** | Every operation, with one-click undo. |
 
@@ -100,6 +101,22 @@ filed back out of `Processed`, it rejoins exactly those playlists at its new
 location. Matching is on artist and title, so it survives Platinum Notes
 renaming the file *and* changing its format — an MP3 that comes back as FLAC
 still lands back in its set.
+
+## When there's no genre to infer
+
+Sortero derives genre from tags and folder names. When a file has neither —
+an analysis tool stripped the tag, or a Bandcamp rip never had one — there is
+nothing to infer from, and it lands in `Unsorted`. The **Genres** tab is the way
+out: select a group and set it, or ask Discogs.
+
+Discogs needs no API token. Its free tier is rate limited, so lookups are paced
+at 2.5s and cached on disk — re-running never asks twice. Queries are cleaned
+first (`Track (Original Mix)_PN` → `Track`), which took the hit rate from 1-in-8
+to 6-in-10 on a real batch. Only artist and title are sent.
+
+Coverage is honest, not magic: well-known club tracks resolve, obscure Bandcamp
+material often doesn't. For that tail, set it by hand — that's what bulk
+assignment is for.
 
 ## Streaming playlists
 

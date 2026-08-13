@@ -8,12 +8,16 @@ from mutagen.mp4 import MP4
 # logical field -> per-format tag name
 ID3_FRAMES = {"key": TKEY, "grouping": TIT1, "genre": TCON,
               "artist": TPE1, "title": TIT2, "bpm": TBPM}
+# Mixed In Key writes its 1-10 rating to ENERGYLEVEL. Note it also writes a
+# base64 JSON blob to plain KEY/ENERGY - read INITIALKEY, never KEY.
 VORBIS_KEYS = {"key": "INITIALKEY", "grouping": "GROUPING", "genre": "GENRE",
                "artist": "ARTIST", "title": "TITLE", "bpm": "BPM",
-               "comment": "COMMENT"}
+               "comment": "COMMENT", "energylevel": "ENERGYLEVEL"}
 MP4_KEYS = {"grouping": "\xa9grp", "genre": "\xa9gen", "artist": "\xa9ART",
             "title": "\xa9nam", "comment": "\xa9cmt"}
 MP4_KEY_ATOM = "----:com.apple.iTunes:initialkey"
+MP4_ENERGY_ATOM = "----:com.apple.iTunes:EnergyLevel"
+ID3_ENERGY_DESCS = ("energylevel", "energy")
 
 
 class Track:
@@ -73,6 +77,13 @@ class Track:
                         if f.text and f.text[0].strip():
                             return f.text[0]
                     return None
+                if field == "energylevel":
+                    for f in self.audio.getall("TXXX"):
+                        if str(getattr(f, "desc", "")).lower() in ID3_ENERGY_DESCS:
+                            v = str(f.text[0]) if f.text else ""
+                            if v.strip().isdigit():
+                                return v.strip()
+                    return None
                 frame = ID3_FRAMES.get(field)
                 if not frame:
                     return None
@@ -84,6 +95,9 @@ class Track:
             if self.kind == "mp4":
                 if field == "key":
                     v = self.audio.get(MP4_KEY_ATOM)
+                    return v[0].decode("utf-8", "ignore") if v else None
+                if field == "energylevel":
+                    v = self.audio.get(MP4_ENERGY_ATOM)
                     return v[0].decode("utf-8", "ignore") if v else None
                 if field == "bpm":
                     v = self.audio.get("tmpo")

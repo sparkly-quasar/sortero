@@ -26,6 +26,7 @@ class Rec:
     bpm: str = None
     grouping: str = None
     comment: str = None
+    energylevel: str = None
     album: str = None
     duration: float = 0.0
     bitrate: int = 0
@@ -41,6 +42,9 @@ class Rec:
 
     @property
     def energy(self):
+        # Mixed In Key's own ENERGYLEVEL tag is the most reliable source.
+        if self.energylevel and str(self.energylevel).strip().isdigit():
+            return int(str(self.energylevel).strip())
         for src in (self.grouping, self.comment):
             if src:
                 m = re.search(r"(?i)energy\s*(\d+)", src)
@@ -55,7 +59,15 @@ class Rec:
 
     @property
     def analyzed(self):
-        return bool(self.key and self.bpm)
+        """Has this been through an analysis tool?
+
+        Key only. Requiring BPM as well was wrong: Mixed In Key writes key and
+        energy but frequently no BPM tag at all (260 of 261 vs 22 of 261 on a
+        real processed batch), so demanding both sent fully-analysed tracks
+        straight back to 'To Be Processed' - an endless loop. Key is the thing
+        only an analysis tool provides; every DJ app derives BPM on import.
+        """
+        return bool(self.key)
 
     @property
     def display(self):
@@ -106,6 +118,7 @@ def scan(root, progress=None):
             r.bpm = _clean(t.get("bpm"))
             r.grouping = _clean(t.get("grouping"))
             r.comment = _clean(t.get("comment"))
+            r.energylevel = _clean(t.get("energylevel"))
             r.album = _clean(t.get("album"))
             r.duration = t.length or 0.0
             r.bitrate = t.bitrate or 0

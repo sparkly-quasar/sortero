@@ -159,7 +159,7 @@ def classify(r, keep_sets=True, route_unanalyzed=False):
 
 # --------------------------------------------------------------------------
 def plan(root, recs, keep_sets=True, min_genre=8, route_unanalyzed=False,
-         canonical=None):
+         canonical=None, exclude=None):
     """Build the list of moves. Returns (moves, playlists, stats).
 
     moves: list of (rec, dest_abs)
@@ -169,13 +169,21 @@ def plan(root, recs, keep_sets=True, min_genre=8, route_unanalyzed=False,
     copies are routed to _Quarantine and every playlist that referenced one is
     repointed at the surviving file, so a track curated into five vibe folders
     ends up as one file on disk referenced by five playlists.
+
+    `exclude` is a set of paths to leave exactly where they are. They are
+    excluded here rather than filtered out afterwards, so the playlists point at
+    where those files actually stay instead of where they would have gone.
     """
     canonical = canonical or {}
+    exclude = exclude or set()
 
     # First pass: classify and count genres so tiny genres can be folded away.
     prelim = {}
     gcount = collections.Counter()
     for r in recs:
+        if r.path in exclude:
+            prelim[r.path] = ("skip", None)
+            continue
         if canonical.get(r.path, r.path) != r.path:
             prelim[r.path] = ("duplicate", None)
             continue
@@ -253,6 +261,7 @@ def plan(root, recs, keep_sets=True, min_genre=8, route_unanalyzed=False,
         "playlists": len(playlists),
         "skipped_protected": sum(1 for r in recs if r.protected),
         "deduped": sum(1 for r in recs if prelim.get(r.path, (None,))[0] == "duplicate"),
+        "excluded": sum(1 for r in recs if r.path in exclude),
     }
     return moves, dict(playlists), stats
 
@@ -318,8 +327,17 @@ def stage_for_analysis(root, recs, all_recs=None, log=print, progress=None):
 
     # Capture curation before anything moves.
     staged_paths = {r.path for r in recs}
-    owed = [(r, [n]) for r in recs if (n := folder_playlist_name(r))]
-    if owed:
+    # Curated folders become playlists to rejoin; genre folders under Tracks/
+    # are remembered as a genre instead, since the analysis tool strips the tag.
+    owed = []
+    for r in recs:
+        n = folder_playlist_name(r)
+        from_genre_folder = r.rel.split(os.sep)[0] == TRACKS_DIR
+        # store the canonical genre either way, so it comes back as a real
+        # folder name rather than a raw tag like "Techno, Electronic, Minimal"
+        owed.append((r, [] if from_genre_folder else ([n] if n else []),
+                     resolve_genre(r)))
+    if any(names or genre for _, names, genre in owed):
         pool = all_recs if all_recs is not None else recs
         by_name = collections.defaultdict(list)
         for r in pool:
@@ -328,14 +346,15 @@ def stage_for_analysis(root, recs, all_recs=None, log=print, progress=None):
             n = folder_playlist_name(r)
             if n:
                 by_name[n].append(r.path)
-        affected = {n for _, names in owed for n in names}
+        affected = {n for _, names, _ in owed for n in names}
         # min_tracks=1: keep even a nearly-empty playlist alive so the staged
         # track has something to rejoin.
         write_playlists(root, {n: by_name.get(n, []) for n in affected},
                         journal=j, min_tracks=1)
         membership.remember(owed)
-        log(f"recorded playlist membership for {len(owed)} tracks "
-            f"across {len(affected)} playlists")
+        log(f"recorded where {len(owed)} tracks came from "
+            f"({len(affected)} playlists, "
+            f"{sum(1 for _, _, g in owed if g)} genres)")
 
     total = len(recs) or 1
     n = 0

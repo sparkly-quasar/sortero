@@ -43,7 +43,7 @@ DJ Collection/
 | Tab | What it does |
 |---|---|
 | **Overview** | Track count, size, and what share has key+BPM, genre and energy. Lists what needs attention. |
-| **Organise** | Previews every move before anything happens. Collapses duplicates, writes playlists, files tracks by genre. |
+| **Organise** | Previews every move before anything happens. Untick folders, or exclude individual rows, to leave things where they are. Collapses duplicates, writes playlists, files tracks by genre. |
 | **Tags** | Strips download-site spam from Genre/Comment, infers missing Artist/Title from filenames, normalises Genre, and promotes Mixed In Key energy into the sortable Grouping field. |
 | **Duplicates** | Exact (identical audio) and Likely (same artist/title/version, same length). Different remixes are never grouped. Extras move to `_Quarantine`. |
 | **Import** | Add files or folders. Analysed tracks go straight to `Tracks/<Genre>`; anything missing key/BPM lands in `To Be Processed`. Tracks already in the library are flagged, not copied. **"Sort the 'Processed' folder"** files everything you've already run through PN and MIK. |
@@ -61,6 +61,13 @@ loop:
 2. **Stage selected in 'To Be Processed'.**
 3. Run that folder through your analysis tool, saving the results into `Processed`.
 4. **Import → "Sort the 'Processed' folder"** files them by genre automatically.
+   Sortero also shows a green bar whenever `Processed` has tracks waiting, and the
+   setup wizard files them as its first real step, so the loop closes even if you
+   walk away mid-way.
+
+Staged tracks remember the genre they came from. Analysis tools routinely strip
+the genre tag when they re-encode, and without that memory every returning track
+would land in `Unsorted` — on a real batch, 251 of 262.
 
 Sortero doesn't care which tool wrote the tags — only that key and BPM are there.
 Any of these work:

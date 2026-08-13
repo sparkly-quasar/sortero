@@ -46,11 +46,19 @@ def _keys(rec):
     return precise, loose
 
 
+# A track staged out of Tracks/<Genre> came from a genre folder, not a curated
+# playlist. Remember the genre instead - otherwise it returns with no genre tag
+# (Platinum Notes drops it) and lands in Unsorted.
+GENRE_FOLDER = re.compile(r"^Tracks\s*-\s*(.+)$")
+
+
 def remember(pairs):
-    """pairs: iterable of (Rec, [playlist name, ...])."""
+    """pairs: iterable of (Rec, [playlist name, ...], genre) or (Rec, names)."""
     data = _load()
-    for rec, names in pairs:
-        if not names:
+    for item in pairs:
+        rec, names = item[0], item[1]
+        genre = item[2] if len(item) > 2 else None
+        if not names and not genre:
             continue
         precise, loose = _keys(rec)
         found = None
@@ -61,28 +69,58 @@ def remember(pairs):
                 break
         if found is None:
             found = {"ident": precise, "title": loose,
-                     "display": rec.display, "playlists": []}
+                     "display": rec.display, "playlists": [], "genre": None}
             data.append(found)
-        for n in names:
+        if genre and not found.get("genre"):
+            found["genre"] = genre
+        for n in names or ():
             if n not in found["playlists"]:
                 found["playlists"].append(n)
     _save(data)
     return len(data)
 
 
-def claim(rec):
-    """Playlists this track owes a place in. Does not clear the entry."""
+def _find(rec):
     precise, loose = _keys(rec)
     data = _load()
     if precise:
         for e in data:
             if e.get("ident") == precise:
-                return e["playlists"]
+                return e
     if loose:
         for e in data:
             if e.get("title") == loose:
-                return e["playlists"]
-    return []
+                return e
+    return None
+
+
+def claim(rec):
+    """Curated playlists this track owes a place in.
+
+    Genre folders under Tracks/ are excluded - re-adding those would build
+    playlists that just mirror the folder tree.
+    """
+    e = _find(rec)
+    if not e:
+        return []
+    return [n for n in e.get("playlists", []) if not GENRE_FOLDER.match(n)]
+
+
+def claim_genre(rec):
+    """The genre this track had before it was staged, if known."""
+    e = _find(rec)
+    if not e:
+        return None
+    if e.get("genre"):
+        return e["genre"]
+    # Entries written before genre was recorded still encode it in the name.
+    for n in e.get("playlists", []):
+        m = GENRE_FOLDER.match(n)
+        if m:
+            g = m.group(1).strip()
+            if g and g.lower() != "unsorted":
+                return g
+    return None
 
 
 def release(recs):

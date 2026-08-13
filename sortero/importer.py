@@ -9,7 +9,8 @@ Spam tags are stripped on the way in so junk never enters the library.
 import os, shutil, collections
 from .common import AUDIO_EXTS, is_spam
 from .library import scan, Rec, is_protected
-from .organize import resolve_genre, target_filename, safe, TRACKS_DIR, MIX_MIN_SECONDS, MIXES_DIR
+from .organize import (resolve_genre, canon_genre, target_filename, safe,
+                       TRACKS_DIR, MIX_MIN_SECONDS, MIXES_DIR)
 from .dupes import _sig, ident
 from .journal import Journal
 from .tagio import Track
@@ -86,6 +87,7 @@ def plan(root, sources, library_recs, progress=None):
             r.bpm = (t.get("bpm") or "").strip() or None
             r.grouping = (t.get("grouping") or "").strip() or None
             r.comment = (t.get("comment") or "").strip() or None
+            r.energylevel = (t.get("energylevel") or "").strip() or None
             r.duration = t.length or 0.0
         if not r.artist or not r.title:
             a, ti = split_artist_title(clean_stem(p))
@@ -105,15 +107,20 @@ def plan(root, sources, library_recs, progress=None):
             dest = os.path.join(root, MIXES_DIR, os.path.basename(p))
             results.append({"rec": r, "dest": dest, "action": "mix",
                             "reason": "longer than 20 minutes"})
-        elif not (r.key and r.bpm):
+        elif not r.analyzed:
             dest = os.path.join(root, TO_PROCESS, target_filename(r))
             results.append({"rec": r, "dest": dest, "action": "to-process",
                             "reason": "missing key/BPM - needs analysing"})
         else:
             g = resolve_genre(r)
+            if g == "Unsorted":
+                remembered = membership.claim_genre(r)
+                if remembered:
+                    g = canon_genre(remembered) or remembered
+                    r.genre = r.genre or g
             dest = os.path.join(root, TRACKS_DIR, safe(g, 60), target_filename(r))
             results.append({"rec": r, "dest": dest, "action": "sort",
-                            "reason": f"genre: {g}"})
+                            "genre": g, "reason": f"genre: {g}"})
     if progress:
         progress(total, total)
     return results
@@ -154,6 +161,16 @@ def apply(root, results, move=True, clean_spam=True, log=print, progress=None):
                             t.set(field, None)
                     if ch and t.save():
                         j.tagged(final, ch)
+
+            # Restore the genre the analysis tool dropped.
+            want_genre = x.get("genre")
+            if want_genre:
+                t = Track(final)
+                if t.ok and not (t.get("genre") or "").strip():
+                    old = t.get("genre")
+                    t.set("genre", want_genre)
+                    if t.save():
+                        j.tagged(final, {"genre": {"old": old, "new": want_genre}})
 
             # If this track was staged out of a set/vibe folder, put it back
             # into the playlists it came from - now pointing at its new home.

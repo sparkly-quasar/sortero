@@ -12,7 +12,7 @@ import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-from . import settings, library, auth, organize, fixtags, dupes, session
+from . import settings, library, auth, organize, fixtags, dupes, session, importer
 from .common import human_size
 
 TITLE = "Welcome to Sortero"
@@ -56,6 +56,7 @@ class Wizard(tk.Toplevel):
 
         self.steps = [
             self._welcome, self._folder, self._scan,
+            self._file_processed,
             self._tags, self._duplicates, self._organise, self._analysis,
             self._done,
         ]
@@ -291,6 +292,67 @@ class Wizard(tk.Toplevel):
         ttk.Label(self.scan_box, foreground="#666", wraplength=690, justify="left",
                   text="\nThe next steps will offer to fix these. Press Next."
                   ).pack(anchor="w")
+
+    # -- step: file anything already analysed --------------------------------
+    def _file_processed(self):
+        self._heading("Anything already analysed?",
+                      "If you've run tracks through your analysis tool and saved them "
+                      "into 'Processed', they get filed by genre now — before anything "
+                      "else moves, so they land in the right place.")
+        root = self.root_dir.get()
+        folder = os.path.join(root, importer.PROCESSED)
+        if not os.path.isdir(folder) or not importer.gather([folder]):
+            self._mono("'Processed' is empty — nothing waiting to be filed.")
+            ttk.Label(self.body, foreground="#666", wraplength=690, justify="left",
+                      text="\nThat's expected on a first run. Later steps will stage "
+                           "tracks that need analysing; once you've run them, come back "
+                           "to this step (Help → Setup Wizard) or use Import → \"Sort "
+                           "the 'Processed' folder\"."
+                      ).pack(anchor="w", pady=(8, 0))
+            return
+
+        self.proc_note = self._mono("Checking…")
+        self.proc_btn, _ = self._action_row("File them into the library",
+                                            self._apply_processed)
+        self.proc_btn.configure(state="disabled")
+
+        def work(progress):
+            known = importer.library_excluding(self.recs or [], root, importer.PROCESSED)
+            return importer.plan(root, [folder], known, progress=progress)
+
+        def done(res):
+            self._proc_results = res
+            c = importer.summarize(res)
+            filed = sum(1 for x in res if x["dest"])
+            if not filed:
+                self.proc_note.configure(
+                    text="Nothing new to file — " +
+                         ", ".join(f"{v} {k}" for k, v in c.most_common()))
+                return
+            self.proc_note.configure(
+                text=f"{filed} tracks ready to file:\n" +
+                     "\n".join(f"  {v:5}  {k}" for k, v in c.most_common()))
+            self.proc_btn.configure(state="normal")
+
+        self._run(work, done, "Reading 'Processed'")
+
+    def _apply_processed(self):
+        res = getattr(self, "_proc_results", None)
+        if not res:
+            return
+        root = self.root_dir.get()
+
+        def work(progress):
+            return importer.apply(root, res, log=lambda m: None, progress=progress)
+
+        def done(out):
+            _, n = out
+            self.proc_btn.configure(state="disabled")
+            self.proc_note.configure(text=f"Done — {n} tracks filed into the library.")
+            self.app.refresh_banner()
+            self.rescan()
+
+        self._run(work, done, "Filing analysed tracks")
 
     # -- step: tags ---------------------------------------------------------
     def _tags(self):
@@ -534,6 +596,23 @@ class Wizard(tk.Toplevel):
                       text="Use the Testing menu to keep it all, or undo the entire "
                            "setup in one go. Until you choose, the restore point stays."
                       ).pack(anchor="w", pady=(4, 0))
+        staged = 0
+        try:
+            folder = os.path.join(self.root_dir.get(), importer.TO_PROCESS)
+            staged = len(importer.gather([folder])) if os.path.isdir(folder) else 0
+        except Exception:
+            pass
+        if staged:
+            ttk.Label(self.body, foreground="#8a5a00", font=("Helvetica", 13, "bold"),
+                      text=f"{staged} tracks are waiting in 'To Be Processed'"
+                      ).pack(anchor="w", pady=(14, 2))
+            ttk.Label(self.body, foreground="#666", wraplength=690, justify="left",
+                      text="Run them through your analysis tool and save the results "
+                           "into 'Processed'. Then come back — Sortero shows a bar "
+                           "offering to file them, or use Import → \"Sort the "
+                           "'Processed' folder\". The wizard's first steps will also "
+                           "pick them up if you run it again."
+                      ).pack(anchor="w")
         ttk.Label(self.body, foreground="#666", wraplength=690, justify="left",
                   text="\nReopen this wizard any time from Help → Setup Wizard."
                   ).pack(anchor="w", pady=(10, 0))

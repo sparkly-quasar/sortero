@@ -91,6 +91,7 @@ class Sortero(tk.Tk):
         self._build_header()
         self._build_tabs()
         self._build_banner()
+        self._build_notice()
         self._build_footer()
         self.after(250, self._first_run)
 
@@ -156,6 +157,36 @@ class Sortero(tk.Tk):
         tk.Button(self.banner, text="Undo everything", command=self.testing_revert,
                   highlightbackground="#8a5a00").pack(side="right", pady=4)
         self.refresh_banner()
+
+    def _build_notice(self):
+        """Shown when 'Processed' has analysed tracks waiting to be filed."""
+        self.notice = tk.Frame(self, bg="#1d5c3a")
+        self.notice_label = tk.Label(self.notice, bg="#1d5c3a", fg="white",
+                                     font=("Helvetica", 12, "bold"), pady=6)
+        self.notice_label.pack(side="left", padx=12)
+        tk.Button(self.notice, text="File them now",
+                  command=self._file_processed_now,
+                  highlightbackground="#1d5c3a").pack(side="right", padx=10, pady=4)
+        self.refresh_notice()
+
+    def refresh_notice(self):
+        d = self.root_dir.get()
+        n = 0
+        if d and os.path.isdir(d):
+            folder = os.path.join(d, importer.PROCESSED)
+            if os.path.isdir(folder):
+                n = len(importer.gather([folder]))
+        if not n:
+            self.notice.pack_forget()
+            return
+        self.notice_label.configure(
+            text=f"{n} analysed track{'s' if n != 1 else ''} in 'Processed' "
+                 f"waiting to be filed into your library.")
+        self.notice.pack(fill="x", before=self.nb)
+
+    def _file_processed_now(self):
+        self.nb.select(self.tab_import)
+        self.tab_import.intake_processed()
 
     def refresh_banner(self):
         sess = session.active()
@@ -402,6 +433,7 @@ class Sortero(tk.Tk):
                 t.invalidate()
             self.log(f"Scanned {len(self.recs)} files in {d}")
             self.refresh_banner()
+            self.refresh_notice()
 
         self.task.run(work, done, "Scanning library")
 
@@ -476,7 +508,7 @@ class OverviewTab(BaseTab):
 
         self.issues.delete(0, "end")
         for label, items, hint in [
-            ("missing key/BPM", h["needs_analysis"], "run through your analysis tool"),
+            ("missing key", h["needs_analysis"], "run through your analysis tool"),
             ("missing genre", h["no_genre"], "Tags tab can normalise what exists"),
             ("missing artist", h["no_artist"], "Tags tab can infer from filename"),
             ("spam in genre", h["spam_genre"], "Tags tab clears these"),
@@ -518,23 +550,84 @@ class OrganizeTab(BaseTab):
                        "'To Be Processed' and 'Processed' are never touched."
                   ).pack(anchor="w", pady=(0, 8))
 
+        src = ttk.LabelFrame(self, text="Folders to reorganise", padding=8)
+        src.pack(fill="x", pady=(0, 8))
+        ttk.Label(src, foreground="#666",
+                  text="Untick anything you want left exactly where it is."
+                  ).pack(anchor="w")
+        self.folder_wrap = ttk.Frame(src)
+        self.folder_wrap.pack(fill="x", pady=(4, 0))
+        self.folder_vars = {}
+
         btns = ttk.Frame(self)
         btns.pack(fill="x", pady=(0, 8))
         ttk.Button(btns, text="Preview plan", command=self.preview).pack(side="left")
         self.apply_btn = ttk.Button(btns, text="Apply", command=self.apply, state="disabled")
         self.apply_btn.pack(side="left", padx=8)
-        self.summary = ttk.Label(btns, text="", foreground="#444")
-        self.summary.pack(side="left", padx=12)
+        ttk.Button(btns, text="Exclude selected rows",
+                   command=self.exclude_rows).pack(side="left", padx=(12, 0))
+        ttk.Button(btns, text="Clear exclusions",
+                   command=self.clear_exclusions).pack(side="left", padx=6)
 
-        f, self.tv = tree(self, ("From", "To"), (480, 480), height=16)
+        self.summary = ttk.Label(self, text="", foreground="#444", wraplength=980,
+                                 justify="left")
+        self.summary.pack(anchor="w", pady=(0, 4))
+
+        f, self.tv = tree(self, ("From", "To"), (480, 480), height=14)
         f.pack(fill="both", expand=True)
         self.plan = None
+        self.excluded = set()          # individual paths the user opted out of
 
     def invalidate(self):
         self.plan = None
         self.apply_btn.configure(state="disabled")
         self.tv.delete(*self.tv.get_children())
         self.summary.configure(text="")
+        self.excluded = set()
+        self._build_folder_list()
+
+    def _build_folder_list(self):
+        for w in self.folder_wrap.winfo_children():
+            w.destroy()
+        if not self.app.recs:
+            return
+        counts = collections.Counter(r.top for r in self.app.recs if not r.protected)
+        keep = dict(self.folder_vars)
+        self.folder_vars = {}
+        for i, (name, n) in enumerate(sorted(counts.items(), key=lambda x: -x[1])):
+            v = tk.BooleanVar(value=keep[name].get() if name in keep else True)
+            self.folder_vars[name] = v
+            ttk.Checkbutton(self.folder_wrap, text=f"{name} ({n})", variable=v
+                            ).grid(row=i // 4, column=i % 4, sticky="w", padx=(0, 14))
+
+    def _excluded_paths(self):
+        """Paths to leave alone: whole unticked folders, plus individual rows."""
+        off = {name for name, v in self.folder_vars.items() if not v.get()}
+        paths = set(self.excluded)
+        if off:
+            paths |= {r.path for r in self.app.recs if r.top in off}
+        return paths
+
+    def exclude_rows(self):
+        if not self.plan:
+            messagebox.showinfo(APP, "Preview a plan first, then select rows to exclude.")
+            return
+        sel = self.tv.selection()
+        if not sel:
+            messagebox.showinfo(APP, "Select one or more rows in the list first.")
+            return
+        moves = self.plan[0]
+        for iid in sel:
+            idx = self.tv.index(iid)
+            if idx < len(moves):
+                self.excluded.add(moves[idx][0].path)
+        self.preview()
+
+    def clear_exclusions(self):
+        self.excluded = set()
+        for v in self.folder_vars.values():
+            v.set(True)
+        self.preview()
 
     def preview(self):
         if self.need_scan():
@@ -544,6 +637,7 @@ class OrganizeTab(BaseTab):
         consolidate = self.consolidate.get()
         keep_sets = self.keep_sets.get()
         route = self.route_unan.get()
+        exclude = self._excluded_paths()
 
         def work(progress, log):
             canonical = {}
@@ -551,10 +645,14 @@ class OrganizeTab(BaseTab):
                 log("Finding duplicate copies…")
                 found = dupes.find(self.app.recs, progress=progress)
                 canonical = dupes.canonical_map(found)
+                # never quarantine a copy the user asked to leave alone
+                canonical = {k: v for k, v in canonical.items()
+                             if k not in exclude and v not in exclude}
                 log(f"{len(canonical)} extra copies will collapse into "
                     f"{len(set(canonical.values()))} canonical files")
             return organize.plan(root, self.app.recs, keep_sets=keep_sets,
-                                 route_unanalyzed=route, canonical=canonical)
+                                 route_unanalyzed=route, canonical=canonical,
+                                 exclude=exclude)
 
         def done(res):
             moves, pls, st = res
@@ -566,9 +664,10 @@ class OrganizeTab(BaseTab):
                 os.path.relpath(d, root).split(os.sep)[0] for _, d in moves)
             bits = ", ".join(f"{v} → {k}/" for k, v in cats.most_common())
             extra = f" · {st['deduped']} duplicate copies quarantined" if st.get("deduped") else ""
+            left = f" · {st['excluded']} left alone" if st.get("excluded") else ""
             self.summary.configure(
                 text=f"{len(moves)} moves · {len(pls)} playlists · "
-                     f"{st['skipped_protected']} protected{extra} · {bits}")
+                     f"{st['skipped_protected']} protected{left}{extra} · {bits}")
             self.apply_btn.configure(state="normal" if moves else "disabled")
 
         self.app.task.run(work, done, "Planning")
@@ -905,10 +1004,8 @@ class NeedsWorkTab(BaseTab):
     """Find and act on tracks whose metadata still needs outside help."""
 
     FILTERS = [
-        ("Missing key or BPM — needs analysing",
-         lambda r: not r.analyzed),
-        ("Missing key only", lambda r: not r.key),
-        ("Missing BPM only", lambda r: not r.bpm),
+        ("Missing key — needs analysing", lambda r: not r.analyzed),
+        ("Missing BPM (most DJ apps fill this in themselves)", lambda r: not r.bpm),
         ("No energy rating", lambda r: r.energy is None),
         ("Missing genre", lambda r: not r.genre),
         ("Missing artist", lambda r: not r.artist),

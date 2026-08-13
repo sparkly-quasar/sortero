@@ -9,9 +9,9 @@ bulk.
 Discogs' search works without an API token, but the free tier is rate limited,
 so lookups are paced and cached on disk - re-running never re-asks.
 """
-import json, os, re, time, urllib.parse, urllib.request
+import json, os, re, time, urllib.error, urllib.parse, urllib.request
 
-from . import net, paths
+from . import net, paths, settings
 from .journal import Journal
 from .organize import canon_genre
 from .tagio import Track
@@ -19,7 +19,9 @@ from .version import __version__
 
 UA = f"Sortero/{__version__} +https://github.com/sparkly-quasar/sortero"
 SEARCH = "https://api.discogs.com/database/search"
-MIN_INTERVAL = 2.5          # unauthenticated Discogs allows ~25 requests/minute
+ANON_INTERVAL = 2.5     # unauthenticated Discogs allows ~25 requests/minute
+TOKEN_INTERVAL = 1.0    # a free personal token raises it to ~60/minute
+MIN_INTERVAL = ANON_INTERVAL
 CACHE = "discogs-cache.json"
 
 _last_call = [0.0]
@@ -72,18 +74,38 @@ def key_for(rec):
     return f"{clean_artist(rec.artist)}|{clean_title(rec.title)}".lower()
 
 
+def worth_asking(rec):
+    """A query needs both halves; without them Discogs can only guess."""
+    return bool(clean_artist(rec.artist) and clean_title(rec.title))
+
+
 # ------------------------------------------------------------------ lookup
+def token():
+    return (settings.get("discogs_token") or "").strip()
+
+
+def interval():
+    return TOKEN_INTERVAL if token() else ANON_INTERVAL
+
+
+def eta_minutes(n):
+    return max(1, round(n * interval() / 60))
+
+
 def _throttle():
-    wait = MIN_INTERVAL - (time.time() - _last_call[0])
+    wait = interval() - (time.time() - _last_call[0])
     if wait > 0:
         time.sleep(wait)
     _last_call[0] = time.time()
 
 
 def _search(artist, title, timeout=25):
-    q = urllib.parse.urlencode({"artist": artist, "track": title,
-                                "type": "release", "per_page": "5"})
-    req = urllib.request.Request(f"{SEARCH}?{q}", headers={"User-Agent": UA})
+    params = {"artist": artist, "track": title, "type": "release", "per_page": "5"}
+    tok = token()
+    if tok:
+        params["token"] = tok
+    req = urllib.request.Request(f"{SEARCH}?{urllib.parse.urlencode(params)}",
+                                 headers={"User-Agent": UA})
     for attempt in range(3):
         _throttle()
         try:
@@ -125,13 +147,25 @@ def lookup(rec, cache=None):
     return None, raw
 
 
-def bulk_lookup(recs, detail="fine", progress=None, log=print):
-    """Look up many tracks. Returns {path: (suggestion, raw_styles)}."""
+def bulk_lookup(recs, detail="fine", progress=None, log=print,
+                on_result=None, should_stop=None, save_every=10):
+    """Look up many tracks.
+
+    Reports as it goes and saves the cache periodically, so a long run is both
+    visible and resumable - stopping halfway keeps everything already fetched.
+    Returns {path: (suggestion, raw_styles)}.
+    """
     cache = load_cache()
     out = {}
     total = len(recs) or 1
+    matched = 0
+    started = time.time()
+    done = 0
     try:
         for i, r in enumerate(recs):
+            if should_stop is not None and should_stop():
+                log(f"stopped after {i} of {total}")
+                break
             if progress:
                 progress(i, total)
             try:
@@ -139,13 +173,24 @@ def bulk_lookup(recs, detail="fine", progress=None, log=print):
             except LookupError as e:
                 log(f"stopped: {e}")
                 break
+            done += 1
             if g or raw:
                 out[r.path] = (g, raw)
+                if on_result:
+                    on_result(r.path, (g, raw))
+                if g:
+                    matched += 1
+            if done % save_every == 0:
+                save_cache(cache)
+                rate = (time.time() - started) / max(done, 1)
+                left = int(rate * (total - i - 1) / 60)
+                log(f"Discogs {i+1}/{total} · {matched} with a genre · "
+                    f"~{left} min left")
     finally:
         save_cache(cache)
         if progress:
             progress(total, total)
-    log(f"looked up {len(out)} of {total} tracks")
+    log(f"looked up {len(out)} of {total} tracks ({matched} mapped to a genre)")
     return out
 
 

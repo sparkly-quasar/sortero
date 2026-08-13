@@ -110,7 +110,14 @@ nothing to infer from, and it lands in `Unsorted`. The **Genres** tab is the way
 out: select a group and set it, or ask Discogs.
 
 Discogs needs no API token. Its free tier is rate limited, so lookups are paced
-at 2.5s and cached on disk — re-running never asks twice. Queries are cleaned
+at 2.5s and cached on disk — re-running never asks twice. A free personal token
+from discogs.com/settings/developer raises the rate to about one per second;
+paste it into the Genres tab if you're doing a big batch.
+
+A long run reports as it goes: results fill the Suggested column while it works,
+the status line shows how many are done and roughly how long is left, and Stop
+keeps everything already fetched. The cache is written throughout, so a stopped
+or crashed run resumes where it left off rather than starting over. Queries are cleaned
 first (`Track (Original Mix)_PN` → `Track`), which took the hit rate from 1-in-8
 to 6-in-10 on a real batch. Only artist and title are sent.
 

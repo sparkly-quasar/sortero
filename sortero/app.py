@@ -1288,14 +1288,35 @@ class GenresTab(BaseTab):
                    command=self.apply_manual).pack(side="left")
         ttk.Button(row2, text="Look up selected on Discogs",
                    command=self.lookup).pack(side="left", padx=(16, 0))
+        self.stop_btn = ttk.Button(row2, text="Stop", command=self.stop_lookup,
+                                   state="disabled")
+        self.stop_btn.pack(side="left", padx=4)
         ttk.Button(row2, text="Accept suggestions",
                    command=self.apply_suggested).pack(side="left", padx=6)
+
+        self.lookup_status = ttk.Label(self, text="", foreground="#1d5c3a",
+                                       font=("Helvetica", 12, "bold"))
+        self.lookup_status.pack(anchor="w", pady=(0, 4))
+
+        tok = ttk.Frame(self)
+        tok.pack(fill="x", pady=(0, 6))
+        ttk.Label(tok, text="Discogs token (optional)").pack(side="left")
+        self.token_var = tk.StringVar(value=settings.get("discogs_token") or "")
+        ttk.Entry(tok, textvariable=self.token_var, width=34,
+                  show="•").pack(side="left", padx=6)
+        ttk.Button(tok, text="Save", command=self._save_token).pack(side="left")
+        ttk.Label(tok, foreground="#666",
+                  text="  — works without one; a free token from discogs.com/settings/"
+                       "developer makes lookups about 2.5x faster"
+                  ).pack(side="left")
 
         f, self.tv = tree(self, ("Track", "Artist", "Genre", "Suggested", "Where"),
                           (300, 190, 150, 170, 200), height=15)
         f.pack(fill="both", expand=True)
         self.tv.bind("<<TreeviewSelect>>", lambda e: self._sync())
         self.rows, self.suggested = [], {}
+        self._stop = threading.Event()
+        self._looking = False
 
     def invalidate(self):
         vocab = sorted({lab for _, lab in organize.GENRE_RULES} |
@@ -1380,30 +1401,70 @@ class GenresTab(BaseTab):
 
         self.app.task.run(work, done, "Writing genres")
 
-    def lookup(self):
-        recs = self._selected()
-        if not recs:
-            messagebox.showinfo(APP, "Select the tracks you want looked up.")
+    def _save_token(self):
+        settings.set("discogs_token", self.token_var.get().strip())
+        messagebox.showinfo(APP, "Saved. Lookups will run at the faster rate."
+                            if self.token_var.get().strip() else
+                            "Cleared. Lookups will use the slower anonymous rate.")
+
+    def stop_lookup(self):
+        self._stop.set()
+        self.lookup_status.configure(text="Stopping after the current track…")
+
+    def _tick(self):
+        """Refresh the table while a lookup runs, so results appear as they land."""
+        if not self._looking:
             return
-        mins = max(1, round(len(recs) * genres.MIN_INTERVAL / 60))
+        self.refresh()
+        self.after(4000, self._tick)
+
+    def lookup(self):
+        recs = [r for r in self._selected() if genres.worth_asking(r)]
+        skipped = len(self._selected()) - len(recs)
+        if not recs:
+            messagebox.showinfo(APP, "Select the tracks you want looked up."
+                                     + (f"\n\n{skipped} have no artist or title to "
+                                        "search with — set those by hand instead."
+                                        if skipped else ""))
+            return
+        cache = genres.load_cache()
+        fresh = [r for r in recs if genres.key_for(r) not in cache]
+        mins = genres.eta_minutes(len(fresh))
         if not messagebox.askyesno(
                 APP, f"Look up {len(recs)} tracks on Discogs?\n\n"
-                     f"Discogs rate-limits free use, so this is paced and takes "
-                     f"roughly {mins} minute(s). Results are cached, so re-running "
-                     "never asks twice.\n\nArtist and title are sent to Discogs; "
-                     "nothing else leaves your machine."):
+                     f"{len(recs) - len(fresh)} are already cached and cost nothing; "
+                     f"{len(fresh)} need asking, which takes about {mins} minute(s) "
+                     "because Discogs rate-limits free use.\n\n"
+                     "Results appear in the Suggested column as they arrive, and you "
+                     "can Stop at any point — everything fetched is kept."
+                     + (f"\n\n{skipped} selected tracks have no artist or title and "
+                        "were left out." if skipped else "")
+                     + "\n\nOnly artist and title are sent to Discogs."):
             return
 
+        self._stop.clear()
+        self._looking = True
+        self.stop_btn.configure(state="normal")
+        self.lookup_status.configure(text=f"Asking Discogs about {len(recs)} tracks…")
+        self.after(2000, self._tick)
+        results = self.suggested          # worker fills this in as it goes
+
         def work(progress, log):
-            return genres.bulk_lookup(recs, progress=progress, log=log)
+            return genres.bulk_lookup(
+                recs, progress=progress, log=log,
+                on_result=lambda path, val: results.__setitem__(path, val),
+                should_stop=self._stop.is_set)
 
         def done(found):
-            self.suggested.update(found)
-            got = sum(1 for v in found.values() if v[0])
+            self._looking = False
+            self.stop_btn.configure(state="disabled")
+            got = sum(1 for v in self.suggested.values() if v[0])
+            self.lookup_status.configure(
+                text=f"Discogs finished — {got} tracks have a suggested genre.")
             self.refresh()
             messagebox.showinfo(
-                APP, f"Discogs matched {len(found)} tracks; {got} map to a genre "
-                     "Sortero recognises.\n\nReview the Suggested column, then "
+                APP, f"Looked up {len(found)} tracks; {got} map to a genre Sortero "
+                     "recognises.\n\nReview the Suggested column, then "
                      "'Accept suggestions'.")
 
         self.app.task.run(work, done, "Asking Discogs")

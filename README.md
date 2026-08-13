@@ -132,8 +132,21 @@ explains the analysis loop. It appears once; after that Sortero opens straight
 into your library. Reopen it any time from **Help → Setup Wizard…**.
 
 **Help → Check for Updates…** compares your version against the latest GitHub
-release and offers to open the download page. It can also check automatically
-on launch (at most once a day) — toggle that in the same menu.
+release. If there's a newer one it offers to **download, install and relaunch**
+in one step: Sortero fetches the build for your platform, hands the swap to a
+small helper, quits, and reopens on the new version.
+
+The helper waits for Sortero to exit before touching anything, keeps the old
+copy aside until the new one is in place, and puts it back if the move fails —
+a failed update never leaves you without an application.
+
+Two caveats. Running from source it won't self-update, and says so. And macOS
+asks permission before one app modifies another in `/Applications`; if it's
+refused, allow Sortero under **System Settings → Privacy & Security → App
+Management**, or keep Sortero somewhere in your home folder.
+
+It can also check automatically on launch (at most once a day) — toggle that in
+the same menu.
 
 > While the repository is private, the update check can't read the release list
 > anonymously and will say so. Either make the repo public, or add a GitHub

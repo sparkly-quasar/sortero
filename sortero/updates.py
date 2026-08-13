@@ -59,10 +59,12 @@ def check(token=None, timeout=15):
     settings.set("last_update_check", time.time())
     latest = data.get("tag_name") or data.get("name") or ""
     url = data.get("html_url") or RELEASES_URL
+    assets = data.get("assets") or []
     if is_newer(latest):
-        return {"state": "update", "latest": latest, "url": url,
+        return {"state": "update", "latest": latest, "url": url, "assets": assets,
+                "notes": (data.get("body") or "").strip(),
                 "message": f"Sortero {latest} is available. You have {__version__}."}
-    return {"state": "up-to-date", "latest": latest, "url": url,
+    return {"state": "up-to-date", "latest": latest, "url": url, "assets": assets,
             "message": f"Sortero {__version__} is the latest version."}
 
 

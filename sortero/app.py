@@ -4,7 +4,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 from . import (library, organize, dupes, fixtags, importer, journal, playlists,
-               auth, paths, settings, updates, wizard, session)
+               auth, paths, settings, updates, wizard, session, updater)
 from .common import human_size
 
 APP = "Sortero"
@@ -358,6 +358,44 @@ class Sortero(tk.Tk):
         if settings.get("check_updates_on_launch") and updates.due():
             self.after(2500, lambda: self.check_updates(quiet=True))
 
+    def _offer_install(self, res):
+        """Found a newer release - download, swap it in, and relaunch."""
+        import webbrowser
+        if not updater.running_frozen():
+            if messagebox.askyesno(APP, res["message"] + "\n\nThis copy is running "
+                                        "from source, so it can't replace itself. "
+                                        "Open the download page?"):
+                webbrowser.open(res["url"])
+            return
+        if not messagebox.askyesno(
+                APP, res["message"] + "\n\nDownload it, install it and restart "
+                     "Sortero now?\n\nAnything unsaved is finished first — this "
+                     "only quits once the new version is ready."):
+            return
+        try:
+            asset = updater.pick_asset(res.get("assets") or [])
+        except updater.UpdateError as e:
+            messagebox.showerror(APP, str(e))
+            return
+
+        def work(progress, log):
+            log(f"downloading {asset['name']}…")
+            new = updater.prepare(asset, progress=progress)
+            log(f"unpacked to {new}")
+            return new
+
+        def done(new_path):
+            try:
+                updater.install(new_path)
+            except updater.UpdateError as e:
+                messagebox.showerror(APP, str(e))
+                return
+            messagebox.showinfo(APP, "Update ready. Sortero will close and reopen "
+                                     "on the new version in a moment.")
+            self.after(300, self.destroy)
+
+        self.task.run(work, done, "Downloading update")
+
     def check_updates(self, quiet=True):
         """quiet=True only speaks up when there is actually an update."""
         def work(progress, log):
@@ -366,9 +404,7 @@ class Sortero(tk.Tk):
         def done(res):
             state = res["state"]
             if state == "update":
-                if messagebox.askyesno(APP, res["message"] + "\n\nOpen the download page?"):
-                    import webbrowser
-                    webbrowser.open(res["url"])
+                self._offer_install(res)
             elif not quiet:
                 if state == "private":
                     if messagebox.askyesno(APP, res["message"] + "\n\nOpen Releases now?"):

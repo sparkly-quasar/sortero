@@ -101,6 +101,30 @@ FOLDER_HINTS = [
 ILLEGAL = re.compile(r'[/:\x00-\x1f]')
 
 
+def energy_folder(r):
+    """The energy subfolder a track belongs in, or None to keep it flat.
+
+    Mixed In Key rates 1-10 in the ENERGYLEVEL tag (see Track.energy). Tracks
+    with no rating - the user's own rips and field recordings - have no folder
+    and stay directly in the genre root.
+    """
+    e = r.energy
+    return f"Energy {e}" if e is not None else None
+
+
+def track_genre(root, dest):
+    """The genre folder a planned track destination sits under, or None.
+
+    Robust to the optional Energy subfolder: the genre is always the first
+    segment under Tracks/, whether the path is Tracks/<Genre>/file or
+    Tracks/<Genre>/Energy 6/file.
+    """
+    parts = os.path.relpath(dest, root).split(os.sep)
+    if len(parts) >= 3 and parts[0] == TRACKS_DIR:
+        return parts[1]
+    return None
+
+
 def canon_genre(value, strict=False, detail="broad"):
     """Map a genre string onto the canonical vocabulary.
 
@@ -200,7 +224,7 @@ def classify(r, keep_sets=True, route_unanalyzed=False, detail="broad"):
 
 # --------------------------------------------------------------------------
 def plan(root, recs, keep_sets=True, min_genre=None, route_unanalyzed=False,
-         canonical=None, exclude=None, detail="broad"):
+         canonical=None, exclude=None, detail="broad", by_energy=False):
     """Build the list of moves. Returns (moves, playlists, stats).
 
     moves: list of (rec, dest_abs)
@@ -253,6 +277,10 @@ def plan(root, recs, keep_sets=True, min_genre=None, route_unanalyzed=False,
             if sub in small:
                 sub = UNSORTED
             dest_dir = os.path.join(root, TRACKS_DIR, safe(sub, 60))
+            if by_energy:
+                ef = energy_folder(r)
+                if ef:
+                    dest_dir = os.path.join(dest_dir, ef)
             fname = target_filename(r)
         elif cat == "set":
             dest_dir = os.path.join(root, SETS_DIR, safe(sub, 60))
@@ -301,8 +329,7 @@ def plan(root, recs, keep_sets=True, min_genre=None, route_unanalyzed=False,
     stats = {
         "moves": len(moves),
         "genres": collections.Counter(
-            os.path.basename(os.path.dirname(d)) for r, d in moves
-            if os.path.join(root, TRACKS_DIR) in d),
+            g for g in (track_genre(root, d) for r, d in moves) if g),
         "playlists": len(playlists),
         "skipped_protected": sum(1 for r in recs if r.protected),
         "deduped": sum(1 for r in recs if prelim.get(r.path, (None,))[0] == "duplicate"),

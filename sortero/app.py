@@ -615,6 +615,10 @@ class OrganizeTab(BaseTab):
         box.pack(side="left", padx=6)
         self._detail_box = box
 
+        self.by_energy = tk.BooleanVar(value=bool(settings.get("split_by_energy")))
+        ttk.Checkbutton(opts2, text="Split genres by energy level",
+                        variable=self.by_energy).pack(side="left", padx=12)
+
         ttk.Label(self, foreground="#666", wraplength=980, justify="left",
                   text="Each track ends up as one file at Tracks/<Genre>/Artist - Title. "
                        "Every folder you have now — the Spotify and Tidal vibe imports, the gig "
@@ -721,6 +725,8 @@ class OrganizeTab(BaseTab):
         exclude = self._excluded_paths()
         detail = "fine" if self._detail_box.get().startswith("fine") else "broad"
         settings.set("genre_detail", detail)
+        by_energy = self.by_energy.get()
+        settings.set("split_by_energy", by_energy)
 
         def work(progress, log):
             canonical = {}
@@ -735,7 +741,7 @@ class OrganizeTab(BaseTab):
                     f"{len(set(canonical.values()))} canonical files")
             return organize.plan(root, self.app.recs, keep_sets=keep_sets,
                                  route_unanalyzed=route, canonical=canonical,
-                                 exclude=exclude, detail=detail)
+                                 exclude=exclude, detail=detail, by_energy=by_energy)
 
         def done(res):
             moves, pls, st = res

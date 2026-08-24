@@ -45,6 +45,11 @@ one flat level. Labels Sortero picked always get their own folder; a raw tag
 value that matched no rule needs at least 8 tracks to earn one, so oddities like
 `Mainstage` don't litter the tree.
 
+**Split by energy** is an optional tick on the Organise tab. When on, each genre
+folder gains `Energy 1`…`Energy 10` subfolders, filed from the Mixed In Key
+rating (`Tracks/Techno/Energy 6/…`). Tracks with no rating — your own rips and
+recordings — stay directly in the genre folder rather than in a catch-all.
+
 ## Tabs
 
 | Tab | What it does |

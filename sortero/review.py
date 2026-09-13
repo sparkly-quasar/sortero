@@ -13,7 +13,7 @@ import json, os, re, shutil, subprocess, threading
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from . import paths, settings, organize, playlists, membership, genres, folders
+from . import paths, settings, organize, playlists, membership, genres, folders, preview
 from .journal import Journal, prune_empty
 from .library import PROTECTED
 from .organize import TRACKS_DIR, target_filename, safe
@@ -142,7 +142,11 @@ class ReviewDialog(tk.Toplevel):
                 known.add(rel)
         self.recent = []
         self.i = 0
-        self.player = None
+        self.player = None              # fallback: afplay / default app, no seeking
+        self.preview = preview.Player()
+        self._seekable = False
+        self._dragging = False
+        self._tick_gen = 0
         self.busy = False
         self.changed = False
         self._close_after_apply = False
@@ -181,12 +185,29 @@ class ReviewDialog(tk.Toplevel):
         self.hint_lab = ttk.Label(info, foreground="#666", wraplength=890, justify="left")
         self.hint_lab.pack(anchor="w", pady=(4, 0))
 
+        tr = ttk.Frame(self, padding=(16, 0, 16, 6))
+        tr.pack(fill="x")
+        self.play_btn = ttk.Button(tr, text="▶ Play", width=9, command=self.toggle_play)
+        self.play_btn.pack(side="left")
+        self.back15_btn = ttk.Button(tr, text="−15s", width=5, command=lambda: self.jump(-15))
+        self.back15_btn.pack(side="left", padx=(6, 0))
+        self.fwd15_btn = ttk.Button(tr, text="+15s", width=5, command=lambda: self.jump(15))
+        self.fwd15_btn.pack(side="left", padx=(2, 8))
+        self.elapsed_lab = ttk.Label(tr, text="0:00", font=("Menlo", 11), width=6, anchor="e")
+        self.elapsed_lab.pack(side="left")
+        self.scrub_var = tk.DoubleVar(value=0.0)
+        self.scrub = ttk.Scale(tr, from_=0, to=1, orient="horizontal",
+                               variable=self.scrub_var, command=self._scrub_moved)
+        self.scrub.pack(side="left", fill="x", expand=True, padx=8)
+        self.scrub.bind("<ButtonPress-1>", self._scrub_start)
+        self.scrub.bind("<ButtonRelease-1>", self._scrub_end)
+        self.total_lab = ttk.Label(tr, text="0:00", font=("Menlo", 11), width=6, anchor="w")
+        self.total_lab.pack(side="left")
+
         act = ttk.Frame(self, padding=(16, 0, 16, 8))
         act.pack(fill="x")
-        self.play_btn = ttk.Button(act, text="▶ Play", command=self.toggle_play)
-        self.play_btn.pack(side="left")
         ttk.Button(act, text="Show file",
-                   command=lambda: paths.reveal(self.current.path)).pack(side="left", padx=6)
+                   command=lambda: paths.reveal(self.current.path)).pack(side="left")
         self.discogs_btn = ttk.Button(act, text="Ask Discogs", command=self.ask_discogs)
         self.discogs_btn.pack(side="left")
         self.sugg_btn = ttk.Button(act, text="No suggestion", command=self.use_suggestion,
@@ -256,6 +277,8 @@ class ReviewDialog(tk.Toplevel):
             self.skip()
         elif e.keysym == "Left":
             self.back()
+        elif e.keysym == "space":
+            self.toggle_play()
 
     def _to_list(self, e):
         if self.lb.size():
@@ -317,6 +340,7 @@ class ReviewDialog(tk.Toplevel):
     # -- display -----------------------------------------------------------
     def show(self):
         self.stop_play()
+        self._prepare_transport()
         r = self.current
         self.pos_lab.configure(text=f"Track {self.i + 1} of {len(self.recs)}")
         self.bar.configure(maximum=max(len(self.recs), 1), value=self.i)
@@ -459,11 +483,110 @@ class ReviewDialog(tk.Toplevel):
             self.show()
 
     # -- audio preview -----------------------------------------------------
+    @staticmethod
+    def _clock(sec):
+        sec = max(0, int(sec or 0))
+        return f"{sec // 60}:{sec % 60:02d}"
+
+    def _prepare_transport(self):
+        """Reset the scrub bar for the current track."""
+        r = self.current
+        dur = float(r.duration or 0)
+        self._seekable = bool(dur) and preview.can_seek(r.path)
+        state = "normal" if self._seekable else "disabled"
+        self.scrub.configure(to=max(dur, 1.0), state=state)
+        self.back15_btn.configure(state=state)
+        self.fwd15_btn.configure(state=state)
+        self.scrub_var.set(0.0)
+        self.elapsed_lab.configure(text="0:00")
+        self.total_lab.configure(text=self._clock(dur) if dur else "-:--")
+
     def toggle_play(self):
+        if not self._seekable:
+            return self._fallback_play()
+        p = self.preview
+        try:
+            if p.active and not p.paused:
+                p.pause()
+                self.play_btn.configure(text="▶ Play")
+                return
+            if p.active:
+                p.resume()
+            else:
+                p.load(self.current.path, self.current.duration)
+                p.play(at=self.scrub_var.get())
+        except Exception as e:
+            p.stop()
+            self._seekable = False
+            self.scrub.configure(state="disabled")
+            self.status_lab.configure(text=f"Can't scrub this file ({e}) - playing from the start.")
+            return self._fallback_play()
+        self.play_btn.configure(text="❚❚ Pause")
+        self._tick_gen += 1
+        self._tick_player(self._tick_gen)
+
+    def _tick_player(self, gen):
+        p = self.preview
+        if gen != self._tick_gen or not p.active:
+            return
+        try:
+            if p.finished():
+                p.stop()
+                self.play_btn.configure(text="▶ Play")
+                self.scrub_var.set(0.0)
+                self.elapsed_lab.configure(text="0:00")
+                return
+            if not self._dragging:
+                pos = p.position()
+                self.scrub_var.set(pos)
+                self.elapsed_lab.configure(text=self._clock(pos))
+        except tk.TclError:
+            return
+        if not p.paused:
+            self.after(200, lambda: self._tick_player(gen))
+
+    def _scrub_start(self, e):
+        if self._seekable:
+            self._dragging = True
+
+    def _scrub_moved(self, value):
+        self.elapsed_lab.configure(text=self._clock(float(value)))
+
+    def _scrub_end(self, e):
+        if not self._seekable:
+            return
+        self._dragging = False
+        self.after_idle(self._commit_scrub)      # let the scale settle on its final value
+
+    def _commit_scrub(self):
+        pos = self.scrub_var.get()
+        if self.preview.active:
+            try:
+                self.preview.seek(pos)
+            except Exception as e:
+                self.status_lab.configure(text=f"Couldn't jump there: {e}")
+        self.elapsed_lab.configure(text=self._clock(pos))
+
+    def jump(self, delta):
+        if not self._seekable:
+            return
+        p = self.preview
+        base = p.position() if p.active else self.scrub_var.get()
+        pos = min(max(0.0, base + delta), float(self.current.duration or 0))
+        self.scrub_var.set(pos)
+        self.elapsed_lab.configure(text=self._clock(pos))
+        if p.active:
+            p.seek(pos)
+
+    def _fallback_play(self):
+        """No seeking available: play from the start with what the OS provides."""
         if self.player and self.player.poll() is None:
             self.stop_play()
             return
         path = self.current.path
+        if os.path.splitext(path)[1].lower() in (".m4a", ".mp4", ".aac"):
+            self.status_lab.configure(text="Scrubbing isn't available for AAC files - "
+                                           "playing from the start.")
         try:
             if paths.IS_MAC:
                 self.player = subprocess.Popen(["afplay", path])
@@ -486,6 +609,11 @@ class ReviewDialog(tk.Toplevel):
                 pass
 
     def stop_play(self):
+        self._tick_gen += 1
+        try:
+            self.preview.stop()
+        except Exception:
+            pass
         if self.player and self.player.poll() is None:
             self.player.terminate()
         self.player = None

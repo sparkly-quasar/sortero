@@ -144,7 +144,9 @@ walks through them one at a time:
 
 - every hint on screen: the genre tag, key and energy, the playlist it was
   staged out of, and Discogs styles if they've been looked up
-- **Play** to hear it (macOS plays in place; elsewhere it opens your player)
+- **Play** with a **scrub bar**: drag anywhere in the track, or jump ±15s
+  past a long intro; space plays and pauses. AAC files (`.m4a`) can't be
+  scrubbed and play from the start instead
 - your collection's **real folders** to pick from — type to filter, or type a new
   name to create one
 - your last nine choices on the number keys, and **Return** to file and move on
@@ -266,7 +268,7 @@ than starting a working one. Only needed once per download.
 
 ```bash
 python3.12 -m venv .venv
-./.venv/bin/pip install -U pip mutagen keyring pyinstaller
+./.venv/bin/pip install -U pip mutagen keyring certifi pygame-ce pyinstaller
 ./.venv/bin/python build/build_app.py
 ```
 

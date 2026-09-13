@@ -64,7 +64,10 @@ def main():
            "--distpath", DIST, "--workpath", WORK, "--specpath", BUILD,
            "--hidden-import", "mutagen", "--collect-submodules", "mutagen",
            "--hidden-import", "keyring", "--collect-submodules", "keyring",
-           "--hidden-import", "certifi", "--collect-data", "certifi"]
+           "--hidden-import", "certifi", "--collect-data", "certifi",
+           # pygame-ce ships its own PyInstaller hook; drop what preview never uses
+           "--exclude-module", "pygame.tests", "--exclude-module", "pygame.examples",
+           "--exclude-module", "pygame.docs"]
     if icon and os.path.exists(icon):
         cmd += ["--icon", icon]
     if IS_MAC:

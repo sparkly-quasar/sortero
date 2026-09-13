@@ -10,7 +10,7 @@ import os, shutil, threading
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from . import folders, playlists
+from . import folders, playlists, ui
 from .common import AUDIO_EXTS
 from .journal import Journal, prune_empty
 from .library import PROTECTED
@@ -152,8 +152,8 @@ class FlattenDialog(tk.Toplevel):
 
         pad = ttk.Frame(self, padding=16)
         pad.pack(fill="both", expand=True)
-        ttk.Label(pad, text=TITLE, font=("Helvetica", 17, "bold")).pack(anchor="w")
-        ttk.Label(pad, foreground="#666", wraplength=930, justify="left",
+        ttk.Label(pad, text=TITLE, font=ui.TITLE).pack(anchor="w")
+        ttk.Label(pad, style="Muted.TLabel", wraplength=930, justify="left",
                   text="Tracks inside a release folder — an EP or album sitting within a "
                        "genre folder — move up into that genre folder, and the emptied "
                        "release folder is removed. Filenames are kept; a clash gets a "
@@ -196,7 +196,7 @@ class FlattenDialog(tk.Toplevel):
         self.progress.pack(fill="x", pady=(8, 0))
         bottom = ttk.Frame(pad)
         bottom.pack(fill="x", pady=(8, 0))
-        self.summary = ttk.Label(bottom, foreground="#444")
+        self.summary = ttk.Label(bottom, style="Muted.TLabel")
         self.summary.pack(side="left")
         ttk.Button(bottom, text="Close", command=self.close).pack(side="right")
         self.apply_btn = ttk.Button(bottom, text="Flatten", command=self.apply)

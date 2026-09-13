@@ -17,7 +17,7 @@ import collections, os, shutil, threading
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from . import importer, library, membership, playlists, review
+from . import importer, library, membership, playlists, review, ui
 from .dupes import ident, _sig
 from .journal import Journal, prune_empty
 from .library import PROTECTED
@@ -202,8 +202,8 @@ class ProcessedDialog(tk.Toplevel):
 
         pad = ttk.Frame(self, padding=16)
         pad.pack(fill="both", expand=True)
-        ttk.Label(pad, text=TITLE, font=("Helvetica", 17, "bold")).pack(anchor="w")
-        self.status = ttk.Label(pad, foreground="#666", wraplength=960, justify="left",
+        ttk.Label(pad, text=TITLE, font=ui.TITLE).pack(anchor="w")
+        self.status = ttk.Label(pad, style="Muted.TLabel", wraplength=960, justify="left",
                                 text="Reading Processed…")
         self.status.pack(anchor="w", pady=(2, 6))
         self.progress = ttk.Progressbar(pad)
@@ -287,7 +287,7 @@ class ProcessedDialog(tk.Toplevel):
         if not res:
             self.status.configure(text="Processed is empty — everything in it has been dealt with.")
             ttk.Label(self.body, text="Nothing left to sort.",
-                      font=("Helvetica", 14, "bold")).pack(anchor="w", pady=20)
+                      font=ui.HEADING).pack(anchor="w", pady=20)
             return
         ready = [x for x in res if x["action"] in ("sort", "mix", "to-process")]
         held = [x["rec"] for x in res if x["action"] == "needs-folder"]
@@ -304,14 +304,14 @@ class ProcessedDialog(tk.Toplevel):
             lines = [f"{v:4}  →  {k}" for k, v in where.most_common(8)]
             if len(where) > 8:
                 lines.append(f"      … and {len(where) - 8} more folders")
-            ttk.Label(f1, font=("Menlo", 11), justify="left",
+            ttk.Label(f1, font=ui.MONO, justify="left",
                       text="\n".join(lines)).pack(anchor="w")
             b = ttk.Button(f1, text=f"File {len(ready)} track{'s' if len(ready) != 1 else ''}",
                            command=lambda: self.file_ready(ready))
             b.pack(anchor="w", pady=(8, 0))
             self._btns.append(b)
         else:
-            ttk.Label(f1, foreground="#666", text="None — nothing Sortero can file on its own."
+            ttk.Label(f1, style="Muted.TLabel", text="None — nothing Sortero can file on its own."
                       ).pack(anchor="w")
 
         f2 = ttk.LabelFrame(self.body, text=f"Choose a folder by hand — {len(held)}", padding=10)
@@ -323,19 +323,19 @@ class ProcessedDialog(tk.Toplevel):
                            command=lambda: self.review(held))
             b.pack(side="left")
             self._btns.append(b)
-            ttk.Label(row, foreground="#666",
+            ttk.Label(row, style="Muted.TLabel",
                       text="   No genre to go on — listen and pick a folder for each."
                       ).pack(side="left")
         else:
-            ttk.Label(f2, foreground="#666", text="None.").pack(anchor="w")
+            ttk.Label(f2, style="Muted.TLabel", text="None.").pack(anchor="w")
 
         f3 = ttk.LabelFrame(self.body, text=f"Already in your library — {len(self.dups)}",
                             padding=10)
         f3.pack(fill="both", expand=True)
         if not self.dups:
-            ttk.Label(f3, foreground="#666", text="None.").pack(anchor="w")
+            ttk.Label(f3, style="Muted.TLabel", text="None.").pack(anchor="w")
             return
-        ttk.Label(f3, foreground="#666", wraplength=940, justify="left",
+        ttk.Label(f3, style="Muted.TLabel", wraplength=940, justify="left",
                   text="Fresh copies of tracks you already have — usually because the "
                        "analysis tool wrote a new file and left the original. Replace puts "
                        "the new copy where the old one lives, playlists follow it, and the "

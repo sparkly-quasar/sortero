@@ -12,7 +12,7 @@ import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-from . import settings, library, auth, organize, fixtags, dupes, session, importer, review, processed
+from . import settings, library, auth, organize, fixtags, dupes, session, importer, review, processed, ui
 from .common import human_size
 
 TITLE = "Welcome to Sortero"
@@ -42,7 +42,7 @@ class Wizard(tk.Toplevel):
         foot.pack(fill="x")
         self.progress = ttk.Progressbar(foot, mode="determinate")
         self.progress.pack(fill="x", pady=(0, 8))
-        self.status = ttk.Label(foot, text="", foreground="#666")
+        self.status = ttk.Label(foot, text="", style="Muted.TLabel")
         self.status.pack(anchor="w")
 
         nav = ttk.Frame(self, padding=(20, 0, 20, 16))
@@ -131,9 +131,9 @@ class Wizard(tk.Toplevel):
             w.destroy()
 
     def _heading(self, text, sub=None):
-        ttk.Label(self.body, text=text, font=("Helvetica", 18, "bold")).pack(anchor="w")
+        ttk.Label(self.body, text=text, font=ui.TITLE).pack(anchor="w")
         if sub:
-            ttk.Label(self.body, text=sub, foreground="#666", wraplength=690,
+            ttk.Label(self.body, text=sub, style="Muted.TLabel", wraplength=690,
                       justify="left").pack(anchor="w", pady=(6, 12))
 
     def _action_row(self, label, command):
@@ -141,12 +141,12 @@ class Wizard(tk.Toplevel):
         row.pack(anchor="w", pady=(12, 0))
         btn = ttk.Button(row, text=label, command=command)
         btn.pack(side="left")
-        note = ttk.Label(row, foreground="#666", wraplength=430, justify="left")
+        note = ttk.Label(row, style="Muted.TLabel", wraplength=430, justify="left")
         note.pack(side="left", padx=10)
         return btn, note
 
     def _mono(self, text):
-        lab = ttk.Label(self.body, text=text, font=("Menlo", 11), justify="left")
+        lab = ttk.Label(self.body, text=text, font=ui.MONO, justify="left")
         lab.pack(anchor="w", pady=(4, 0))
         return lab
 
@@ -205,14 +205,14 @@ class Wizard(tk.Toplevel):
 
         ttk.Checkbutton(
             self.body, variable=self.use_testing,
-            text="Record everything I do here as one undoable restore point"
+            text="Turn on the safety net: record everything I do here as one undoable restore point"
         ).pack(anchor="w", pady=(16, 0))
-        ttk.Label(self.body, foreground="#666", wraplength=690, justify="left",
+        ttk.Label(self.body, style="Muted.TLabel", wraplength=690, justify="left",
                   text="Recommended for a first run. You can undo the whole setup in "
-                       "one go afterwards, or keep it, from the Testing menu."
+                       "one go afterwards, or keep it, from History."
                   ).pack(anchor="w", padx=22)
 
-        ttk.Label(self.body, foreground="#666", wraplength=690, justify="left",
+        ttk.Label(self.body, style="Muted.TLabel", wraplength=690, justify="left",
                   text="\nEvery step previews what it would do before it does anything, "
                        "and every step can be skipped."
                   ).pack(anchor="w", pady=(10, 0))
@@ -230,7 +230,7 @@ class Wizard(tk.Toplevel):
         row.pack(fill="x", pady=(0, 10))
         ttk.Entry(row, textvariable=self.root_dir).pack(side="left", fill="x", expand=True)
         ttk.Button(row, text="Choose…", command=self.choose).pack(side="left", padx=6)
-        self.folder_note = ttk.Label(self.body, foreground="#666", wraplength=690,
+        self.folder_note = ttk.Label(self.body, style="Muted.TLabel", wraplength=690,
                                      justify="left", text="")
         self.folder_note.pack(anchor="w")
         self._folder_note()
@@ -287,9 +287,9 @@ class Wizard(tk.Toplevel):
                 f"{h['pct_energy']:.0f}%  have an energy rating\n\n"
                 f"{len(h['needs_analysis'])} tracks need analysing for key and BPM\n"
                 f"{len(h['no_genre'])} need a genre — most can be inferred")
-        ttk.Label(self.scan_box, text=text, font=("Menlo", 11),
+        ttk.Label(self.scan_box, text=text, font=ui.MONO,
                   justify="left").pack(anchor="w")
-        ttk.Label(self.scan_box, foreground="#666", wraplength=690, justify="left",
+        ttk.Label(self.scan_box, style="Muted.TLabel", wraplength=690, justify="left",
                   text="\nThe next steps will offer to fix these. Press Next."
                   ).pack(anchor="w")
 
@@ -303,11 +303,11 @@ class Wizard(tk.Toplevel):
         folder = os.path.join(root, importer.PROCESSED)
         if not os.path.isdir(folder) or not importer.gather([folder]):
             self._mono("'Processed' is empty — nothing waiting to be filed.")
-            ttk.Label(self.body, foreground="#666", wraplength=690, justify="left",
+            ttk.Label(self.body, style="Muted.TLabel", wraplength=690, justify="left",
                       text="\nThat's expected on a first run. Later steps will stage "
                            "tracks that need analysing; once you've run them, come back "
-                           "to this step (Help → Setup Wizard) or use Import → \"Sort "
-                           "the 'Processed' folder\"."
+                           "to this step (Help → Setup Guide), or press Sort them… "
+                           "on the To do screen."
                       ).pack(anchor="w", pady=(8, 0))
             return
 
@@ -540,15 +540,15 @@ class Wizard(tk.Toplevel):
 
     # -- step: analysis -----------------------------------------------------
     def _analysis(self):
-        self._heading("Tracks that need Mixed In Key",
+        self._heading("Tracks that need analysing",
                       "Sortero works out genre, artist and title itself, but key, BPM "
                       "and energy come from an analysis tool — Mixed In Key, rekordbox, "
                       "Mixxx, whichever you use. Sortero can gather the tracks that need "
                       "it into 'To Be Processed' ready to run.")
-        ttk.Label(self.body, foreground="#8a5a00", font=("Helvetica", 13, "bold"),
+        ttk.Label(self.body, style="Warn.TLabel", font=ui.HEADING,
                   text="If you use Platinum Notes: run it BEFORE analysing"
                   ).pack(anchor="w", pady=(0, 2))
-        ttk.Label(self.body, foreground="#666", wraplength=690, justify="left",
+        ttk.Label(self.body, style="Muted.TLabel", wraplength=690, justify="left",
                   text="It re-encodes the audio, so mastering after analysing leaves the "
                        "tags describing a file that no longer exists. Ignore this if you "
                        "don't use it — Sortero only needs the key and BPM tags, whatever "
@@ -567,9 +567,9 @@ class Wizard(tk.Toplevel):
                                           self._apply_stage)
         if not pending:
             self.an_btn.configure(state="disabled")
-        ttk.Label(self.body, foreground="#666", wraplength=690, justify="left",
+        ttk.Label(self.body, style="Muted.TLabel", wraplength=690, justify="left",
                   text="\nAfterwards: analyse them, save the results into 'Processed', "
-                       "then use Import → \"Sort the 'Processed' folder\". Tracks staged "
+                       "then press Sort them… on the To do screen. Tracks taken "
                        "out of a set rejoin its playlist automatically when they come "
                        "back."
                   ).pack(anchor="w", pady=(10, 0))
@@ -598,25 +598,25 @@ class Wizard(tk.Toplevel):
     # -- step: done ---------------------------------------------------------
     def _done(self):
         self._heading("You're set up",
-                      "Everything from here on lives in the tabs behind this window.")
+                      "Everything from here on starts from the To do screen behind this window.")
         for pid in ("tidal", "spotify"):
             cfg = auth.PROVIDERS[pid]
             state = "connected" if auth.is_connected(pid) else "not connected"
             ttk.Label(self.body, text=f"•  {cfg['label']}: {state}").pack(anchor="w", pady=2)
-        ttk.Label(self.body, foreground="#666", wraplength=690, justify="left",
-                  text="Connect these from the Playlists tab to rebuild a Spotify or "
+        ttk.Label(self.body, style="Muted.TLabel", wraplength=690, justify="left",
+                  text="Connect these in Settings to rebuild a Spotify or "
                        "TIDAL playlist against the files you own. Pasting a tracklist "
                        "works without an account."
                   ).pack(anchor="w", pady=(4, 12))
 
         if session.active():
             s = session.summary()
-            ttk.Label(self.body, font=("Menlo", 11), justify="left",
-                      text=f"Testing session is recording:\n"
+            ttk.Label(self.body, font=ui.MONO, justify="left",
+                      text=f"The safety net is recording:\n"
                            f"  {s['moves']} moves, {s['tags']} tag edits"
                       ).pack(anchor="w")
-            ttk.Label(self.body, foreground="#666", wraplength=690, justify="left",
-                      text="Use the Testing menu to keep it all, or undo the entire "
+            ttk.Label(self.body, style="Muted.TLabel", wraplength=690, justify="left",
+                      text="Go to History to keep it all, or undo the entire "
                            "setup in one go. Until you choose, the restore point stays."
                       ).pack(anchor="w", pady=(4, 0))
         staged = 0
@@ -626,18 +626,18 @@ class Wizard(tk.Toplevel):
         except Exception:
             pass
         if staged:
-            ttk.Label(self.body, foreground="#8a5a00", font=("Helvetica", 13, "bold"),
+            ttk.Label(self.body, style="Warn.TLabel", font=ui.HEADING,
                       text=f"{staged} tracks are waiting in 'To Be Processed'"
                       ).pack(anchor="w", pady=(14, 2))
-            ttk.Label(self.body, foreground="#666", wraplength=690, justify="left",
+            ttk.Label(self.body, style="Muted.TLabel", wraplength=690, justify="left",
                       text="Run them through your analysis tool and save the results "
-                           "into 'Processed'. Then come back — Sortero shows a bar "
-                           "offering to file them, or use Import → \"Sort the "
-                           "'Processed' folder\". The wizard's first steps will also "
+                           "into 'Processed'. Then come back: the To do screen "
+                           "offers to sort them. "
+                           "The setup guide's first steps will also "
                            "pick them up if you run it again."
                       ).pack(anchor="w")
-        ttk.Label(self.body, foreground="#666", wraplength=690, justify="left",
-                  text="\nReopen this wizard any time from Help → Setup Wizard."
+        ttk.Label(self.body, style="Muted.TLabel", wraplength=690, justify="left",
+                  text="\nReopen this guide any time from Help → Setup Guide."
                   ).pack(anchor="w", pady=(10, 0))
 
 

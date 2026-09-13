@@ -6,7 +6,7 @@ A cross-platform desktop app for getting a DJ collection under control: one
 canonical copy of every track, playlists that preserve your curation, clean
 tags, and an intake lane for new music. Runs on macOS, Windows and Linux.
 
-![tabs: Overview, Organise, Tags, Duplicates, Import, History](build/icon_1024.png)
+![Sortero icon](build/icon_1024.png)
 
 ## The idea
 
@@ -20,7 +20,7 @@ reference a track, they don't copy it. Sortero applies that:
   file. A track curated into five vibes is five playlist entries and one file.
 - **Key, BPM and energy live in tags**, where rekordbox and Mixxx can sort them.
 - **Nothing is deleted.** Extra copies go to `_Quarantine/`. Every operation is
-  journalled and reversible from the History tab.
+  journalled and reversible from History.
 
 ## Layout it produces
 
@@ -38,45 +38,51 @@ DJ Collection/
 
 `To Be Processed` and `Processed` are never reorganised.
 
-**Genre detail** is a choice on the Organise tab. *Broad* gives a handful of wide
+**Genre detail** is a choice in **Tidy up → Reorganise the whole collection**. *Broad* gives a handful of wide
 folders; *fine* keeps subgenres apart — `Techno (Peak Time)` separate from
 `Techno (Hypnotic)`, `Deep House` from `Tech House`. Either way the layout stays
 one flat level. Labels Sortero picked always get their own folder; a raw tag
 value that matched no rule needs at least 8 tracks to earn one, so oddities like
 `Mainstage` don't litter the tree.
 
-**Split by energy** is an optional tick on the Organise tab. When on, each genre
+**Split by energy** is an optional tick in the same place. When on, each genre
 folder gains `Energy 1`…`Energy 10` subfolders, filed from the Mixed In Key
 rating (`Tracks/Techno/Energy 6/…`). Tracks with no rating — your own rips and
 recordings — stay directly in the genre folder rather than in a catch-all.
 
-## Tabs
+## Finding your way around
 
-| Tab | What it does |
+A sidebar on the left, one job per screen. Each screen has a one-line summary
+under its title, and an **ⓘ** beside the title for the longer explanation. The
+main action is always the blue button at the bottom right; everything else is
+under **More** next to it.
+
+| Screen | What it's for |
 |---|---|
-| **Overview** | Track count, size, and what share has key+BPM, genre and energy. Lists what needs attention. |
-| **Organise** | Previews every move before anything happens. Untick folders, or exclude individual rows, to leave things where they are. Collapses duplicates, writes playlists, files tracks by genre. **Flatten release folders…** lifts tracks out of EP and album folders into the genre folder above. |
-| **Tags** | Strips download-site spam from Genre/Comment, infers missing Artist/Title from filenames, normalises Genre, and promotes Mixed In Key energy into the sortable Grouping field. |
-| **Duplicates** | Exact (identical audio) and Likely (same artist/title/version, same length). Different remixes are never grouped. Extras move to `_Quarantine`. |
-| **Import** | Add files or folders, or **Sort the 'Processed' folder**. Analysed tracks go to the folder that already means their genre — yours if you have one. Anything missing key/BPM lands in `To Be Processed`. Tracks with no genre to go on are **held back for you to place** instead of being dropped in `Unsorted`. Tracks already in the library are flagged, not copied. |
-| **Needs Work** | Everything Sortero can't fix by itself, filtered by what's missing (key/BPM, energy, genre, artist, low bitrate). Select tracks and stage them in `To Be Processed` for whichever analysis tool you use. Your own set recordings are excluded. |
-| **Genres** | Assign genres in bulk. **Use folder name** fills the tag in from the genre folder a track already sits in; **Choose folders one by one…** walks through tracks individually. Filter to tracks with none, sort by artist or folder, select a group and set it — or look them up on Discogs, whose *styles* are the subgenre detail you want. Every write is undoable. |
-| **Playlists** | Rebuild a Spotify or TIDAL playlist against your local files, rebuild the folder playlists, or **repair broken links** when tracks come back from analysis renamed or re-encoded. |
-| **History** | Every operation, with one-click undo. |
+| **To do** | Home. Cards for the jobs worth doing, most useful first, each with one button: analysed tracks waiting in `Processed`, tracks in `Unsorted`, tracks with no genre, tracks not analysed yet, tags full of download-site spam. The number beside it in the sidebar is how many jobs there are. |
+| **Add music** | Choose a folder or files. Analysed tracks go to the folder that already means their genre — yours if you have one. Anything missing a key lands in `To Be Processed`. Tracks with no genre to go on are **held back for you to place** instead of being dropped in `Unsorted`. Tracks already in the library are pointed out, not added twice. |
+| **Library** | Every track in one list. **Show** filters to what needs work (no genre, not analysed, no energy, no artist, no BPM, low bitrate); **Search** narrows it; click a column heading to sort. Select tracks and set a genre, send them to analysis, place them one by one, copy genres from folder names, or look them up on Discogs. Your own set recordings are hidden unless you ask. |
+| **Playlists** | Rebuild a Spotify or TIDAL playlist against your local files from a link, a pasted tracklist or a CSV. **More** rebuilds the folder playlists or repairs broken links. |
+| **Tidy up** | Tools for an existing collection: **Clean tags**, **Find duplicates**, **Place a folder's tracks by hand**, **Flatten release folders**, **Fix playlist links**, and **Reorganise the whole collection**. Every tool previews before it changes anything. |
+| **History** | Every operation, with undo, and the **safety net**. **Show log** reveals the detailed log. |
+| **Settings** | Collection folder, update checks, Discogs token, Spotify and TIDAL accounts, and the setup guide. |
+
+`Cmd-1`…`Cmd-6` (`Ctrl` on Windows and Linux) jump between screens, `Cmd-,`
+opens Settings and `Cmd-R` reads the collection again. Sortero follows your
+system's light or dark appearance.
 
 ## The analysis loop
 
 Sortero works out genre, artist and title on its own, but not key, BPM or
-energy — those come from an analysis tool. The **Needs Work** tab closes that
-loop:
+energy — those come from an analysis tool. Sortero closes that loop:
 
-1. Filter by *Missing key or BPM* and select what you want.
-2. **Stage selected in 'To Be Processed'.**
+1. **To do → "tracks not analysed yet" → Show them**, or **Library → Show: Not
+   analysed yet**. Select what you want.
+2. **Send to analysis…** moves them into `To Be Processed`.
 3. Run that folder through your analysis tool, saving the results into `Processed`.
-4. **Import → "Sort the 'Processed' folder"** files them by genre automatically.
-   Sortero also shows a green bar whenever `Processed` has tracks waiting, and the
-   setup wizard files them as its first real step, so the loop closes even if you
-   walk away mid-way.
+4. **To do → Sort them…** files them by genre. That card appears whenever
+   `Processed` has tracks waiting, and the setup guide files them as its first
+   real step, so the loop closes even if you walk away mid-way.
 
 Staged tracks remember the genre they came from. Analysis tools routinely strip
 the genre tag when they re-encode, and without that memory every returning track
@@ -109,22 +115,23 @@ still lands back in its set.
 
 Filing a track into `Tracks/<Genre>` also **writes that genre into the file**.
 Without it the folder knew the genre and the tag didn't, so rekordbox, Mixxx and
-Sortero's own Genres tab all still saw the track as untagged. An existing genre
+Sortero's own Library all still saw the track as untagged. An existing genre
 tag is never overwritten.
 
 ## When there's no genre to infer
 
 Sortero derives genre from tags and folder names. When a file has neither —
 an analysis tool stripped the tag, or a Bandcamp rip never had one — there is
-nothing to infer from, and it lands in `Unsorted`. The **Genres** tab is the way
-out: select a group and set it, or ask Discogs.
+nothing to infer from, and it lands in `Unsorted`. **Library → Show: Needs a
+genre** is the way out: select a group and set it, or **More → Look up selected
+on Discogs**.
 
 Discogs needs no API token. Its free tier is rate limited, so lookups are paced
 at 2.5s and cached on disk — re-running never asks twice. A free personal token
 from discogs.com/settings/developer raises the rate to about one per second;
-paste it into the Genres tab if you're doing a big batch.
+paste it into **Settings** if you're doing a big batch.
 
-A long run reports as it goes: results fill the Suggested column while it works,
+A long run reports as it goes: results fill the *Discogs suggests* column while it works,
 the status line shows how many are done and roughly how long is left, and Stop
 keeps everything already fetched. The cache is written throughout, so a stopped
 or crashed run resumes where it left off rather than starting over. Queries are cleaned
@@ -139,8 +146,9 @@ assignment is for.
 
 Some tracks have nothing to infer a genre from — the analysis tool stripped the
 tag, the rip never had one, Discogs doesn't know it. Sortero no longer quietly
-files those into `Unsorted`. Intake **holds them back**, and **Choose folders…**
-walks through them one at a time:
+files those into `Unsorted`. Add music **holds them back**, and the one-by-one
+window (**Place held-back tracks…**, **Place one by one…** in Library, or
+**Place them…** on the To do card) walks through them one at a time:
 
 - every hint on screen: the genre tag, key and energy, the playlist it was
   staged out of, and Discogs styles if they've been looked up
@@ -151,7 +159,7 @@ walks through them one at a time:
   name to create one
 - your last nine choices on the number keys, and **Return** to file and move on
 
-**Review a folder…** (Genres tab, or the File menu) does the same for a whole
+**Place a folder's tracks by hand** (Tidy up, or the File menu) does the same for a whole
 folder already in your collection — say a Spotify or Tidal vibe playlist you
 want spread across genre folders. It offers to save the folder as a playlist
 first, which then follows each track as it's filed, so the set stays together
@@ -166,8 +174,8 @@ follows it. All of it is one undoable step in History.
 
 ## Sorting the Processed folder
 
-**File them now** on the green bar, or **Import → Sort the 'Processed' folder**,
-opens one window that deals with everything in `Processed`, in three groups:
+**Sort them…** on the To do card, **Add music → Already analysed? Sort the
+Processed folder…**, or **File → Sort the Processed Folder…** opens one window that deals with everything in `Processed`, in three groups:
 
 - **Ready to file** — shows where each will go; one button files them. Anything
   still missing a key goes back to `To Be Processed`.
@@ -199,7 +207,7 @@ flattened away, and never mistaken for a genre.
 ## Flattening release folders
 
 A hand-built library drifts into `Genre/Subgenre/Some EP/track`, and for DJing
-the release folder is one more click. **Organise → Flatten release folders…**
+the release folder is one more click. **Tidy up → Flatten release folders**
 lists every folder holding tracks below its genre folder, and lifts the ones you
 tick into that genre folder, removing the emptied release folder.
 
@@ -211,10 +219,10 @@ undo puts the release folders back exactly.
 
 ## Streaming playlists
 
-Paste a Spotify or TIDAL playlist link on the **Playlists** tab and Sortero
+Paste a Spotify or TIDAL playlist link on the **Playlists** screen and Sortero
 matches each track against files you already own, then writes an `.m3u8`.
 
-Connect an account (Playlists → Accounts) to read playlists of any length. It
+Connect an account (**Settings → Spotify and TIDAL**) to read playlists of any length. It
 uses OAuth 2.0 with PKCE: you sign in on Spotify's or TIDAL's own website, so
 Sortero never sees your password, and the tokens are stored in your OS
 credential store. One-time setup is creating a free app at
@@ -235,9 +243,9 @@ software can sort on. Sortero copies it to **Grouping** as `5A - Energy 6`
 
 ## First run
 
-A setup wizard walks you through choosing your collection folder, reads it, and
+A setup guide walks you through choosing your collection folder, reads it, and
 explains the analysis loop. It appears once; after that Sortero opens straight
-into your library. Reopen it any time from **Help → Setup Wizard…**.
+onto To do. Reopen it any time from **Help → Setup Guide…** or Settings.
 
 **Help → Check for Updates…** compares your version against the latest GitHub
 release. If there's a newer one it offers to **download, install and relaunch**
@@ -254,7 +262,7 @@ refused, allow Sortero under **System Settings → Privacy & Security → App
 Management**, or keep Sortero somewhere in your home folder.
 
 It can also check automatically on launch (at most once a day) — toggle that in
-the same menu.
+Settings.
 
 > While the repository is private, the update check can't read the release list
 > anonymously and will say so. Either make the repo public, or add a GitHub
@@ -321,16 +329,17 @@ interpreter — see `.github/workflows/release.yml`.
 ./.venv/bin/python run.py
 ```
 
-## Testing mode
+## Safety net
 
-For a first big reorganisation, turn on **Testing → Start Testing Session**.
-Everything you do from then on is recorded into a single restore point, saved
-continuously as a `.bak` file, and a banner keeps count of what has changed.
+For a first big reorganisation, turn on the safety net (**History → Turn on…**,
+or **Safety Net → Turn On Safety Net…**). Everything you do from then on is
+recorded into a single restore point, saved continuously as a `.bak` file, and
+an orange banner keeps count of what has changed.
 
-- **Keep All Changes** — make it permanent and delete the backup. Individual
+- **Keep changes** — make it permanent and delete the backup. Individual
   operations stay in History and can still be undone one at a time.
-- **Undo Everything in This Session** — put the collection back as it was.
-- **Save Backup As… / Load Backup and Undo…** — the `.bak` is portable and
+- **Undo everything** — put the collection back as it was.
+- **Save Backup As… / Load a Backup and Undo It…** — the `.bak` is portable and
   self-contained, so it can undo the work from a different machine or after
   reinstalling.
 
@@ -345,11 +354,11 @@ are bit-identical; verified with a decode-and-compare.
 
 ## Safety
 
-- Dry-run previews on every destructive tab; nothing moves until you confirm.
+- Previews before every change; nothing moves until you confirm.
 - Journals live alongside your other app data: `~/Library/Application Support/Sortero`
   on macOS, `%APPDATA%\\Sortero` on Windows, `$XDG_DATA_HOME/sortero` on Linux.
 - Duplicate removal is quarantine-only — Sortero never calls `unlink` on your music.
-- Back up before the first big reorganisation anyway — or use Testing mode.
+- Back up before the first big reorganisation anyway — or use the safety net.
 
 ## License
 

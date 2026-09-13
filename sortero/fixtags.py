@@ -8,10 +8,10 @@ from .organize import canon_genre
 
 FIXES = ("energy", "spam", "artist", "genre")
 FIX_LABELS = {
-    "energy": "Promote Mixed In Key energy to the Grouping field (sortable)",
-    "spam": "Strip download-site spam from Genre and Comment",
-    "artist": "Fill missing Artist/Title from the filename",
-    "genre": "Normalise Genre to a consistent vocabulary",
+    "energy": "Copy Mixed In Key's energy rating into Grouping, where DJ apps can sort it",
+    "spam": "Clear download-site spam from Genre and Comment",
+    "artist": "Fill in a missing artist or title from the filename",
+    "genre": "Tidy genre names into one consistent set",
 }
 
 

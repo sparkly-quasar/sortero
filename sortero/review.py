@@ -13,7 +13,7 @@ import json, os, re, shutil, subprocess, threading
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from . import paths, settings, organize, playlists, membership, genres, folders, preview
+from . import paths, settings, organize, playlists, membership, genres, folders, preview, ui
 from .journal import Journal, prune_empty
 from .library import PROTECTED
 from .organize import TRACKS_DIR, target_filename, safe
@@ -173,21 +173,21 @@ class ReviewDialog(tk.Toplevel):
     def _build(self):
         top = ttk.Frame(self, padding=(16, 12, 16, 4))
         top.pack(fill="x")
-        self.pos_lab = ttk.Label(top, font=("Helvetica", 13, "bold"))
+        self.pos_lab = ttk.Label(top, font=ui.HEADING)
         self.pos_lab.pack(side="left")
-        self.count_lab = ttk.Label(top, foreground="#666")
+        self.count_lab = ttk.Label(top, style="Muted.TLabel")
         self.count_lab.pack(side="right")
         self.bar = ttk.Progressbar(self, maximum=max(len(self.recs), 1))
         self.bar.pack(fill="x", padx=16)
 
         info = ttk.Frame(self, padding=(16, 10))
         info.pack(fill="x")
-        self.title_lab = ttk.Label(info, font=("Helvetica", 17, "bold"),
+        self.title_lab = ttk.Label(info, font=ui.TITLE,
                                    wraplength=890, justify="left")
         self.title_lab.pack(anchor="w")
-        self.meta_lab = ttk.Label(info, font=("Menlo", 11), justify="left")
+        self.meta_lab = ttk.Label(info, font=ui.MONO, justify="left")
         self.meta_lab.pack(anchor="w", pady=(4, 0))
-        self.hint_lab = ttk.Label(info, foreground="#666", wraplength=890, justify="left")
+        self.hint_lab = ttk.Label(info, style="Muted.TLabel", wraplength=890, justify="left")
         self.hint_lab.pack(anchor="w", pady=(4, 0))
 
         tr = ttk.Frame(self, padding=(16, 0, 16, 6))
@@ -198,7 +198,7 @@ class ReviewDialog(tk.Toplevel):
         self.back15_btn.pack(side="left", padx=(6, 0))
         self.fwd15_btn = ttk.Button(tr, text="+15s", width=5, command=lambda: self.jump(15))
         self.fwd15_btn.pack(side="left", padx=(2, 8))
-        self.elapsed_lab = ttk.Label(tr, text="0:00", font=("Menlo", 11), width=6, anchor="e")
+        self.elapsed_lab = ttk.Label(tr, text="0:00", font=ui.MONO, width=6, anchor="e")
         self.elapsed_lab.pack(side="left")
         self.scrub_var = tk.DoubleVar(value=0.0)
         self.scrub = ttk.Scale(tr, from_=0, to=1, orient="horizontal",
@@ -206,7 +206,7 @@ class ReviewDialog(tk.Toplevel):
         self.scrub.pack(side="left", fill="x", expand=True, padx=8)
         self.scrub.bind("<ButtonPress-1>", self._scrub_start)
         self.scrub.bind("<ButtonRelease-1>", self._scrub_end)
-        self.total_lab = ttk.Label(tr, text="0:00", font=("Menlo", 11), width=6, anchor="w")
+        self.total_lab = ttk.Label(tr, text="0:00", font=ui.MONO, width=6, anchor="w")
         self.total_lab.pack(side="left")
 
         act = ttk.Frame(self, padding=(16, 0, 16, 8))
@@ -218,7 +218,7 @@ class ReviewDialog(tk.Toplevel):
         self.sugg_btn = ttk.Button(act, text="No suggestion", command=self.use_suggestion,
                                    state="disabled")
         self.sugg_btn.pack(side="left", padx=(14, 0))
-        self.status_lab = ttk.Label(act, foreground="#1d5c3a")
+        self.status_lab = ttk.Label(act, style="Good.TLabel")
         self.status_lab.pack(side="left", padx=10)
 
         body = ttk.Frame(self, padding=(16, 0))
@@ -234,7 +234,7 @@ class ReviewDialog(tk.Toplevel):
         self.filter_entry.bind("<Down>", self._to_list)
         lf = ttk.Frame(left)
         lf.pack(fill="both", expand=True)
-        self.lb = tk.Listbox(lf, font=("Menlo", 12), activestyle="none",
+        self.lb = tk.Listbox(lf, font=ui.MONO, activestyle="none",
                              exportselection=False)
         sb = ttk.Scrollbar(lf, orient="vertical", command=self.lb.yview)
         self.lb.configure(yscrollcommand=sb.set)

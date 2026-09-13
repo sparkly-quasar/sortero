@@ -4,7 +4,8 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 from . import (library, organize, dupes, fixtags, importer, journal, playlists,
-               auth, paths, settings, updates, wizard, session, updater, genres)
+               auth, paths, settings, updates, wizard, session, updater, genres,
+               review, flatten)
 from .common import human_size
 
 APP = "Sortero"
@@ -479,7 +480,7 @@ class Sortero(tk.Tk):
             return None
         return d
 
-    def scan(self):
+    def scan(self, then=None):
         d = self.require_root()
         if not d:
             return
@@ -499,6 +500,8 @@ class Sortero(tk.Tk):
             self.log(f"Scanned {len(self.recs)} files in {d}")
             self.refresh_banner()
             self.refresh_notice()
+            if then:
+                then()
 
         self.task.run(work, done, "Scanning library")
 
@@ -646,6 +649,8 @@ class OrganizeTab(BaseTab):
                    command=self.exclude_rows).pack(side="left", padx=(12, 0))
         ttk.Button(btns, text="Clear exclusions",
                    command=self.clear_exclusions).pack(side="left", padx=6)
+        ttk.Button(btns, text="Flatten release folders…",
+                   command=self.open_flatten).pack(side="right")
 
         self.summary = ttk.Label(self, text="", foreground="#444", wraplength=980,
                                  justify="left")
@@ -692,6 +697,12 @@ class OrganizeTab(BaseTab):
         if off:
             paths |= {r.path for r in self.app.recs if r.top in off}
         return paths
+
+    def open_flatten(self):
+        if not self.app.require_root():
+            return
+        flatten.FlattenDialog(self.app, self.app,
+                              on_close=lambda changed: self.app.scan() if changed else None)
 
     def exclude_rows(self):
         if not self.plan:
@@ -972,6 +983,16 @@ class ImportTab(BaseTab):
         ttk.Checkbutton(btns, text="Move (uncheck to copy)", variable=self.move_var).pack(side="left", padx=12)
         self.apply_btn = ttk.Button(btns, text="Import", command=self.apply, state="disabled")
         self.apply_btn.pack(side="left", padx=8)
+        self.review_btn = ttk.Button(btns, text="Choose folders for held tracks…",
+                                     command=self.open_review, state="disabled")
+        self.review_btn.pack(side="left")
+
+        hold = ttk.Frame(self)
+        hold.pack(fill="x", pady=(0, 8))
+        self.hold_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(hold, variable=self.hold_var,
+                        text="Hold tracks with no genre for me to place, instead of "
+                             "filing them into Unsorted").pack(side="left")
 
         pl = ttk.Frame(self)
         pl.pack(fill="x", pady=(0, 8))
@@ -1001,6 +1022,7 @@ class ImportTab(BaseTab):
         self.tv.delete(*self.tv.get_children())
         self.summary.configure(text="")
         self.apply_btn.configure(state="disabled")
+        self.review_btn.configure(state="disabled")
 
     def add_files(self):
         fs = filedialog.askopenfilenames(title="Choose tracks to import")
@@ -1037,8 +1059,11 @@ class ImportTab(BaseTab):
         if self.exclude:
             known = importer.library_excluding(known, root, self.exclude)
 
+        hold = self.hold_var.get()
+
         def work(progress, log):
-            return importer.plan(root, srcs, known, progress=progress)
+            return importer.plan(root, srcs, known, progress=progress,
+                                 hold_unsorted=hold)
 
         def done(res):
             self.results = res
@@ -1051,6 +1076,9 @@ class ImportTab(BaseTab):
             c = importer.summarize(res)
             self.summary.configure(text=" · ".join(f"{v} {k}" for k, v in c.most_common()))
             self.apply_btn.configure(state="normal" if any(x["dest"] for x in res) else "disabled")
+            self.review_btn.configure(
+                state="normal" if any(x["action"] == "needs-folder" for x in res)
+                else "disabled")
 
         self.app.task.run(work, done, "Reading new files")
 
@@ -1081,13 +1109,37 @@ class ImportTab(BaseTab):
             msg = f"Imported {n} files."
             if plname:
                 msg += f"\nAdded {added} to '{plname}'."
+            held = [x["rec"] for x in results if x["action"] == "needs-folder"]
+            if held:
+                msg += (f"\n\n{len(held)} tracks had no genre to go on, so they were "
+                        "left where they are for you to place.")
             messagebox.showinfo(APP, msg)
             self.clear()
             self.app.tab_history.refresh()
-            self.app.after(400, self.app.offer_playlist_repair)
-            self.app.scan()
+
+            def after_scan():
+                if held and messagebox.askyesno(
+                        APP, f"Go through the {len(held)} held tracks now and choose "
+                             "a folder for each?"):
+                    self._review(held)
+                else:
+                    self.app.offer_playlist_repair()
+
+            self.app.scan(then=after_scan)
 
         self.app.task.run(work, done, "Importing")
+
+    def open_review(self):
+        held = [x["rec"] for x in (self.results or []) if x["action"] == "needs-folder"]
+        if not held:
+            messagebox.showinfo(APP, "Nothing is being held back.")
+            return
+        self._review(held)
+
+    def _review(self, recs):
+        review.ReviewDialog(self.app, self.app, recs,
+                            on_close=lambda changed: self.app.scan(
+                                then=self.app.offer_playlist_repair))
 
 
 class NeedsWorkTab(BaseTab):
@@ -1294,6 +1346,8 @@ class GenresTab(BaseTab):
                    command=self.apply_manual).pack(side="left")
         ttk.Button(row2, text="Use folder name",
                    command=self.apply_from_folder).pack(side="left", padx=6)
+        ttk.Button(row2, text="Choose folders one by one…",
+                   command=self.review_one_by_one).pack(side="left")
         ttk.Button(row2, text="Look up selected on Discogs",
                    command=self.lookup).pack(side="left", padx=(16, 0))
         self.stop_btn = ttk.Button(row2, text="Stop", command=self.stop_lookup,
@@ -1400,6 +1454,15 @@ class GenresTab(BaseTab):
             return
         self._write(pairs, f"Set {len(pairs)} tracks to the genre of the folder "
                            "they're already in?")
+
+    def review_one_by_one(self):
+        recs = self._selected() or self.rows
+        if not recs:
+            messagebox.showinfo(APP, "Nothing to go through.")
+            return
+        review.ReviewDialog(self.app, self.app, recs,
+                            on_close=lambda changed: self.app.scan(
+                                then=self.app.offer_playlist_repair) if changed else None)
 
     def apply_suggested(self):
         recs = self._selected() or self.rows

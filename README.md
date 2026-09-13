@@ -55,12 +55,12 @@ recordings — stay directly in the genre folder rather than in a catch-all.
 | Tab | What it does |
 |---|---|
 | **Overview** | Track count, size, and what share has key+BPM, genre and energy. Lists what needs attention. |
-| **Organise** | Previews every move before anything happens. Untick folders, or exclude individual rows, to leave things where they are. Collapses duplicates, writes playlists, files tracks by genre. |
+| **Organise** | Previews every move before anything happens. Untick folders, or exclude individual rows, to leave things where they are. Collapses duplicates, writes playlists, files tracks by genre. **Flatten release folders…** lifts tracks out of EP and album folders into the genre folder above. |
 | **Tags** | Strips download-site spam from Genre/Comment, infers missing Artist/Title from filenames, normalises Genre, and promotes Mixed In Key energy into the sortable Grouping field. |
 | **Duplicates** | Exact (identical audio) and Likely (same artist/title/version, same length). Different remixes are never grouped. Extras move to `_Quarantine`. |
-| **Import** | Add files or folders. Analysed tracks go straight to `Tracks/<Genre>`; anything missing key/BPM lands in `To Be Processed`. Tracks already in the library are flagged, not copied. **"Sort the 'Processed' folder"** files everything you've already run through PN and MIK. |
+| **Import** | Add files or folders, or **Sort the 'Processed' folder**. Analysed tracks go to the folder that already means their genre — yours if you have one. Anything missing key/BPM lands in `To Be Processed`. Tracks with no genre to go on are **held back for you to place** instead of being dropped in `Unsorted`. Tracks already in the library are flagged, not copied. |
 | **Needs Work** | Everything Sortero can't fix by itself, filtered by what's missing (key/BPM, energy, genre, artist, low bitrate). Select tracks and stage them in `To Be Processed` for whichever analysis tool you use. Your own set recordings are excluded. |
-| **Genres** | Assign genres in bulk. **Use folder name** fills the tag in from the genre folder a track already sits in. Filter to tracks with none, sort by artist or folder, select a group and set it — or look them up on Discogs, whose *styles* are the subgenre detail you want. Every write is undoable. |
+| **Genres** | Assign genres in bulk. **Use folder name** fills the tag in from the genre folder a track already sits in; **Choose folders one by one…** walks through tracks individually. Filter to tracks with none, sort by artist or folder, select a group and set it — or look them up on Discogs, whose *styles* are the subgenre detail you want. Every write is undoable. |
 | **Playlists** | Rebuild a Spotify or TIDAL playlist against your local files, rebuild the folder playlists, or **repair broken links** when tracks come back from analysis renamed or re-encoded. |
 | **History** | Every operation, with one-click undo. |
 
@@ -134,6 +134,49 @@ to 6-in-10 on a real batch. Only artist and title are sent.
 Coverage is honest, not magic: well-known club tracks resolve, obscure Bandcamp
 material often doesn't. For that tail, set it by hand — that's what bulk
 assignment is for.
+
+## Placing tracks by hand
+
+Some tracks have nothing to infer a genre from — the analysis tool stripped the
+tag, the rip never had one, Discogs doesn't know it. Sortero no longer quietly
+files those into `Unsorted`. Intake **holds them back**, and **Choose folders…**
+walks through them one at a time:
+
+- every hint on screen: the genre tag, key and energy, the playlist it was
+  staged out of, and Discogs styles if they've been looked up
+- **Play** to hear it (macOS plays in place; elsewhere it opens your player)
+- your collection's **real folders** to pick from — type to filter, or type a new
+  name to create one
+- your last nine choices on the number keys, and **Return** to file and move on
+
+Choices are saved as you go, so closing half way loses nothing. Nothing moves
+until you say so. Each track takes its folder's name as its genre, rejoins any
+playlists it came from, and every playlist entry pointing at its old location
+follows it. All of it is one undoable step in History.
+
+## Your layout, not Sortero's
+
+Sortero's own layout is `Tracks/<Genre>`, but a library organised by hand as
+`House/`, `Techno/Hypnotic Techno/` is respected. Intake files a Tech House track
+into your existing `Tech House` folder rather than building a parallel
+`Tracks/Tech House`, and a genre that has no folder yet is created alongside
+yours. Folders are matched by name, so `Lez Dance` or `smooth vibes` — curation,
+not genres — never swallow tracks just because they share a word with one.
+The energy split's `Energy N` subfolders are part of the layout too: never
+flattened away, and never mistaken for a genre.
+
+## Flattening release folders
+
+A hand-built library drifts into `Genre/Subgenre/Some EP/track`, and for DJing
+the release folder is one more click. **Organise → Flatten release folders…**
+lists every folder holding tracks below its genre folder, and lifts the ones you
+tick into that genre folder, removing the emptied release folder.
+
+Folders of 60 tracks or fewer — a release — are ticked for you. Bigger ones,
+like a whole label's archive or a Beatport top 100 dump, are listed but left
+unticked. Filenames are kept; a clash gets a number rather than overwriting. The
+release name can be kept in the Album tag, playlists follow the moved files, and
+undo puts the release folders back exactly.
 
 ## Streaming playlists
 

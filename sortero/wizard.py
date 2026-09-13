@@ -12,7 +12,7 @@ import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-from . import settings, library, auth, organize, fixtags, dupes, session, importer
+from . import settings, library, auth, organize, fixtags, dupes, session, importer, review
 from .common import human_size
 
 TITLE = "Welcome to Sortero"
@@ -322,17 +322,19 @@ class Wizard(tk.Toplevel):
 
         def done(res):
             self._proc_results = res
+            if not self.proc_note.winfo_exists():
+                return
             c = importer.summarize(res)
             filed = sum(1 for x in res if x["dest"])
-            if not filed:
-                self.proc_note.configure(
-                    text="Nothing new to file — " +
-                         ", ".join(f"{v} {k}" for k, v in c.most_common()))
-                return
+            held = [x["rec"] for x in res if x["action"] == "needs-folder"]
+            head = (f"{filed} tracks ready to file:\n" if filed
+                    else "Nothing Sortero can file on its own:\n")
             self.proc_note.configure(
-                text=f"{filed} tracks ready to file:\n" +
-                     "\n".join(f"  {v:5}  {k}" for k, v in c.most_common()))
-            self.proc_btn.configure(state="normal")
+                text=head + "\n".join(f"  {v:5}  {k}" for k, v in c.most_common()))
+            if filed:
+                self.proc_btn.configure(state="normal")
+            if held:
+                self._held_row(held)
 
         self._run(work, done, "Reading 'Processed'")
 
@@ -353,6 +355,16 @@ class Wizard(tk.Toplevel):
             self.rescan()
 
         self._run(work, done, "Filing analysed tracks")
+
+    def _held_row(self, held):
+        _, note = self._action_row(f"Choose folders for {len(held)} tracks…",
+                                   lambda: self._review(held))
+        note.configure(text="Sortero couldn't work out a genre for these, so it hasn't "
+                            "filed them anywhere. Go through them one at a time.")
+
+    def _review(self, held):
+        review.ReviewDialog(self, self.app, held,
+                            on_close=lambda changed: self.rescan() if changed else None)
 
     # -- step: tags ---------------------------------------------------------
     def _tags(self):

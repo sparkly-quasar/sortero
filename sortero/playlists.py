@@ -417,6 +417,43 @@ def repair(root, recs, dry=True, log=print):
     return fixed, unresolved, per
 
 
+def remap(root, mapping, journal=None):
+    """Point playlist entries at files that have moved: {old_path: new_path}.
+
+    Exact path substitution, for moves Sortero made itself - cheaper and surer
+    than repair(), which has to guess from artist and title. With a journal, each
+    rewritten playlist's previous contents are recorded so the edit can be undone.
+    """
+    d = playlist_dir(root)
+    if not mapping or not os.path.isdir(d):
+        return 0
+    moved = {os.path.normpath(k): v for k, v in mapping.items()}
+    total = 0
+    for fn in sorted(os.listdir(d)):
+        if not fn.endswith(".m3u8"):
+            continue
+        fp = os.path.join(d, fn)
+        with open(fp, encoding="utf-8") as fh:
+            text = fh.read()
+        out, changed = [], 0
+        for line in text.splitlines():
+            s = line.strip()
+            if s and not s.startswith("#"):
+                target = os.path.normpath(os.path.join(d, s))
+                if target in moved:
+                    out.append(os.path.relpath(moved[target], d))
+                    changed += 1
+                    continue
+            out.append(line)
+        if changed:
+            if journal is not None:
+                journal.wrote(fp, text)
+            with open(fp, "w", encoding="utf-8") as fh:
+                fh.write("\n".join(out) + "\n")
+            total += changed
+    return total
+
+
 def append(root, name, paths):
     """Add paths to a playlist, creating it if needed and skipping repeats."""
     d = playlist_dir(root)

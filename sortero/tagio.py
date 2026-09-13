@@ -1,20 +1,20 @@
 """Format-agnostic read/write for the tag fields DJ software actually reads."""
 import mutagen
-from mutagen.id3 import ID3, TKEY, TIT1, TCON, TPE1, TIT2, TBPM, COMM, ID3NoHeaderError
+from mutagen.id3 import ID3, TKEY, TIT1, TCON, TPE1, TIT2, TBPM, TALB, COMM, ID3NoHeaderError
 from mutagen.flac import FLAC
 from mutagen.oggvorbis import OggVorbis
 from mutagen.mp4 import MP4
 
 # logical field -> per-format tag name
 ID3_FRAMES = {"key": TKEY, "grouping": TIT1, "genre": TCON,
-              "artist": TPE1, "title": TIT2, "bpm": TBPM}
+              "artist": TPE1, "title": TIT2, "bpm": TBPM, "album": TALB}
 # Mixed In Key writes its 1-10 rating to ENERGYLEVEL. Note it also writes a
 # base64 JSON blob to plain KEY/ENERGY - read INITIALKEY, never KEY.
 VORBIS_KEYS = {"key": "INITIALKEY", "grouping": "GROUPING", "genre": "GENRE",
                "artist": "ARTIST", "title": "TITLE", "bpm": "BPM",
-               "comment": "COMMENT", "energylevel": "ENERGYLEVEL"}
+               "comment": "COMMENT", "energylevel": "ENERGYLEVEL", "album": "ALBUM"}
 MP4_KEYS = {"grouping": "\xa9grp", "genre": "\xa9gen", "artist": "\xa9ART",
-            "title": "\xa9nam", "comment": "\xa9cmt"}
+            "title": "\xa9nam", "comment": "\xa9cmt", "album": "\xa9alb"}
 MP4_KEY_ATOM = "----:com.apple.iTunes:initialkey"
 MP4_ENERGY_ATOM = "----:com.apple.iTunes:EnergyLevel"
 ID3_ENERGY_DESCS = ("energylevel", "energy")

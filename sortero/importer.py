@@ -3,7 +3,9 @@
 Rules, in order:
   1. Already in the library (same content signature) -> flagged as duplicate.
   2. No key/BPM               -> 'To Be Processed'  (your analysis staging lane).
-  3. Otherwise               -> Tracks/<Genre>/Artist - Title.ext
+  3. Otherwise               -> the existing folder for that genre, or a new one
+                                laid out the way the collection already is
+  4. No genre to go on       -> held back for the user to place
 Spam tags are stripped on the way in so junk never enters the library.
 """
 import os, shutil, collections
@@ -15,6 +17,7 @@ from .dupes import _sig, ident
 from .journal import Journal
 from .tagio import Track
 from . import membership
+from . import folders
 from . import playlists as pl
 
 TO_PROCESS = "To Be Processed"
@@ -55,9 +58,14 @@ def gather(sources):
     return sorted(out.items())
 
 
-def plan(root, sources, library_recs, progress=None):
-    """Return list of dicts: {rec, dest, action, reason}."""
+def plan(root, sources, library_recs, progress=None, hold_unsorted=True):
+    """Return list of dicts: {rec, dest, action, reason}.
+
+    hold_unsorted: a track with no genre to go on is held back for the user to
+    place, instead of being filed into Unsorted where it is easy to lose.
+    """
     files = gather(sources)
+    homes = folders.homes(root)
     # signatures + identities of what is already in the library
     known_sig, known_id = set(), set()
     for r in library_recs:
@@ -118,9 +126,19 @@ def plan(root, sources, library_recs, progress=None):
                 if remembered:
                     g = canon_genre(remembered) or remembered
                     r.genre = r.genre or g
-            dest = os.path.join(root, TRACKS_DIR, safe(g, 60), target_filename(r))
-            results.append({"rec": r, "dest": dest, "action": "sort",
-                            "genre": g, "reason": f"genre: {g}"})
+            if g == "Unsorted" and hold_unsorted:
+                results.append({"rec": r, "dest": None, "action": "needs-folder",
+                                "reason": "no genre to go on - choose a folder"})
+                continue
+            # an existing folder that already means this genre beats a new one
+            home = folders.existing_home(root, g, homes)
+            dest_dir = home or folders.new_home(root, g, homes)
+            dest = os.path.join(dest_dir, target_filename(r))
+            label = os.path.basename(home) if home else g
+            results.append({"rec": r, "dest": dest, "action": "sort", "genre": label,
+                            "reason": f"genre: {g}" + (
+                                f" -> your '{os.path.relpath(home, root)}' folder"
+                                if home else "")})
     if progress:
         progress(total, total)
     return results

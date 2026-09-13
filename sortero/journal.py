@@ -29,6 +29,10 @@ class Journal:
     def created(self, path):
         self.entries.append({"op": "create", "path": path})
 
+    def wrote(self, path, old_content):
+        """A text file rewritten in place; keep what it said before."""
+        self.entries.append({"op": "write", "path": path, "old": old_content})
+
     # -- persist ------------------------------------------------------------
     @property
     def path(self):
@@ -98,6 +102,10 @@ def revert(journal_file, log=print):
                     os.remove(p); ok += 1
                 elif os.path.isdir(p) and not os.listdir(p):
                     os.rmdir(p); ok += 1
+            elif e["op"] == "write":
+                with open(e["path"], "w", encoding="utf-8") as fh:
+                    fh.write(e["old"])
+                ok += 1
         except Exception as ex:
             fail += 1
             log(f"  ! {ex}")

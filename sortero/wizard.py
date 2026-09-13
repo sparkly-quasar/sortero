@@ -12,7 +12,7 @@ import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-from . import settings, library, auth, organize, fixtags, dupes, session, importer, review
+from . import settings, library, auth, organize, fixtags, dupes, session, importer, review, processed
 from .common import human_size
 
 TITLE = "Welcome to Sortero"
@@ -335,6 +335,9 @@ class Wizard(tk.Toplevel):
                 self.proc_btn.configure(state="normal")
             if held:
                 self._held_row(held)
+            dups = sum(1 for x in res if x["action"] == "duplicate")
+            if dups:
+                self._dups_row(dups)
 
         self._run(work, done, "Reading 'Processed'")
 
@@ -361,6 +364,14 @@ class Wizard(tk.Toplevel):
                                    lambda: self._review(held))
         note.configure(text="Sortero couldn't work out a genre for these, so it hasn't "
                             "filed them anywhere. Go through them one at a time.")
+
+    def _dups_row(self, n):
+        _, note = self._action_row(
+            f"Sort out {n} already in your library…",
+            lambda: processed.ProcessedDialog(
+                self, self.app, on_close=lambda changed: self.rescan() if changed else None))
+        note.configure(text="Fresh copies of tracks you already have. Choose whether each "
+                            "replaces the old copy, is set aside, or is kept as well.")
 
     def _review(self, held):
         review.ReviewDialog(self, self.app, held,

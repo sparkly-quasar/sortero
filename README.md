@@ -164,6 +164,27 @@ until you say so. Each track takes its folder's name as its genre, rejoins any
 playlists it came from, and every playlist entry pointing at its old location
 follows it. All of it is one undoable step in History.
 
+## Sorting the Processed folder
+
+**File them now** on the green bar, or **Import → Sort the 'Processed' folder**,
+opens one window that deals with everything in `Processed`, in three groups:
+
+- **Ready to file** — shows where each will go; one button files them. Anything
+  still missing a key goes back to `To Be Processed`.
+- **Choose a folder by hand** — no genre to go on; opens the one-by-one window.
+- **Already in your library** — fresh copies of tracks you already have. Platinum
+  Notes writes a new file and leaves the original, so the analysed version looks
+  like a duplicate of its own original; before this, those were refused and sat
+  in `Processed` forever. For each, choose **Replace library copy** (the new copy
+  takes the old one's place, playlists follow, the old copy goes to `_Quarantine`),
+  **Keep library copy** (the new one is set aside), or **Keep both**.
+
+Sensible defaults are pre-chosen: identical audio keeps the library copy, a length
+difference of more than three seconds keeps both (it may be another edit), and
+otherwise the version you just processed replaces the old one. Tags the old copy
+had and the new one lacks — genre, album, energy — carry over. Nothing is deleted,
+and each group's action is its own undoable step.
+
 ## Your layout, not Sortero's
 
 Sortero's own layout is `Tracks/<Genre>`, but a library organised by hand as

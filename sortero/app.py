@@ -5,7 +5,7 @@ from tkinter import ttk, filedialog, messagebox
 
 from . import (library, organize, dupes, fixtags, importer, journal, playlists,
                auth, paths, settings, updates, wizard, session, updater, genres,
-               review, flatten)
+               review, flatten, processed)
 from .common import human_size
 
 APP = "Sortero"
@@ -213,8 +213,19 @@ class Sortero(tk.Tk):
         self.task.run(work, done, "Checking playlists")
 
     def _file_processed_now(self):
-        self.nb.select(self.tab_import)
-        self.tab_import.intake_processed()
+        self.open_processed()
+
+    def open_processed(self):
+        """One window that deals with everything in Processed, leaving nothing stranded."""
+        root = self.require_root()
+        if not root:
+            return
+        if not os.path.isdir(os.path.join(root, importer.PROCESSED)):
+            messagebox.showinfo(APP, f"There's no '{importer.PROCESSED}' folder in your collection.")
+            return
+        processed.ProcessedDialog(
+            self, self, on_close=lambda changed: self.scan(then=self.offer_playlist_repair)
+            if changed else self.refresh_notice())
 
     def refresh_banner(self):
         sess = session.active()
@@ -349,7 +360,15 @@ class Sortero(tk.Tk):
                                     initialdir=rootn)
         if not d:
             return
-        d = os.path.normpath(d)
+        # The picker can hand back ~/Dropbox/... while the collection is stored as
+        # ~/Library/CloudStorage/Dropbox/... (or the reverse). Compare real paths,
+        # then express the choice in the collection's own form, so every path in
+        # the review stays consistent with the rest of the library.
+        real_root, real_d = os.path.realpath(rootn), os.path.realpath(d)
+        if real_d != real_root and real_d.startswith(real_root + os.sep):
+            d = os.path.join(rootn, os.path.relpath(real_d, real_root))
+        else:
+            d = os.path.normpath(d)
         if d == rootn or not d.startswith(rootn + os.sep):
             messagebox.showinfo(
                 APP, "Pick a folder inside your collection.\n\nFor music from somewhere "
@@ -1053,7 +1072,7 @@ class ImportTab(BaseTab):
         pf = ttk.Frame(self)
         pf.pack(fill="x", pady=(0, 8))
         ttk.Button(pf, text="Sort the 'Processed' folder",
-                   command=self.intake_processed).pack(side="left")
+                   command=lambda: self.app.open_processed()).pack(side="left")
         ttk.Label(pf, foreground="#666",
                   text="  — file everything you have already run through "
                        "your analysis tool").pack(side="left")

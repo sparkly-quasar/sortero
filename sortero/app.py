@@ -111,6 +111,7 @@ class Sortero(tk.Tk):
         filem.add_command(label="Choose Collection Folder…", command=self.choose)
         filem.add_command(label="Rescan", accelerator="Cmd-R" if paths.IS_MAC else "Ctrl+R",
                           command=self.scan)
+        filem.add_command(label="Review a Folder…", command=self.review_folder)
         filem.add_separator()
         filem.add_command(label="Open App Data Folder",
                           command=lambda: paths.reveal(paths.data_dir()))
@@ -337,6 +338,89 @@ class Sortero(tk.Tk):
             self.scan()
 
         self.task.run(work, done, "Restoring from backup")
+
+    def review_folder(self):
+        """Pick a folder in the collection and place each of its tracks by hand."""
+        root = self.require_root()
+        if not root:
+            return
+        rootn = os.path.normpath(root)
+        d = filedialog.askdirectory(title="Choose a folder to go through track by track",
+                                    initialdir=rootn)
+        if not d:
+            return
+        d = os.path.normpath(d)
+        if d == rootn or not d.startswith(rootn + os.sep):
+            messagebox.showinfo(
+                APP, "Pick a folder inside your collection.\n\nFor music from somewhere "
+                     "else, use Import → Add folder…: it holds back anything it can't "
+                     "place, and you can go through those one by one.")
+            return
+        rel = os.path.relpath(d, rootn)
+        top = rel.split(os.sep)[0]
+        if top in (organize.QUARANTINE, organize.PLAYLIST_DIR):
+            messagebox.showinfo(APP, f"'{top}' isn't music waiting to be filed.")
+            return
+
+        def work(progress, log):
+            recs = library.scan(d, progress=progress)
+            for r in recs:                        # scanned from the folder; re-anchor
+                r.rel = os.path.relpath(r.path, rootn)
+                r.protected = library.is_protected(r.rel)
+            return recs
+
+        def done(recs):
+            long_ = {id(r) for r in recs
+                     if r.is_recording or (r.duration and r.duration >= organize.MIX_MIN_SECONDS)}
+            tracks = [r for r in recs if id(r) not in long_]
+            nested = [r for r in tracks if os.path.dirname(r.path) != d]
+            if nested:
+                ans = messagebox.askyesnocancel(
+                    APP, f"'{rel}' has {len(tracks) - len(nested)} tracks of its own and "
+                         f"{len(nested)} more in subfolders.\n\nInclude the subfolders too?")
+                if ans is None:
+                    return
+                if not ans:
+                    tracks = [r for r in tracks if os.path.dirname(r.path) == d]
+            if not tracks:
+                messagebox.showinfo(APP, f"There are no tracks to place in '{rel}'."
+                                    + (" Only set recordings, which are left alone." if long_ else ""))
+                return
+            name = organize.safe(rel.replace(os.sep, " - "), 100)
+            exists = os.path.exists(os.path.join(playlists.playlist_dir(rootn), name + ".m3u8"))
+            ans = messagebox.askyesnocancel(
+                APP, f"{len(tracks)} tracks in '{rel}'"
+                     + (f" ({len(long_)} set recordings left out)" if long_ else "") + ".\n\n"
+                     f"Save the folder as the playlist '{name}' first? As you file tracks "
+                     "into genre folders the playlist follows them, so the set stays "
+                     "together even once the folder is empty."
+                     + ("\n\nA playlist with that name already exists and will be "
+                        "replaced (undoable from History)." if exists else "")
+                     + "\n\nYes saves it · No goes straight in · Cancel stops")
+            if ans is None:
+                return
+            if ans:
+                self._save_folder_playlist(rootn, name, tracks)
+            review.ReviewDialog(
+                self, self, tracks, exclude_folder=rel, context=rel,
+                on_close=lambda changed: self.scan(then=self.offer_playlist_repair)
+                if changed else None)
+
+        self.task.run(work, done, f"Reading '{rel}'")
+
+    def _save_folder_playlist(self, root, name, recs):
+        """Write the folder's current order out as a playlist, undoably."""
+        fp = os.path.join(playlists.playlist_dir(root), organize.safe(name, 100) + ".m3u8")
+        j = journal.Journal("save-playlist", root)
+        if os.path.exists(fp):
+            with open(fp, encoding="utf-8") as fh:
+                j.wrote(fp, fh.read())
+        else:
+            j.created(fp)
+        playlists.write(root, name, [r.path for r in recs])
+        j.save()
+        self.tab_history.refresh()
+        self.log(f"saved playlist {fp} ({len(recs)} tracks)")
 
     def _first_run(self):
         def after_wizard(root_dir):
@@ -1348,6 +1432,8 @@ class GenresTab(BaseTab):
                    command=self.apply_from_folder).pack(side="left", padx=6)
         ttk.Button(row2, text="Choose folders one by one…",
                    command=self.review_one_by_one).pack(side="left")
+        ttk.Button(row2, text="Review a folder…",
+                   command=lambda: self.app.review_folder()).pack(side="left", padx=6)
         ttk.Button(row2, text="Look up selected on Discogs",
                    command=self.lookup).pack(side="left", padx=(16, 0))
         self.stop_btn = ttk.Button(row2, text="Stop", command=self.stop_lookup,

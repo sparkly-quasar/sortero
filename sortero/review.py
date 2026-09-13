@@ -125,7 +125,7 @@ def apply_decisions(root, items, log=print, progress=None):
 
 # ---------------------------------------------------------------- dialog
 class ReviewDialog(tk.Toplevel):
-    def __init__(self, parent, app, recs, on_close=None):
+    def __init__(self, parent, app, recs, on_close=None, exclude_folder=None, context=None):
         super().__init__(parent)
         self.app, self._parent, self.on_close = app, parent, on_close
         self.root_dir = app.root_dir.get()
@@ -135,6 +135,11 @@ class ReviewDialog(tk.Toplevel):
         self.cache = genres.load_cache()
         self.detail = settings.get("genre_detail") or "broad"
         self.choices = folders.homes(self.root_dir)
+        if exclude_folder:
+            # the folder being reviewed is where these tracks are *leaving* -
+            # filing one back into it would tag its genre as the folder's name
+            gone = os.path.normpath(exclude_folder)
+            self.choices = [c for c in self.choices if os.path.normpath(c[0]) != gone]
         known = {rel for rel, _ in self.choices}
         for rel in self.decisions.values():
             if rel not in known:
@@ -151,7 +156,7 @@ class ReviewDialog(tk.Toplevel):
         self.changed = False
         self._close_after_apply = False
 
-        self.title(TITLE)
+        self.title(f"{TITLE} — {context}" if context else TITLE)
         self.geometry("940x700")
         self.minsize(820, 600)
         self.transient(parent)

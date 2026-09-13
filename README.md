@@ -151,6 +151,14 @@ walks through them one at a time:
   name to create one
 - your last nine choices on the number keys, and **Return** to file and move on
 
+**Review a folder…** (Genres tab, or the File menu) does the same for a whole
+folder already in your collection — say a Spotify or Tidal vibe playlist you
+want spread across genre folders. It offers to save the folder as a playlist
+first, which then follows each track as it's filed, so the set stays together
+even once the folder is empty. Tracks come up in the folder's own order, the
+folder itself isn't offered as a destination, and **Skip** leaves a track
+where it is.
+
 Choices are saved as you go, so closing half way loses nothing. Nothing moves
 until you say so. Each track takes its folder's name as its genre, rejoins any
 playlists it came from, and every playlist entry pointing at its old location

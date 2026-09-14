@@ -352,6 +352,21 @@ Files whose tags were edited won't be byte-identical afterwards — rewriting an
 ID3 tag rebuilds the tag container's padding and frame order. The audio streams
 are bit-identical; verified with a decode-and-compare.
 
+## Sortero Pro
+
+The free version does everything, but each action changes up to **50 tracks at
+a time**; run it again for the next batch. Previews, undo, History and the
+safety net are never limited. Reorganising the whole collection can't be split
+into batches, so beyond 50 tracks it needs Pro.
+
+**Sortero Pro** in the sidebar takes the limit away, as a one-time purchase or
+a subscription, through Stripe. After paying you get a licence key to paste in.
+One-time and gift keys are checked offline; a subscription is confirmed with the
+Sortero server every few days and keeps working offline for two weeks at a time.
+
+Selling it is set up in [`server/README.md`](server/README.md). Free keys for
+yourself or anyone you like come from `tools/licence_admin.py gift`.
+
 ## Safety
 
 - Previews before every change; nothing moves until you confirm.

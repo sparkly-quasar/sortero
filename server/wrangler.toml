@@ -1,0 +1,11 @@
+name = "sortero-pro"
+main = "worker.js"
+compatibility_date = "2025-09-01"
+
+[vars]
+# The public half of the licence signing key. Must match PUBLIC_KEY in
+# sortero/licence.py; tools/licence_admin.py genkey --install fills both in.
+LICENCE_PUBLIC_KEY = "b395b5d7b45fb5f3259b7221625e8081a88021677d18a868fa45415877bdb73d"
+# Your Stripe Payment Link ids (plink_...), comma separated. A purchase through
+# any other link gets no licence key.
+PAYMENT_LINKS = ""

@@ -4,7 +4,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 from . import (library, organize, journal, playlists, paths, settings, updates, wizard,
-               session, updater, review, flatten, processed, importer, ui)
+               session, updater, review, flatten, processed, importer, ui, licence)
 from .screens.base import APP, RESCAN, changes
 from .screens.todo import TodoScreen
 from .screens.add_music import AddMusicScreen
@@ -13,6 +13,7 @@ from .screens.playlist_builder import PlaylistsScreen
 from .screens.tidy import TidyUpScreen, CleanTagsScreen, DuplicatesScreen, ReorganiseScreen
 from .screens.history import HistoryScreen
 from .screens.settings_screen import SettingsScreen
+from .screens.pro_screen import ProScreen
 from .version import __version__
 
 NAV = [("todo", "To do"), ("add", "Add music"), ("library", "Library"),
@@ -20,7 +21,7 @@ NAV = [("todo", "To do"), ("add", "Add music"), ("library", "Library"),
 SCREENS = {"todo": TodoScreen, "add": AddMusicScreen, "library": LibraryScreen,
            "playlists": PlaylistsScreen, "tidy": TidyUpScreen, "tags": CleanTagsScreen,
            "dupes": DuplicatesScreen, "reorganise": ReorganiseScreen,
-           "history": HistoryScreen, "settings": SettingsScreen}
+           "history": HistoryScreen, "settings": SettingsScreen, "pro": ProScreen}
 MOD = "Command" if paths.IS_MAC else "Control"
 ACCEL = "Cmd-" if paths.IS_MAC else "Ctrl+"
 
@@ -109,6 +110,7 @@ class Sortero(tk.Tk):
         self.refresh_banner()
         self.show("todo")
         self.after(250, self._first_run)
+        self.after(4000, self._maybe_check_licence)
 
     # -- window chrome -----------------------------------------------------
     def _build_menu(self):
@@ -149,6 +151,7 @@ class Sortero(tk.Tk):
 
         helpm = tk.Menu(menubar, tearoff=0, name="help")
         helpm.add_command(label="Setup Guide…", command=self.run_wizard)
+        helpm.add_command(label="Sortero Pro…", command=lambda: self.show("pro"))
         helpm.add_separator()
         helpm.add_command(label="Check for Updates…",
                           command=lambda: self.check_updates(quiet=False))
@@ -177,6 +180,7 @@ class Sortero(tk.Tk):
         filler = tk.Frame(side)
         ui.paint(filler, bg="sidebar")
         filler.pack(fill="both", expand=True)
+        self._nav_item("pro", "Sortero Pro")
         self._nav_item("settings", "Settings")
 
         self.coll_lab = tk.Label(side, font=ui.SMALL, anchor="w", justify="left",
@@ -623,6 +627,30 @@ class Sortero(tk.Tk):
     def run_wizard(self):
         wizard.Wizard(self, on_finish=lambda d: (self.root_dir.set(d), self.scan())
                       if d else None)
+
+    def _maybe_check_licence(self):
+        """Confirm a subscription every few days, quietly, off the UI thread."""
+        if not licence.due():
+            return
+        box = {}
+
+        def work():
+            try:
+                licence.refresh()
+            except Exception as e:
+                box["error"] = str(e)
+            box["done"] = True
+
+        def poll():
+            if "done" not in box:
+                self.after(500, poll)
+                return
+            if "error" in box:
+                self.log(f"licence check: {box['error']}")
+            self.screens["pro"].render()
+
+        threading.Thread(target=work, daemon=True).start()
+        self.after(500, poll)
 
     def _maybe_auto_update(self):
         if settings.get("check_updates_on_launch") and updates.due():

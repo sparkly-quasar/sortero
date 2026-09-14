@@ -12,7 +12,7 @@ import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-from . import settings, library, auth, organize, fixtags, dupes, session, importer, review, processed, ui
+from . import settings, library, auth, organize, fixtags, dupes, session, importer, review, processed, pro, ui
 from .common import human_size
 
 TITLE = "Welcome to Sortero"
@@ -345,6 +345,11 @@ class Wizard(tk.Toplevel):
         res = getattr(self, "_proc_results", None)
         if not res:
             return
+        todo = [x for x in res if x["dest"]]
+        allowed = pro.allow(self, len(todo), "Filing analysed tracks")
+        if not allowed:
+            return
+        res = todo[:allowed] + [x for x in res if not x["dest"]]
         root = self.root_dir.get()
 
         def work(progress):
@@ -410,6 +415,10 @@ class Wizard(tk.Toplevel):
         changes = getattr(self, "_tag_changes", None)
         if not changes:
             return
+        allowed = pro.allow(self, len(changes), "Cleaning tags")
+        if not allowed:
+            return
+        changes = changes[:allowed]
         root = self.root_dir.get()
 
         def work(progress):
@@ -463,6 +472,10 @@ class Wizard(tk.Toplevel):
             return
         root = self.root_dir.get()
         groups = found["exact"] + found["likely"]
+        allowed = pro.allow(self, sum(len(g) - 1 for g in groups), "Setting duplicates aside")
+        if not allowed:
+            return
+        groups = pro.take_groups(groups, allowed)
 
         def work(progress):
             return dupes.quarantine(root, groups, log=lambda m: None)
@@ -520,6 +533,9 @@ class Wizard(tk.Toplevel):
             return
         moves, pls, _ = plan
         root = self.root_dir.get()
+        if not pro.allow(self, len(moves), "Reorganising the collection", split=False,
+                         why=pro.WHOLE_LAYOUT):
+            return
         if not messagebox.askyesno(
                 TITLE, f"Move {len(moves)} files into the new structure?\n\n"
                        f"{len(pls)} playlists are written first, so nothing you "
@@ -578,6 +594,10 @@ class Wizard(tk.Toplevel):
         pending = getattr(self, "_pending", None)
         if not pending:
             return
+        allowed = pro.allow(self, len(pending), "Sending tracks to analysis")
+        if not allowed:
+            return
+        pending = pending[:allowed]
         root = self.root_dir.get()
         all_recs = self.recs
 

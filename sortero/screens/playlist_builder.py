@@ -3,7 +3,7 @@ import collections, os
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-from .. import ui, auth, playlists, organize
+from .. import ui, auth, playlists, organize, pro
 from .base import Screen, APP
 
 
@@ -161,6 +161,10 @@ class PlaylistsScreen(Screen):
                                      "there's nothing to save.")
             return
         missing = len(self.results) - len(found)
+        allowed = pro.allow(self.app, len(found), "Saving a playlist")
+        if not allowed:
+            return
+        found = found[:allowed]
         if not messagebox.askyesno(
                 APP, f"Save '{name}' with {ui.plural(len(found), 'track')}?"
                      + (f"\n\n{missing} aren't in your collection and will be left out."

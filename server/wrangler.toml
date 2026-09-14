@@ -9,3 +9,5 @@ LICENCE_PUBLIC_KEY = "b395b5d7b45fb5f3259b7221625e8081a88021677d18a868fa45415877
 # Your Stripe Payment Link ids (plink_...), comma separated. A purchase through
 # any other link gets no licence key.
 PAYMENT_LINKS = ""
+# The private repository the release workflow uploads builds to.
+BUILDS_REPO = "sparkly-quasar/sortero-builds"

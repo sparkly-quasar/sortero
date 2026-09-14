@@ -17,7 +17,7 @@ import collections, os, shutil, threading
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from . import importer, library, membership, playlists, pro, review, ui
+from . import importer, library, membership, playlists, review, ui
 from .dupes import ident, _sig
 from .journal import Journal, prune_empty
 from .library import PROTECTED
@@ -398,10 +398,6 @@ class ProcessedDialog(tk.Toplevel):
         self.refresh()
 
     def file_ready(self, ready):
-        allowed = pro.allow(self, len(ready), "Filing tracks")
-        if not allowed:
-            return
-        ready = ready[:allowed]
         back = sum(1 for x in ready if x["action"] == "to-process")
         if not messagebox.askyesno(
                 TITLE, f"File {len(ready)} tracks now?"
@@ -429,10 +425,6 @@ class ProcessedDialog(tk.Toplevel):
 
     def resolve_dups(self):
         rows = [(d["new"], d["old"], d["action"]) for d in self.dups]
-        allowed = pro.allow(self, len(rows), "Sorting out duplicates")
-        if not allowed:
-            return
-        rows = rows[:allowed]
         c = collections.Counter(a for _, _, a in rows)
         parts = [f"{c[a]} × {ACTIONS[a].lower()}" for a in CYCLE if c[a]]
         if not messagebox.askyesno(

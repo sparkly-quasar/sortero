@@ -3,7 +3,7 @@ import collections, os
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from .. import ui, organize, dupes, fixtags, settings, pro
+from .. import ui, organize, dupes, fixtags, settings
 from ..common import human_size
 from .base import Screen, APP
 
@@ -120,10 +120,7 @@ class CleanTagsScreen(ToolScreen):
     def apply(self):
         if not self.changes:
             return
-        allowed = pro.allow(self.app, len(self.changes), "Cleaning tags")
-        if not allowed:
-            return
-        changes = self.changes[:allowed]
+        changes = self.changes
         if not messagebox.askyesno(APP, f"Write tags on {ui.plural(len(changes), 'file')}?"
                                         "\n\nYou can undo this from History."):
             return
@@ -216,12 +213,6 @@ class DuplicatesScreen(ToolScreen):
         count = sum(len(g) - 1 for g in groups)
         if not count:
             return
-        allowed = pro.allow(self.app, count, "Setting duplicates aside")
-        if not allowed:
-            return
-        if allowed < count:
-            groups = pro.take_groups(groups, allowed)
-            count = sum(len(g) - 1 for g in groups)
         if not messagebox.askyesno(APP, f"Move {ui.plural(count, 'extra copy', 'extra copies')} "
                                         "to _Quarantine?\n\nNothing is deleted, and you "
                                         "can undo this from History."):
@@ -423,9 +414,6 @@ class ReorganiseScreen(ToolScreen):
         if not self.plan:
             return
         moves, pls, _ = self.plan
-        if not pro.allow(self.app, len(moves), "Reorganising the collection", split=False,
-                         why=pro.WHOLE_LAYOUT):
-            return
         keep_pl = self.make_pl.get()
         if not messagebox.askyesno(
                 APP, f"Move {ui.plural(len(moves), 'file')} into the new layout?\n\n"

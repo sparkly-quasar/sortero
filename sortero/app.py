@@ -657,34 +657,41 @@ class Sortero(tk.Tk):
             self.after(2500, lambda: self.check_updates(quiet=True))
 
     def _offer_install(self, res):
-        """Found a newer release - download, swap it in, and relaunch."""
+        """Found a newer release. A Pro copy downloads it, swaps it in and relaunches."""
         import webbrowser
         if not updater.running_frozen():
-            if messagebox.askyesno(APP, res["message"] + "\n\nThis copy is running "
-                                        "from source, so it can't replace itself. "
-                                        "Open the download page?"):
-                webbrowser.open(res["url"])
+            if messagebox.askyesno(APP, res["message"] + "\n\nThis copy runs from source, "
+                                        "so update it from GitHub. Open the project's "
+                                        "releases?"):
+                webbrowser.open(res.get("url") or updates.RELEASES_URL)
+            return
+        if not licence.status().pro:
+            if messagebox.askyesno(APP, res["message"] + "\n\nOne-click updates come with "
+                                        "Sortero Pro. See Sortero Pro?"):
+                self.show("pro")
             return
         if not messagebox.askyesno(
                 APP, res["message"] + "\n\nDownload it, install it and restart "
                      "Sortero now?\n\nAnything unsaved is finished first — this "
                      "only quits once the new version is ready."):
             return
-        try:
-            asset = updater.pick_asset(res.get("assets") or [])
-        except updater.UpdateError as e:
-            messagebox.showerror(APP, str(e))
-            return
 
         def work(progress, log):
-            log(f"downloading {asset['name']}…")
-            new = updater.prepare(asset, progress=progress)
-            log(f"unpacked to {new}")
-            return new
-
-        def done(new_path):
             try:
-                updater.install(new_path)
+                build = licence.latest_build()
+            except licence.LicenceError as e:
+                return ("error", str(e))
+            log(f"downloading {build.get('name') or 'the update'}…")
+            new = updater.prepare(build, progress=progress)
+            log(f"unpacked to {new}")
+            return ("ok", new)
+
+        def done(out):
+            if out[0] == "error":
+                messagebox.showwarning(APP, out[1])
+                return
+            try:
+                updater.install(out[1])
             except updater.UpdateError as e:
                 messagebox.showerror(APP, str(e))
                 return
@@ -701,7 +708,11 @@ class Sortero(tk.Tk):
 
         def done(res):
             state = res["state"]
-            if state == "update":
+            if state == "update" and quiet and updater.running_frozen() \
+                    and not licence.status().pro:
+                # no nagging on launch: without Pro there's nothing to install
+                self.log(f"update check: {res['message']}")
+            elif state == "update":
                 self._offer_install(res)
             elif not quiet:
                 if state == "private":

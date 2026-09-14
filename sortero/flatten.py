@@ -10,7 +10,7 @@ import os, shutil, threading
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from . import folders, playlists, pro, ui
+from . import folders, playlists, ui
 from .common import AUDIO_EXTS
 from .journal import Journal, prune_empty
 from .library import PROTECTED
@@ -269,10 +269,6 @@ class FlattenDialog(tk.Toplevel):
         if not moves:
             messagebox.showinfo(TITLE, "Those folders have no tracks left to move.", parent=self)
             return
-        allowed = pro.allow(self, len(moves), "Flattening release folders")
-        if not allowed:
-            return
-        moves = moves[:allowed]
         renamed = sum(1 for s, d, _ in moves if os.path.basename(s) != os.path.basename(d))
         if not messagebox.askyesno(
                 TITLE, f"Move {len(moves)} tracks out of {len(self.chosen)} release folders?"

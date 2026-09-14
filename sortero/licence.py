@@ -1,5 +1,9 @@
 """Sortero Pro licences.
 
+Sortero is free and open source; Sortero Pro is the ready-to-run app and its
+one-click updates. A licence key is what the updater presents to the Sortero
+server to get a new build.
+
 A licence key is a small signed statement: what kind of licence it is and the
 Stripe purchase or subscription it came from. Sortero checks the signature
 against PUBLIC_KEY, so a one-time or gift licence needs no network, and nobody
@@ -17,12 +21,11 @@ Each signature covers a label plus the payload bytes, so a status can never be
 passed off as a key. server/worker.js makes both; tools/licence_admin.py makes
 gift keys.
 """
-import base64, json, time, urllib.request
+import base64, json, sys, time, urllib.error, urllib.request
 
 from . import ed25519, net, settings, store
 
 PUBLIC_KEY = "b395b5d7b45fb5f3259b7221625e8081a88021677d18a868fa45415877bdb73d"          # hex; tools/licence_admin.py genkey --install fills it in
-FREE_CAP = 50
 GRACE = 14 * 86400       # how long a subscription keeps working without a check
 CHECK_EVERY = 3 * 86400
 KEY_PREFIX, STATUS_PREFIX = "SRT1", "SRS1"
@@ -113,11 +116,6 @@ def status(now=None):
     return Status(False, "sub", None, unconfirmed)
 
 
-def limit():
-    """How many tracks one action may change, or None for no limit."""
-    return None if status().pro else FREE_CAP
-
-
 def activate(key, check=True):
     key = normalise(key)
     lic = read_key(key)
@@ -174,6 +172,43 @@ def refresh(timeout=15):
     settings.set("licence_status", token)
     settings.set("licence_checked", time.time())
     return status()
+
+
+def platform():
+    return {"darwin": "mac", "win32": "windows"}.get(sys.platform, "linux")
+
+
+def latest_build(timeout=20):
+    """The newest ready-to-run build for this computer.
+
+    {"version", "notes", "name", "size", "url"}; the url is a download link that
+    expires within minutes, so use it straight away.
+    """
+    key = settings.get("licence_key") or ""
+    if not read_key(key):
+        raise LicenceError("One-click updates come with Sortero Pro. Add your licence "
+                           "key first.")
+    if not store.SERVER:
+        raise LicenceError("This copy of Sortero doesn't know where to get updates.")
+    try:
+        body = _post(store.SERVER.rstrip("/") + "/update",
+                     {"key": key, "platform": platform()}, timeout)
+    except urllib.error.HTTPError as e:
+        try:
+            reason = json.loads(e.read().decode()).get("error")
+        except Exception:
+            reason = None
+        raise LicenceError(reason or f"The Sortero server answered {e.code}.")
+    except Exception as e:
+        raise LicenceError(f"Couldn't reach the Sortero server ({e}).")
+    url = body.get("url") if isinstance(body, dict) else None
+    if not isinstance(url, str) or not url.startswith("https://"):
+        raise LicenceError("The Sortero server didn't send a download.")
+    return body
+
+
+def downloads_page():
+    return store.SERVER.rstrip("/") + "/downloads" if store.SERVER else ""
 
 
 def buy_url_ok(url):

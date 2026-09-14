@@ -1,32 +1,56 @@
 # Selling Sortero Pro
 
-Sortero's free version changes up to 50 tracks per action; a licence key lifts
-that. This folder is the small server that turns a Stripe payment into a key.
+Sortero is free and open source. **Sortero Pro** is the ready-to-run app for
+Mac, Windows and Linux, plus one-click updates. This folder is the small server
+that turns a Stripe payment into a licence key and hands out the builds.
 
 ```
-buyer ── Stripe Payment Link ── pays ──▶ redirected to  /success   shows the key
-Stripe ─────────────── webhook ────────▶                /webhook   saves key on the payment
-Sortero (subscriptions, every few days) ▶               /check     signed "paid until …"
+buyer ── Stripe Payment Link ── pays ──▶ /success     licence key + download buttons
+returning buyer ── pastes key ─────────▶ /downloads   download buttons
+Sortero's updater ── key ──────────────▶ /update      newest build for this computer
+Sortero (subscriptions, every few days) ▶ /check      signed "paid until …"
+Stripe ─────────────── webhook ────────▶ /webhook    saves the key on the payment
 ```
 
 There's no database. Keys are signed with a private key only you and the
-server hold; the app has the public half and checks keys offline.
+server hold; the app has the public half and checks keys offline. The builds
+live as releases on a **private GitHub repository**; the server fetches them
+with a read-only token and gives buyers a download link that expires in minutes.
 
 Do everything in Stripe **test mode** first, then repeat the Stripe steps in
 live mode.
 
 ## 1. The signing key
 
+Already done: `tools/licence_admin.py genkey --install` saved it to
+`~/.config/sortero/licence-signing-key` and wrote the public key into
+`sortero/licence.py` and `server/wrangler.toml`. **Back that file up in a
+password manager.** If it's lost, no new keys can be made; if it leaks, anyone
+can make keys.
+
+## 2. The private builds repository
+
 ```bash
-python tools/licence_admin.py genkey --install
+gh repo create sparkly-quasar/sortero-builds --private --add-readme \
+  --description "Sortero Pro builds"
 ```
 
-This saves the signing key to `~/.config/sortero/licence-signing-key`, readable
-only by you, and writes the public key into `sortero/licence.py` and
-`server/wrangler.toml`. **Back the file up in a password manager.** If it's
-lost, no new keys can be made; if it leaks, anyone can make keys.
+Then make two **fine-grained personal access tokens** (GitHub → Settings →
+Developer settings → Fine-grained tokens), each with *Repository access: Only
+select repositories → sortero-builds*:
 
-## 2. The Stripe products
+| Token | Permission | Goes to |
+|---|---|---|
+| sortero release uploads | Contents: **Read and write** | the `BUILDS_TOKEN` secret of `sparkly-quasar/sortero` (repo Settings → Secrets and variables → Actions) |
+| sortero pro server | Contents: **Read-only** | the Worker, in step 4 |
+
+Tokens expire; set a reminder to renew them. When the upload token lapses the
+release workflow fails loudly rather than publishing nothing.
+
+From then on, pushing a `v*` tag builds all three platforms, uploads the zips to
+`sortero-builds`, and publishes only the release notes on the public repository.
+
+## 3. The Stripe products
 
 In the Stripe dashboard:
 
@@ -39,15 +63,15 @@ In the Stripe dashboard:
    https://sortero-pro.<your-subdomain>.workers.dev/success?session_id={CHECKOUT_SESSION_ID}
    ```
 
-   Type `{CHECKOUT_SESSION_ID}` exactly like that; Stripe fills it in. You'll get
-   the real Worker address in step 3, so you can come back and fix this.
-3. Note each link's id (`plink_…`, shown in the link's details) and URL
+   Type `{CHECKOUT_SESSION_ID}` exactly like that; Stripe fills it in. You get
+   the real Worker address in step 4, so come back and fix this.
+3. Note each link's id (`plink_…`, in the link's details) and URL
    (`https://buy.stripe.com/…`).
 
 If you'll sell outside your own country, look at **Stripe Tax**, which can
 collect VAT and sales tax on Payment Links.
 
-## 3. The server
+## 4. The server
 
 Needs a free Cloudflare account and Node.js.
 
@@ -63,14 +87,15 @@ separated. A purchase from any other link gets no key. Then:
 npx wrangler deploy
 npx wrangler secret put LICENCE_SIGNING_KEY < ~/.config/sortero/licence-signing-key
 npx wrangler secret put STRIPE_SECRET_KEY
+npx wrangler secret put GITHUB_TOKEN
 ```
 
 For `STRIPE_SECRET_KEY` use a **restricted key** (Developers → API keys →
 Create restricted key) with only: *Checkout Sessions: Read*, *Subscriptions:
-Write*, *PaymentIntents: Write*. Wrangler prompts for the value, so it never
-lands in your shell history.
+Write*, *PaymentIntents: Write*. `GITHUB_TOKEN` is the read-only token from
+step 2. Wrangler prompts for each value, so none land in your shell history.
 
-## 4. The webhook
+## 5. The webhook
 
 Stripe dashboard → **Developers → Webhooks → Add endpoint**:
 
@@ -87,7 +112,7 @@ The webhook saves each key into the payment's or subscription's metadata as
 `sortero_licence`, so if a buyer loses theirs you can find it in the dashboard
 and send it again.
 
-## 5. The app
+## 6. The app
 
 Edit `sortero/store.py`:
 
@@ -95,16 +120,20 @@ Edit `sortero/store.py`:
 - each plan's `price` (the label shown, e.g. `"$29"`) and `url` (its
   `https://buy.stripe.com/…` link)
 
-## 6. Try it
+Release a new version so the built app knows where to go.
 
-1. Run Sortero, open **Sortero Pro**, press **Buy…** and pay with Stripe's test
+## 7. Try it
+
+1. Push a tag and check its zips appear on `sortero-builds`.
+2. Open **Sortero Pro** in the app, press **Buy…** and pay with Stripe's test
    card `4242 4242 4242 4242`, any future date, any CVC.
-2. The page you land on shows a key. Paste it into Sortero and press
-   **Activate**.
-3. For the subscription, cancel it in the dashboard and choose **More → Check
-   subscription now**: Pro stays on until the paid period ends, then turns off.
+3. The page you land on shows a key and download buttons. Download a build.
+4. Paste the key into Sortero and press **Activate**. **Help → Check for
+   Updates…** now offers to install newer versions.
+5. For the subscription, cancel it in the dashboard: downloads and updates stop
+   once the paid period ends. The app itself keeps working.
 
-Then switch Stripe to live mode, repeat steps 2–4 with live links and a live
+Then switch Stripe to live mode, repeat steps 3–5 with live links and a live
 restricted key, and update `store.py`.
 
 ## Your own key
@@ -114,4 +143,4 @@ python tools/licence_admin.py gift --note "Elle"
 python tools/licence_admin.py show SRT1.…      # check any key
 ```
 
-Gift keys never expire and need no network. Make as many as you like.
+Gift keys never expire, and get downloads and updates like a one-time licence.

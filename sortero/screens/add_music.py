@@ -3,7 +3,7 @@ import os
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-from .. import ui, importer, playlists, review, pro
+from .. import ui, importer, playlists, review
 from .base import Screen, APP
 
 ACTIONS = {"sort": "File", "mix": "File as a mix", "to-process": "Needs analysing",
@@ -140,17 +140,13 @@ class AddMusicScreen(Screen):
         if not self.results:
             return
         todo = [x for x in self.results if x["dest"]]
-        allowed = pro.allow(self.app, len(todo), "Adding music")
-        if not allowed:
-            return
-        todo = todo[:allowed]
         move = self.move_var.get()
         if not messagebox.askyesno(
                 APP, f"{'Move' if move else 'Copy'} {ui.plural(len(todo), 'track')} into "
                      "your library?\n\nYou can undo this from History."):
             return
         root = self.app.root_dir.get()
-        results = todo + [x for x in self.results if not x["dest"]]
+        results = self.results
         plname = self.playlist_var.get().strip()
 
         def work(progress, log):

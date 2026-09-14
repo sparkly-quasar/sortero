@@ -7,7 +7,7 @@ import os, re, threading
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from .. import ui, organize, genres, folders, review, paths, pro
+from .. import ui, organize, genres, folders, review, paths
 from .base import Screen, APP, needs_genre, is_mix
 
 FILTERS = [
@@ -243,10 +243,6 @@ class LibraryScreen(Screen):
         if not recs:
             messagebox.showinfo(APP, "Select the tracks you want analysed first.")
             return
-        allowed = pro.allow(self.app, len(recs), "Sending tracks to analysis")
-        if not allowed:
-            return
-        recs = recs[:allowed]
         if not messagebox.askyesno(
                 APP, f"Send {ui.plural(len(recs), 'track')} to analysis?\n\n"
                      "They move into 'To Be Processed'. Run that folder through your "
@@ -333,12 +329,6 @@ class LibraryScreen(Screen):
                     then=lambda done: [self.suggested.pop(r.path, None) for r, _ in done])
 
     def _write(self, pairs, question, then=None):
-        allowed = pro.allow(self.app, len(pairs), "Setting genres")
-        if not allowed:
-            return
-        if allowed < len(pairs):
-            pairs = pairs[:allowed]
-            question = f"Write genres to the first {allowed} of these tracks?"
         if not messagebox.askyesno(APP, question + "\n\nYou can undo this from History."):
             return
         root = self.app.root_dir.get()
@@ -399,10 +389,6 @@ class LibraryScreen(Screen):
                                         "search with. Set those by hand instead."
                                         if skipped else ""))
             return
-        allowed = pro.allow(self.app, len(recs), "Looking up on Discogs")
-        if not allowed:
-            return
-        recs = recs[:allowed]
         cache = genres.load_cache()
         fresh = [r for r in recs if genres.key_for(r) not in cache]
         mins = genres.eta_minutes(len(fresh))

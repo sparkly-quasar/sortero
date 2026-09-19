@@ -517,7 +517,7 @@ class Wizard(tk.Toplevel):
     # -- step: organise -----------------------------------------------------
     def _organise(self):
         self._heading("File everything by genre",
-                      "Moves each track to Tracks/<Genre>/Artist - Title, and writes "
+                      "Moves each track to <Genre>/Artist - Title, and writes "
                       "every folder you have now — vibe imports, gig sets — to "
                       "_Playlists as an .m3u8 pointing at that one file. Your "
                       "staging folders are left alone.")

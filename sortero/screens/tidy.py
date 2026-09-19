@@ -470,13 +470,18 @@ FINE = "Fine: keep subgenres apart"
 
 class ReorganiseScreen(ToolScreen):
     title = "Reorganise the collection"
-    summary = ("Move every track into one tidy genre-folder layout. Your current folders "
-               "become playlists.")
-    details = ("Each track ends up as one file in a genre folder. Every folder you have "
-               "now, such as Spotify and TIDAL imports or gig sets, is saved to _Playlists "
-               "as a playlist pointing at that one file, so a track in five playlists is "
-               "still one file on disk. Extra copies move to _Quarantine and are never "
-               "deleted. 'To Be Processed' and 'Processed' are never touched.\n\n"
+    summary = ("Move every track into one tidy genre-folder layout. The folders you "
+               "curated become playlists.")
+    details = ("Each track ends up as one file in a genre folder, straight inside your "
+               "collection: <Genre>/Artist - Title. The folders you curated - Spotify "
+               "and TIDAL imports, gig sets - are saved to _Playlists as playlists "
+               "pointing at that one file, so a track in five playlists is still one "
+               "file on disk. Genre folders are not turned into playlists: they are "
+               "where a track lives, not a set you put together. Extra copies move to "
+               "_Quarantine and are never deleted. 'To Be Processed' and 'Processed' "
+               "are never touched.\n\n"
+               "If Sortero filed this collection under a Tracks folder before, this is "
+               "what moves it up and clears that folder away.\n\n"
                "Preview first. The whole move can be undone from History.")
 
     def build(self):

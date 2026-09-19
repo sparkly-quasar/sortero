@@ -14,7 +14,8 @@ The consensus among working DJs is that the *filesystem* should be shallow and
 predictable, and the *software* should do the organising — crates and playlists
 reference a track, they don't copy it. Sortero applies that:
 
-- **One file per track**, at `Tracks/<Genre>/Artist - Title.ext`
+- **One file per track**, at `<Genre>/Artist - Title.ext`, straight inside the
+  collection folder
 - **Playlists as pointers.** Every folder you have today — Spotify/Tidal vibe
   imports, gig sets — becomes an `.m3u8` in `_Playlists/` pointing at that one
   file. A track curated into five vibes is five playlist entries and one file.
@@ -26,7 +27,7 @@ reference a track, they don't copy it. Sortero applies that:
 
 ```
 DJ Collection/
-  Tracks/<Genre>/Artist - Title.ext    canonical home for every track
+  <Genre>/Artist - Title.ext           canonical home for every track
   Sets/<Set Name>/                     optional: gig folders kept as folders
   Albums/<Album>/                      full releases, left intact
   Mixes/                               recordings over 20 minutes
@@ -47,7 +48,7 @@ value that matched no rule needs at least 8 tracks to earn one, so oddities like
 
 **Split by energy** is an optional tick in the same place. When on, each genre
 folder gains `Energy 1`…`Energy 10` subfolders, filed from the Mixed In Key
-rating (`Tracks/Techno/Energy 6/…`). Tracks with no rating — your own rips and
+rating (`Techno/Energy 6/…`). Tracks with no rating — your own rips and
 recordings — stay directly in the genre folder rather than in a catch-all.
 
 ## Finding your way around
@@ -119,7 +120,7 @@ location. Matching is on artist and title, so it survives Platinum Notes
 renaming the file *and* changing its format — an MP3 that comes back as FLAC
 still lands back in its set.
 
-Filing a track into `Tracks/<Genre>` also **writes that genre into the file**.
+Filing a track into its genre folder also **writes that genre into the file**.
 Without it the folder knew the genre and the tag didn't, so rekordbox, Mixxx and
 Sortero's own Library all still saw the track as untagged. An existing genre
 tag is never overwritten.
@@ -277,11 +278,22 @@ and each group's action is its own undoable step.
 
 ## Your layout, not Sortero's
 
-Sortero's own layout is `Tracks/<Genre>`, but a library organised by hand as
-`House/`, `Techno/Hypnotic Techno/` is respected. Intake files a Tech House track
-into your existing `Tech House` folder rather than building a parallel
-`Tracks/Tech House`, and a genre that has no folder yet is created alongside
-yours. Folders are matched by name, so `Lez Dance` or `smooth vibes` — curation,
+Sortero files genres at the top of the collection, which is how most people do
+it by hand anyway, and a library already organised as `House/`,
+`Techno/Hypnotic Techno/` is simply carried on rather than replaced. Intake
+files a Tech House track into your existing `Tech House` folder, and a genre
+that has no folder yet is created alongside yours.
+
+A genre folder shares the top level with `Sets/`, `Albums/`, `Mixes/`,
+`_Playlists/`, `_Quarantine/` and the two staging folders, so a genre that
+would collide with one of those — a tag literally reading `Mixes` — is filed as
+`Mixes (genre)` instead. Otherwise its tracks would be taken for recordings and
+left alone forever.
+
+Collections Sortero filed under `Tracks/<Genre>` before this are left where
+they are, not split across two layouts. The next **Reorganise** moves them up
+and removes the empty `Tracks/`; you see every move in the preview first, and
+History undoes the lot. Folders are matched by name, so `Lez Dance` or `smooth vibes` — curation,
 not genres — never swallow tracks just because they share a word with one.
 The energy split's `Energy N` subfolders are part of the layout too: never
 flattened away, and never mistaken for a genre.

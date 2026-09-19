@@ -46,9 +46,11 @@ def _keys(rec):
     return precise, loose
 
 
-# A track staged out of Tracks/<Genre> came from a genre folder, not a curated
-# playlist. Remember the genre instead - otherwise it returns with no genre tag
-# (Platinum Notes drops it) and lands in Unsorted.
+# A track staged out of a genre folder came from filing, not from curation.
+# Remember the genre instead - otherwise it returns with no genre tag (Platinum
+# Notes drops it) and lands in Unsorted. Collections filed before genres moved
+# to the top level stored those folders as "Tracks - <Genre>", so entries in
+# that shape are still recognised and skipped.
 GENRE_FOLDER = re.compile(r"^Tracks\s*-\s*(.+)$")
 
 
@@ -97,8 +99,9 @@ def _find(rec):
 def claim(rec):
     """Curated playlists this track owes a place in.
 
-    Genre folders under Tracks/ are excluded - re-adding those would build
-    playlists that just mirror the folder tree.
+    Genre folders are excluded - re-adding those would build playlists that
+    just mirror the folder tree. New ones never get stored at all; this drops
+    the "Tracks - <Genre>" entries an older collection left behind.
     """
     e = _find(rec)
     if not e:

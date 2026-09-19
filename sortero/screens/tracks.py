@@ -310,7 +310,7 @@ class LibraryScreen(Screen):
         for r in recs:
             d = os.path.dirname(r.rel)
             g = folders.genre_of_folder(d) if d else None
-            if (g and g not in (organize.UNSORTED, organize.TRACKS_DIR)
+            if (g and g not in organize.RESERVED_TOP and g != organize.UNSORTED
                     and not folders.looks_like_release(g)
                     and (g in organize.CANONICAL or folders.is_genre_name(g))
                     and g != (r.genre or "").strip()):

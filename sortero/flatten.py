@@ -187,8 +187,8 @@ class FlattenDialog(tk.Toplevel):
                            anchor="center" if col in ("pick", "tracks") else "w")
         sb = ttk.Scrollbar(f, orient="vertical", command=self.tv.yview)
         self.tv.configure(yscrollcommand=sb.set)
+        sb.pack(side="right", fill="y")          # before the table: see ui.tree
         self.tv.pack(side="left", fill="both", expand=True)
-        sb.pack(side="right", fill="y")
         self.tv.bind("<ButtonRelease-1>", self._click)
         self.tv.bind("<space>", lambda e: self.toggle_selected())
 

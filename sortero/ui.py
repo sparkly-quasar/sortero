@@ -328,8 +328,12 @@ def tree(parent, columns, height=14, selectmode="extended"):
         tv.column(cid, width=width, anchor="w", stretch=width >= 150)
     sb = ttk.Scrollbar(frame, orient="vertical", command=tv.yview)
     tv.configure(yscrollcommand=sb.set)
-    tv.pack(side="left", fill="both", expand=True)
+    # Scrollbar first. A table asks for the sum of its column widths - 840 to
+    # 986px here - which is wider than the screen gives it, so packing the
+    # table first left nothing for the scrollbar: clipped in the default
+    # window, gone entirely in the smallest one, on every table in the app.
     sb.pack(side="right", fill="y")
+    tv.pack(side="left", fill="both", expand=True)
     return frame, tv
 
 

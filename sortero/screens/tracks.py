@@ -60,6 +60,12 @@ class LibraryScreen(Screen):
     def build(self):
         top = ttk.Frame(self)
         top.pack(fill="x", pady=(0, ui.GAP))
+        # packed before the left-hand controls so its width is reserved; the
+        # filter, search box and their labels together overflow this row in a
+        # small window and would otherwise clip it
+        self.hide_mixes = tk.BooleanVar(value=True)
+        ttk.Checkbutton(top, text="Hide set recordings", variable=self.hide_mixes,
+                        command=self.refresh).pack(side="right")
         ttk.Label(top, text="Show").pack(side="left")
         self.filter_var = tk.StringVar(value=LABELS["all"])
         box = ttk.Combobox(top, textvariable=self.filter_var, width=26, state="readonly",
@@ -71,9 +77,6 @@ class LibraryScreen(Screen):
         ttk.Entry(top, textvariable=self.search_var, width=24).pack(side="left",
                                                                     padx=(ui.GAP, 0))
         self.search_var.trace_add("write", lambda *a: self._debounce())
-        self.hide_mixes = tk.BooleanVar(value=True)
-        ttk.Checkbutton(top, text="Hide set recordings", variable=self.hide_mixes,
-                        command=self.refresh).pack(side="right")
 
         # appears only while Discogs is being asked, or has answers waiting
         self.strip = ttk.Frame(self)

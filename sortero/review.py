@@ -200,14 +200,16 @@ class ReviewDialog(tk.Toplevel):
         self.fwd15_btn.pack(side="left", padx=(2, 8))
         self.elapsed_lab = ttk.Label(tr, text="0:00", font=ui.MONO, width=6, anchor="e")
         self.elapsed_lab.pack(side="left")
+        # the total sits at the far right and keeps its width; the slider then
+        # expands into whatever is left between the two times
+        self.total_lab = ttk.Label(tr, text="0:00", font=ui.MONO, width=6, anchor="w")
+        self.total_lab.pack(side="right")
         self.scrub_var = tk.DoubleVar(value=0.0)
         self.scrub = ttk.Scale(tr, from_=0, to=1, orient="horizontal",
                                variable=self.scrub_var, command=self._scrub_moved)
         self.scrub.pack(side="left", fill="x", expand=True, padx=8)
         self.scrub.bind("<ButtonPress-1>", self._scrub_start)
         self.scrub.bind("<ButtonRelease-1>", self._scrub_end)
-        self.total_lab = ttk.Label(tr, text="0:00", font=ui.MONO, width=6, anchor="w")
-        self.total_lab.pack(side="left")
 
         act = ttk.Frame(self, padding=(16, 0, 16, 8))
         act.pack(fill="x")
@@ -238,8 +240,8 @@ class ReviewDialog(tk.Toplevel):
                              exportselection=False)
         sb = ttk.Scrollbar(lf, orient="vertical", command=self.lb.yview)
         self.lb.configure(yscrollcommand=sb.set)
+        sb.pack(side="right", fill="y")          # before the list: see ui.tree
         self.lb.pack(side="left", fill="both", expand=True)
-        sb.pack(side="right", fill="y")
         self.lb.bind("<Double-Button-1>", lambda e: self.assign())
         self.lb_values = []
 

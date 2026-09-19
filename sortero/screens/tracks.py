@@ -38,17 +38,6 @@ def _num(v):
         return -1.0
 
 
-def _example_lines(changes, n=4):
-    """'Artist - Title  becomes  Title - Artist', so the dialog shows real tracks."""
-    out = []
-    for r, ch in changes[:n]:
-        a = ch.get("artist", (r.artist, r.artist))
-        t = ch.get("title", (r.title, r.title))
-        out.append(f"{a[0] or '—'} - {t[0] or '—'}      becomes      "
-                   f"{a[1] or '—'} - {t[1] or '—'}")
-    return out
-
-
 def _camelot(r):
     m = re.match(r"(\d+)([AB])", r.camelot or "")
     return (int(m.group(1)), m.group(2)) if m else (99, "")
@@ -394,7 +383,7 @@ class LibraryScreen(Screen):
             "names-from-filename")
 
     def _write_names(self, changes, question, kind):
-        shown = _example_lines(changes)
+        shown = fixtags.example_lines(changes, 4)
         more = (f"\n…and {len(changes) - len(shown):,} more."
                 if len(changes) > len(shown) else "")
         if not messagebox.askyesno(APP, question + "\n\n" + "\n".join(shown) + more

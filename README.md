@@ -151,18 +151,44 @@ anything, and the note tells you which evidence it used, because a guess from
 names alone is worth less than one your tags confirm. It only ever suggests:
 the setting is yours, and a collection where nothing recurs gets no opinion.
 
-For tags that are already in backwards there are two fixes, both previewed
-before anything is written and both undoable from History:
+For tags that are already in backwards, **Clean tags** carries a panel of its
+own, headed *Artist and title the wrong way round*. It counts the tracks whose
+tags look swapped and leads with whichever fix suits that count:
 
-- **A few tracks.** **Library → Show: Artist and title look swapped** lists the
-  ones the tags themselves give away — it cross-references real tags, so a file
-  with no metadata never appears in it and never needs to: there is nothing
-  written to put right, and the order setting handles it from here. Select them
-  and **More → Swap artist and title on selected**. Anything you spot yourself
-  can be swapped the same way, whatever the filter thinks.
-- **The whole collection.** **Clean tags → More → Swap artist and title on
-  every track**, or **Read artist and title from the filenames again** when the
-  filenames are right and the tags are a mess.
+- **A few of them** — it offers *Show the 14 tracks*, which opens the Library
+  filtered to exactly those, where you pick the ones you mean and swap those.
+  Swapping everything is still there, as the quieter second option.
+- **Most of them** — it offers *Swap every track…* first, because at that point
+  the whole collection is the problem, and says how many of how many it can
+  vouch for.
+
+The filter behind that count cross-references real tags, so a file with no
+metadata never appears in it and never needs to: nothing wrong is written to it
+yet, and the order setting above handles it from here.
+
+Whichever job you run, the screen names it — on the line above the list, on the
+button, and in the question before anything is written, which also shows a few
+of your own tracks as they will read afterwards:
+
+```
+Swap artist and title on 1,842 files?
+
+  Kaskade - Atmosphere      becomes      Atmosphere - Kaskade
+  Strobe - Deadmau5         becomes      Deadmau5 - Strobe
+  …and 1,839 more.
+
+1,804 of them look backwards to Sortero, so this fits.
+
+You can undo this from History, and swapping twice puts it back.
+```
+
+That last line is not reassurance, it is arithmetic: the swap exchanges two
+strings and nothing else, so running it twice returns the collection exactly
+where it started. When the evidence *disagrees* — you ask to swap everything
+and only three tracks look backwards — the same sentence says so instead.
+
+**More** keeps **Read artist and title from the filenames again**, for when the
+filenames are right and the tags are a mess.
 
 A track with no artist or title tag at all is never swapped: there is nothing
 written to put the wrong way round, and the name Sortero read off the filename

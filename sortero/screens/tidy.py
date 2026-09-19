@@ -6,7 +6,7 @@ from tkinter import ttk, messagebox
 from .. import ui, organize, dupes, fixtags, settings
 from ..common import (human_size, name_order_note, ARTIST_TITLE, NAME_ORDERS,
                       NAME_ORDER_LABELS)
-from .base import Screen, APP
+from .base import Screen, APP, is_mix
 
 
 class TidyUpScreen(Screen):
@@ -46,6 +46,34 @@ class ToolScreen(Screen):
 
 
 # ------------------------------------------------------------------ tags
+# The three jobs this screen can stage. They all preview into the same table,
+# so everything the user reads on the way to committing has to say which one is
+# pending: the line above the list, the button, and the question at the end.
+JOBS = {
+    "fixes": {
+        "kind": "fixtags",
+        "pending": "Cleaning up tags",
+        "button": "Write to {n}…",
+        "confirm": "Write cleaned-up tags to {n}?",
+        "empty": "Nothing to fix. Your tags are already clean.",
+    },
+    "swap": {
+        "kind": "swap-names",
+        "pending": "Swapping artist and title on every track",
+        "button": "Swap {n}…",
+        "confirm": "Swap artist and title on {n}?",
+        "empty": "Nothing to swap: no track has an artist or title tag to move.",
+    },
+    "names": {
+        "kind": "names-from-filename",
+        "pending": "Reading artist and title from the filenames",
+        "button": "Write names to {n}…",
+        "confirm": "Overwrite artist and title on {n} with what their filenames say?",
+        "empty": "Nothing to change: the tags already match the filenames.",
+    },
+}
+
+
 class CleanTagsScreen(ToolScreen):
     title = "Clean tags"
     summary = ("Fix common tag problems across your collection. Every change is listed "
@@ -56,14 +84,18 @@ class CleanTagsScreen(ToolScreen):
                "into a field DJ apps display. Tick what you want, preview, then write.\n\n"
                "Sortero reads a filename like 'Deadmau5 - Strobe' as artist first. If "
                "yours are the other way round, say so under 'Filenames are' and the "
-               "artist goes in the artist tag, not the title. For tags that are already "
-               "in backwards, More offers a straight swap - on everything here, or on "
-               "just the tracks you pick in Library.\n\n"
-               "You can undo any of it from History.")
+               "artist goes in the artist tag, not the title.\n\n"
+               "Tags that went in backwards are a separate job, in the panel below. "
+               "Sortero counts the tracks whose tags look swapped and leads with "
+               "whichever is likelier to be what you want: picking out the ones it has "
+               "spotted, or swapping the whole collection.\n\n"
+               "Whichever job you run, the line above the list names it, so does the "
+               "button, and so does the question before anything is written. You can "
+               "undo any of it from History.")
 
     def build(self):
         box = ttk.Frame(self)
-        box.pack(fill="x", pady=(0, ui.SECTION))
+        box.pack(fill="x", pady=(0, ui.GAP))
         self.vars = {}
         for k in fixtags.FIXES:
             v = tk.BooleanVar(value=True)
@@ -82,24 +114,81 @@ class CleanTagsScreen(ToolScreen):
         self.detected = ui.WrapLabel(row, style="Muted.TLabel")
         self.detected.pack(side="left", fill="x", expand=True, padx=(ui.GAP, 0))
 
+        # The swap used to sit in the More menu, where nobody found it. It is a
+        # job of its own, with its own scope, so it gets a panel of its own -
+        # and the count decides which way round to offer it, because a handful
+        # of backwards tracks and a wholly backwards collection want opposite
+        # things.
+        self.card_wrap = ttk.Frame(self)
+        self.card_wrap.pack(fill="x", pady=(ui.SECTION, ui.SECTION))
+
+        self.pending = ttk.Label(self)
+        self.pending.pack(anchor="w")
         self.result = ttk.Label(self, style="Muted.TLabel")
         self.result.pack(anchor="w", pady=(0, 4))
         f, self.tv = ui.tree(self, [("track", "Track", 300), ("field", "Tag", 80),
                                     ("before", "Now", 240), ("after", "Becomes", 240)],
-                             height=13)
+                             height=11)
         f.pack(fill="both", expand=True)
         self.bar.set_more([
-            ("Swap artist and title on every track…", self.preview_swap),
             ("Read artist and title from the filenames again…", self.preview_from_names),
-            None,
-            ("Fix only some tracks…", lambda: self.app.show_library("swapped")),
         ])
         self.changes = None
+        self.job = "fixes"
+        self._build_card()
         self._reset()
 
     def invalidate(self):
         self._show_detected()
+        self._build_card()
         self._reset(clear=True)
+
+    # -- the artist/title panel -------------------------------------------
+    def _suspects(self):
+        """Tracks Sortero can show evidence for, and the pool it judged them in."""
+        h = self.app.health or {}
+        suspects = [r for r in h.get("swapped", []) if not is_mix(r)]
+        judged = [r for r in (self.app.recs or [])
+                  if not r.protected and not is_mix(r)
+                  and r.artist and r.title
+                  and not r.artist_from_name and not r.title_from_name]
+        return suspects, judged
+
+    def _build_card(self):
+        for w in self.card_wrap.winfo_children():
+            w.destroy()
+        suspects, judged = self._suspects()
+        n = len(suspects)
+        share = n / len(judged) if judged else 0.0
+        title = "Artist and title the wrong way round"
+        # Lead with the whole-collection swap only when the evidence is that the
+        # whole collection is the problem. With a handful of suspects the
+        # precise instrument is the right one to offer first.
+        if n and share < 0.5:
+            text = (f"{ui.plural(n, 'track')} here have the title sitting in the artist "
+                    "tag. Check those and swap just them, or swap the whole collection "
+                    "if it all went in backwards.")
+            card = ui.Card(self.card_wrap, title, text,
+                           f"Show the {n:,} tracks",
+                           lambda: self.app.show_library("swapped"),
+                           link_text="Swap every track's artist and title…",
+                           link_command=self.preview_swap)
+        else:
+            if n:
+                text = (f"{ui.plural(n, 'track')} of the {len(judged):,} Sortero can "
+                        "check have the title sitting in the artist tag. If the whole "
+                        "collection went in this way round, swap it in one go - you "
+                        "will see every change before anything is written.")
+            else:
+                text = ("Nothing here looks backwards to Sortero. If you know your tags "
+                        "went in the wrong way round anyway, swap them - you will see "
+                        "every change before anything is written.")
+            card = ui.Card(self.card_wrap, title, text,
+                           "Swap every track…", self.preview_swap,
+                           link_text=(f"Show the {n:,} it is sure about" if n else None),
+                           link_command=(lambda: self.app.show_library("swapped"))
+                           if n else None)
+        card.pack(fill="x")
 
     # -- how filenames are read -------------------------------------------
     def order(self):
@@ -133,10 +222,16 @@ class CleanTagsScreen(ToolScreen):
     # -- previewing --------------------------------------------------------
     def _reset(self, clear=False):
         self.changes = None
+        self.job = "fixes"
+        self.pending.configure(text="")
         if clear:
             self.tv.delete(*self.tv.get_children())
             self.result.configure(text="")
         self.bar.set_primary("Preview changes", self.preview)
+
+    def _preview_fn(self, job):
+        return {"fixes": self.preview, "swap": self.preview_swap,
+                "names": self.preview_from_names}[job]
 
     def preview(self):
         if self.need_scan():
@@ -150,48 +245,34 @@ class CleanTagsScreen(ToolScreen):
         def work(progress, log):
             return fixtags.plan(self.app.recs, fixes, order=order)
 
-        self.app.task.run(work, lambda changes: self._show(
-            changes, "Nothing to fix. Your tags are already clean."), "Checking tags")
+        self.app.task.run(work, lambda ch: self._show(ch, "fixes"), "Checking tags")
 
     def preview_swap(self):
+        """Straight to the preview: staging a swap writes nothing, and a warning
+        here is a click to get past rather than a fact to weigh. The weighing
+        belongs at the write, where the list and the evidence are both in hand."""
         if self.need_scan():
-            return
-        if not messagebox.askyesno(
-                APP, "Swap the artist and title tag of every track?\n\n"
-                     "This is for a collection that went in backwards all the way "
-                     "through. If only some tracks are wrong, use Library instead: "
-                     "show 'Artist and title look swapped', pick the ones you mean, and "
-                     "swap those.\n\nNothing is written until you've seen the list."):
             return
 
         def work(progress, log):
             return fixtags.swap([r for r in self.app.recs if not r.protected])
 
-        self.app.task.run(work, lambda changes: self._show(
-            changes, "Nothing to swap: no track has an artist or title to move.",
-            kind="swap-names"), "Reading tags")
+        self.app.task.run(work, lambda ch: self._show(ch, "swap"), "Reading tags")
 
     def preview_from_names(self):
         if self.need_scan():
             return
         order = self.order()
-        if not messagebox.askyesno(
-                APP, "Read artist and title from the filenames again?\n\n"
-                     f"Filenames are read as {NAME_ORDER_LABELS[order]}, which you can "
-                     "change above. Tracks whose name has no ' - ' in it are left alone."
-                     "\n\nThis overwrites the artist and title tags that are there "
-                     "now, so check the list before writing."):
-            return
 
         def work(progress, log):
             return fixtags.from_filename([r for r in self.app.recs if not r.protected],
                                          order=order)
 
-        self.app.task.run(work, lambda changes: self._show(
-            changes, "Nothing to change: the tags already match the filenames.",
-            kind="names-from-filename"), "Reading filenames")
+        self.app.task.run(work, lambda ch: self._show(ch, "names"), "Reading filenames")
 
-    def _show(self, changes, empty, kind="fixtags"):
+    def _show(self, changes, job):
+        spec = JOBS[job]
+        self.job = job
         self.tv.delete(*self.tv.get_children())
         shown = 0
         for r, ch in changes:
@@ -204,26 +285,59 @@ class CleanTagsScreen(ToolScreen):
                     "(cleared)" if new is None else str(new)[:120]))
                 shown += 1
         if not changes:
-            self.result.configure(text=empty)
-            self.bar.set_primary("Preview again", self.preview)
+            self.changes = None
+            self.pending.configure(text="")
+            self.result.configure(text=spec["empty"])
+            # "again" has to mean this job again, not whichever ran first
+            self.bar.set_primary("Preview again", self._preview_fn(job))
             return
+        n = ui.plural(len(changes), "file")
+        self.pending.configure(text=f"{spec['pending']} · {n}")
         c = fixtags.summarize(changes)
         self.result.configure(text=" · ".join(f"{v} {k}" for k, v in c.most_common()))
         self.changes = changes
-        self.bar.set_primary(f"Write to {ui.plural(len(changes), 'file')}…",
-                             lambda: self.apply(kind))
+        self.bar.set_primary(spec["button"].format(n=n), lambda: self.apply(job))
 
-    def apply(self, kind="fixtags"):
+    def _evidence_note(self):
+        """What the collection says about a swap - agreeing or arguing back.
+
+        Friction that scales with the number of files punishes the person whose
+        whole library really is backwards, who has the most files and the least
+        doubt. What should scale is how much the evidence disagrees.
+        """
+        suspects, judged = self._suspects()
+        n, total = len(suspects), len(self.changes)
+        if not n:
+            return ("Sortero cannot see a single track whose tags look backwards, so "
+                    "this may not be what you want.")
+        if n * 4 < total:
+            return (f"Only {n:,} of them look backwards to Sortero, so this goes a good "
+                    "deal further than what it can see.")
+        return f"{n:,} of them look backwards to Sortero, so this fits."
+
+    def apply(self, job):
         if not self.changes:
             return
-        if not messagebox.askyesno(APP, f"Write tags on {ui.plural(len(self.changes), 'file')}?"
-                                        "\n\nYou can undo this from History."):
+        spec = JOBS[job]
+        msg = spec["confirm"].format(n=ui.plural(len(self.changes), "file"))
+        lines = fixtags.example_lines(self.changes)
+        if lines:
+            msg += "\n\n" + "\n".join(lines)
+            if len(self.changes) > len(lines):
+                msg += f"\n…and {len(self.changes) - len(lines):,} more."
+        if job == "swap":
+            msg += "\n\n" + self._evidence_note()
+            msg += "\n\nYou can undo this from History, and swapping twice puts it back."
+        else:
+            msg += "\n\nYou can undo this from History."
+        if not messagebox.askyesno(APP, msg):
             return
         root = self.app.root_dir.get()
         changes = self.changes
 
         def work(progress, log):
-            return fixtags.apply(root, changes, log=log, progress=progress, kind=kind)
+            return fixtags.apply(root, changes, log=log, progress=progress,
+                                 kind=spec["kind"])
 
         def done(res):
             _, n, failed = res

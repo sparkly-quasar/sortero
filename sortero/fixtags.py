@@ -123,6 +123,22 @@ def from_filename(recs, order=ARTIST_TITLE):
     return out
 
 
+def example_lines(changes, n=3):
+    """'Artist - Title  becomes  Title - Artist', for the first few changes.
+
+    A few rows of someone's own music do more to stop a wrong write than any
+    amount of warning prose: they can recognise the mistake at a glance instead
+    of having to assess a description of it.
+    """
+    out = []
+    for r, ch in changes[:n]:
+        a = ch.get("artist", (r.artist, r.artist))
+        t = ch.get("title", (r.title, r.title))
+        out.append(f"{a[0] or '—'} - {t[0] or '—'}      becomes      "
+                   f"{a[1] or '—'} - {t[1] or '—'}")
+    return out
+
+
 def summarize(changes):
     c = collections.Counter()
     for r, ch in changes:

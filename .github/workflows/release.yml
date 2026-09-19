@@ -66,6 +66,29 @@ jobs:
         with:
           ref: ${{ needs.ref.outputs.build }}
 
+      - name: Check the version matches the tag
+        shell: bash
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          # The release is named after the tag, but the app reports the version
+          # built into it, and the updater compares one against the other. Let
+          # the two drift apart and every copy out there is told an update is
+          # waiting that it already has, for good. Checked on each runner, so
+          # what it clears is the tree that binary is actually built from.
+          VERSION=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' sortero/version.py)
+          echo "tag $TAG, sortero/version.py says ${VERSION:-(unreadable)}"
+          if [ -z "$VERSION" ]; then
+            echo "::error::Couldn't read __version__ out of sortero/version.py," \
+                 "so there is nothing to check $TAG against."
+            exit 1
+          fi
+          if [ "$TAG" != "v$VERSION" ]; then
+            echo "::error::$TAG would ship a build that calls itself v$VERSION." \
+                 "Bump sortero/version.py to match the tag, or tag v$VERSION."
+            exit 1
+          fi
+
       # setup-python ships the python.org macOS build, which is universal2 -
       # that is what makes the universal Mac app possible.
       - uses: actions/setup-python@v5

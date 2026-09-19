@@ -282,6 +282,15 @@ class Card(tk.Frame):
                  tone=None, link_text=None, link_command=None):
         super().__init__(parent, highlightthickness=1, bd=0, padx=14, pady=10)
         paint(self, bg="card", highlightbackground="border", highlightcolor="border")
+        # The button is packed before the body on purpose. The packer hands out
+        # space in packing order, and the body expands, so packing it first let
+        # a long explanation claim the whole card and squeeze the button down to
+        # a sliver - four pixels wide in the smallest window, which reads as no
+        # button at all. Reserving the button's width first leaves the body the
+        # rest, which is also what lets the explanation wrap.
+        if button:
+            ttk.Button(self, text=button, command=command).pack(side="right",
+                                                                padx=(12, 0))
         body = tk.Frame(self)
         paint(body, bg="card")
         body.pack(side="left", fill="x", expand=True)
@@ -299,8 +308,6 @@ class Card(tk.Frame):
             paint(lk, bg="card", fg="link")
             lk.pack(fill="x", pady=(4, 0))
             lk.bind("<Button-1>", lambda e: link_command())
-        if button:
-            ttk.Button(self, text=button, command=command).pack(side="right", padx=(12, 0))
 
 
 def tree(parent, columns, height=14, selectmode="extended"):

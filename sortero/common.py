@@ -97,21 +97,23 @@ NAME_ORDER_LABELS = {ARTIST_TITLE: "Artist - Title", TITLE_ARTIST: "Title - Arti
 
 
 def name_order_note(votes):
-    """One line on what the tags say about the filenames, or "" when they can't.
+    """One line on what the collection suggests, or "" when nothing is settled.
 
-    `votes` is library.name_order_votes(). It only ever speaks from tags that
-    name an artist elsewhere in the collection: nothing about "A - B" by itself
-    says which half is the artist, so a collection without those tags gets no
-    note and the choice stays the user's.
+    `votes` is library.name_order_votes(). Its "how" says which evidence won,
+    and the wording has to carry that: a guess drawn from names alone is worth
+    less than one your own tags confirm, and shouldn't read the same.
     """
     if not votes or not votes.get("sure"):
         return ""
     order = votes["order"]
     n = votes["title_artist"] if order == TITLE_ARTIST else votes["artist_title"]
     half = "second" if order == TITLE_ARTIST else "first"
+    why = ("is an artist your other tags name" if votes.get("how") == "tags"
+           else "is a name that comes back across your collection, the way an "
+                "artist does and a title doesn't")
     # never settled under 8 files, so "files" is always the right word here
     return (f"These look like {NAME_ORDER_LABELS[order]}: on {n:,} files the "
-            f"{half} half is an artist your other tags name.")
+            f"{half} half {why}.")
 
 
 def split_artist_title(stem, order=ARTIST_TITLE):
@@ -128,6 +130,34 @@ def split_artist_title(stem, order=ARTIST_TITLE):
             if a and t and len(a) < 80:
                 return a, t
     return None, stem
+
+
+# Mix and version wording that trails a filename after a dash: "Strobe -
+# Extended Mix", "Strobe - Amelie Lens Remix". genres.VERSIONISH covers the
+# bracketed spelling; this is the dash one, which looks exactly like an
+# "A - B" name and isn't. It repeats across a collection for reasons that have
+# nothing to do with artists, so anything reasoning from repetition has to drop
+# it first or it will read a promo folder as Title - Artist.
+VERSION_WORDS = (r"mix|remix|edit|version|extended|original|radio|club|dub|"
+                 r"instrumental|acapella|a\s?cappella|vip|rework|refix|flip|"
+                 r"bootleg|mashup|remaster(?:ed)?|master|intro|outro|live|demo|"
+                 r"promo|cut|tool|transition")
+VERSION_TAIL = re.compile(
+    rf"\s*[-–]\s*[^-–]{{0,40}}\b(?:{VERSION_WORDS})\b[^-–]{{0,12}}$", re.I)
+
+
+def strip_version_tail(stem):
+    """Drop trailing '- Extended Mix' / '- Someone Remix' segments from a stem.
+
+    Deliberately eager: a real artist whose name holds one of these words
+    ("Radio Slave") is dropped too. Losing a vote is the safe failure here -
+    counting a mix designation as an artist is not.
+    """
+    prev = None
+    while prev != stem:
+        prev = stem
+        stem = VERSION_TAIL.sub("", stem).strip(" -–")
+    return stem
 
 
 def halves(stem):

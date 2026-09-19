@@ -129,27 +129,37 @@ wrong words to Discogs.
 `Title - Artist`. Everything that reads a name off a filename then follows it —
 filling in missing tags, adding new music, repairing playlist links.
 
-That choice is yours to make, and mostly Sortero cannot make it for you.
-Nothing about `A - B` says which half is the artist: `Strobe - Deadmau5` and
-`Deadmau5 - Strobe` are the same two words either way. A folder of untagged
-files gets no opinion from Sortero at all — you tell it, once.
+Sortero also works out which way your collection reads and says so next to that
+choice. Nothing about one filename can tell it — `Strobe - Deadmau5` and
+`Deadmau5 - Strobe` are the same two words — but a collection is not one
+filename. Two kinds of evidence, strongest first:
 
-The one case where it can tell you something is when your tags already know an
-artist. If the right-hand half of a filename is an artist that *another* file's
-tags name, and the left-hand half is nobody, that file reads title-first. A
-file never votes on the strength of its own tags, so a wrong assumption can't
-confirm itself, and a filename whose halves are both known artists doesn't vote
-at all. It takes at least 8 files and a clear majority before Sortero says
-anything, and it only ever says it next to the choice — it never changes it.
+- **What your tags already know.** If the right-hand half of a filename is an
+  artist that *another* file's tags name, and the left-hand half is nobody,
+  that file reads title-first. No file votes on the strength of its own tags,
+  so a wrong assumption can't confirm itself, and a name whose halves are both
+  known artists doesn't vote at all.
+- **What comes back.** With no tags to go on — or every one of them backwards —
+  the names still carry it: an artist recurs across a collection and a title
+  recurs once. Mix and version wording is stripped before counting, because
+  `Strobe - Extended Mix` looks exactly like an `A - B` name and isn't, and a
+  side must carry at least three *different* recurring names to count, so one
+  token repeating 13 times (a label, a bootleg tag) proves nothing.
+
+Either way it takes at least 8 files and a clear majority before Sortero says
+anything, and the note tells you which evidence it used, because a guess from
+names alone is worth less than one your tags confirm. It only ever suggests:
+the setting is yours, and a collection where nothing recurs gets no opinion.
 
 For tags that are already in backwards there are two fixes, both previewed
 before anything is written and both undoable from History:
 
 - **A few tracks.** **Library → Show: Artist and title look swapped** lists the
-  ones the tags themselves give away — it reads tags only, so a file with no
-  metadata never appears in it. Select them and **More → Swap artist and title
-  on selected**. Anything you spot yourself can be swapped the same way,
-  whatever the filter thinks.
+  ones the tags themselves give away — it cross-references real tags, so a file
+  with no metadata never appears in it and never needs to: there is nothing
+  written to put right, and the order setting handles it from here. Select them
+  and **More → Swap artist and title on selected**. Anything you spot yourself
+  can be swapped the same way, whatever the filter thinks.
 - **The whole collection.** **Clean tags → More → Swap artist and title on
   every track**, or **Read artist and title from the filenames again** when the
   filenames are right and the tags are a mess.

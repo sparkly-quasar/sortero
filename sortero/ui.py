@@ -238,9 +238,16 @@ class ActionBar(ttk.Frame):
 
     def __init__(self, parent):
         super().__init__(parent)
+        # The right-hand side is packed first so its width is reserved before
+        # the left side expands into what remains. Packed the other way round,
+        # a long label or a wide control on the left squeezes the primary
+        # button down to a sliver, which is how a long card explanation once
+        # made a button disappear entirely.
+        self.right = ttk.Frame(self)
+        self.right.pack(side="right")
         self.left = ttk.Frame(self)
         self.left.pack(side="left", fill="x", expand=True)
-        self.primary = ttk.Button(self, default="active")
+        self.primary = ttk.Button(self.right, default="active")
         self.more_btn = None
         self.menu = None
         self._items = {}
@@ -256,7 +263,7 @@ class ActionBar(ttk.Frame):
     def set_more(self, items):
         """items: [(label, command) | None for a separator]"""
         if self.more_btn is None:
-            self.more_btn = ttk.Menubutton(self, text="More")
+            self.more_btn = ttk.Menubutton(self.right, text="More")
             self.menu = tk.Menu(self.more_btn, tearoff=0)
             self.more_btn.configure(menu=self.menu)
             self.more_btn.pack(side="right", padx=(0, GAP))

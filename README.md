@@ -54,15 +54,21 @@ recordings — stay directly in the genre folder rather than in a catch-all.
 
 A sidebar on the left, one job per screen. Each screen has a one-line summary
 under its title, and an **ⓘ** beside the title for the longer explanation. The
-main action is always the blue button at the bottom right; everything else is
-under **More** next to it.
+main action is always the blue button at the bottom right, with **More** beside
+it for the rest.
+
+What **More** holds is the rest, though, not the point. If a screen has counted
+something for you — tracks whose tags look backwards, duplicate copies waiting,
+new music held back for you to place — the way to act on it sits next to the
+button, with the number in it, rather than behind a menu you had no reason to
+open.
 
 | Screen | What it's for |
 |---|---|
 | **To do** | Home. Cards for the jobs worth doing, most useful first, each with one button: analysed tracks waiting in `Processed`, tracks in `Unsorted`, tracks with no genre, tracks not analysed yet, tracks whose artist and title are the wrong way round, tags full of download-site spam. The number beside it in the sidebar is how many jobs there are. |
 | **Add music** | Choose a folder or files. Analysed tracks go to the folder that already means their genre — yours if you have one. Anything missing a key lands in `To Be Processed`. Tracks with no genre to go on are **held back for you to place** instead of being dropped in `Unsorted`. Tracks already in the library are pointed out, not added twice. |
 | **Library** | Every track in one list. **Show** filters to what needs work (no genre, not analysed, no energy, no artist, artist and title swapped, no BPM, low bitrate); **Search** narrows it; click a column heading to sort. Select tracks and set a genre, swap artist and title, re-read both from the filename, send them to analysis, place them one by one, copy genres from folder names, or look them up on Discogs. Your own set recordings are hidden unless you ask. |
-| **Playlists** | Rebuild a Spotify or TIDAL playlist against your local files from a link, a pasted tracklist or a CSV. **More** rebuilds the folder playlists or repairs broken links. |
+| **Playlists** | Rebuild a Spotify or TIDAL playlist against your local files from a link, a pasted tracklist or a CSV — all three offered together above the list. **More** rebuilds the folder playlists or repairs broken links. |
 | **Tidy up** | Tools for an existing collection: **Clean tags** (including which way round filenames read), **Find duplicates**, **Place a folder's tracks by hand**, **Flatten release folders**, **Fix playlist links**, and **Reorganise the whole collection**. Every tool previews before it changes anything. |
 | **History** | Every operation, with undo, and the **safety net**. **Show log** reveals the detailed log. |
 | **Settings** | Collection folder, update checks, Discogs token, Spotify and TIDAL accounts, and the setup guide. |

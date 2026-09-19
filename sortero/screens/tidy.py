@@ -365,10 +365,12 @@ class DuplicatesScreen(ToolScreen):
                                     ("format", "Format", 70), ("length", "Length", 70),
                                     ("path", "File", 560)], height=15)
         f.pack(fill="both", expand=True)
-        self.bar.set_more([("Set aside exact and likely copies…",
-                            lambda: self.quarantine("all")),
-                           None,
-                           ("Search again", self.find)])
+        # The count of likely copies is printed above, so the way to act on it
+        # belongs on the screen too. It used to be a menu item, which left the
+        # screen saying "17 likely groups (1.2 GB)" over a button that offered
+        # to search again.
+        self.also = ttk.Button(self.bar.left, command=lambda: self.quarantine("all"))
+        self.bar.set_more([("Search again", self.find)])
         self.found = None
         self._reset()
 
@@ -380,7 +382,16 @@ class DuplicatesScreen(ToolScreen):
         self.tv.delete(*self.tv.get_children())
         self.result.configure(text="")
         self.bar.set_primary("Find duplicates", self.find)
-        self.bar.enable("Set aside exact and likely copies…", False)
+        self._show_also(0)
+
+    def _show_also(self, n):
+        """The 'and the likely ones too' button, only once there are any."""
+        if n:
+            self.also.configure(text=f"Include {ui.plural(n, 'likely copy', 'likely copies')} too…")
+            if not self.also.winfo_ismapped():
+                self.also.pack(side="left")
+        else:
+            self.also.pack_forget()
 
     def find(self):
         if self.need_scan():
@@ -407,12 +418,24 @@ class DuplicatesScreen(ToolScreen):
                      f"to free) · {ui.plural(len(lk), 'likely group')} "
                      f"({human_size(dupes.reclaimable(lk))})")
             n = sum(len(g) - 1 for g in ex)
+            nl = sum(len(g) - 1 for g in lk)
             if n:
+                # Exact copies are the safe default; the likely ones ride along
+                # on their own button rather than hiding in a menu.
                 self.bar.set_primary(f"Set aside {ui.plural(n, 'exact copy', 'exact copies')}…",
                                      lambda: self.quarantine("exact"))
+                self._show_also(nl)
+            elif nl:
+                # Nothing exact to offer, so the likely ones are the job. This
+                # used to fall through to "Search again" with the real action
+                # left in the menu.
+                self.bar.set_primary(
+                    f"Set aside {ui.plural(nl, 'likely copy', 'likely copies')}…",
+                    lambda: self.quarantine("all"))
+                self._show_also(0)
             else:
                 self.bar.set_primary("Search again", self.find)
-            self.bar.enable("Set aside exact and likely copies…", bool(ex or lk))
+                self._show_also(0)
 
         self.app.task.run(work, done, "Comparing audio")
 

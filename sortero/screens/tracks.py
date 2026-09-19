@@ -7,15 +7,19 @@ import os, re, threading
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from .. import ui, organize, genres, folders, review, paths
+from .. import ui, organize, genres, folders, review, paths, fixtags, settings
+from ..common import ARTIST_TITLE, NAME_ORDERS, NAME_ORDER_LABELS
 from .base import Screen, APP, needs_genre, is_mix
 
+# A predicate of None means the screen supplies it: the filter needs to look at
+# the whole collection, not one track.
 FILTERS = [
     ("all", "All tracks", lambda r: True),
     ("genre", "Needs a genre", needs_genre),
     ("key", "Not analysed yet (no key)", lambda r: not r.analyzed),
     ("energy", "No energy rating", lambda r: r.energy is None),
     ("artist", "No artist", lambda r: not r.artist),
+    ("swapped", "Artist and title look swapped", None),
     ("bpm", "No BPM", lambda r: not r.bpm),
     ("bitrate", "Low bitrate (under 192 kbps)",
      lambda r: 0 < (getattr(r, "bitrate", 0) or 0) < 192000),
@@ -32,6 +36,17 @@ def _num(v):
         return float(v)
     except (TypeError, ValueError):
         return -1.0
+
+
+def _example_lines(changes, n=4):
+    """'Artist - Title  becomes  Title - Artist', so the dialog shows real tracks."""
+    out = []
+    for r, ch in changes[:n]:
+        a = ch.get("artist", (r.artist, r.artist))
+        t = ch.get("title", (r.title, r.title))
+        out.append(f"{a[0] or '—'} - {t[0] or '—'}      becomes      "
+                   f"{a[1] or '—'} - {t[1] or '—'}")
+    return out
 
 
 def _camelot(r):
@@ -105,6 +120,9 @@ class LibraryScreen(Screen):
             ("Look up selected on Discogs…", self.lookup),
             ("Use folder names as genres…", self.apply_from_folder),
             None,
+            ("Swap artist and title on selected…", self.swap_names),
+            ("Read artist and title from the filename…", self.names_from_file),
+            None,
             ("Send selected to analysis…", self.stage),
             ("Place selected one by one…", self.review_one_by_one),
             ("Place a folder's tracks by hand…", lambda: self.app.review_folder()),
@@ -126,6 +144,13 @@ class LibraryScreen(Screen):
             if label == self.filter_var.get():
                 return k
         return "all"
+
+    def _pred(self, key):
+        """The test for the chosen filter, including the ones needing context."""
+        if key == "swapped":
+            suspect = {r.path for r in (self.app.health or {}).get("swapped", ())}
+            return lambda r: r.path in suspect
+        return dict((k, fn) for k, _, fn in FILTERS)[key]
 
     def set_filter(self, key):
         self.filter_var.set(LABELS.get(key, LABELS["all"]))
@@ -170,7 +195,7 @@ class LibraryScreen(Screen):
         self.rows = []
         recs = self.app.recs
         if recs:
-            pred = dict((k, fn) for k, _, fn in FILTERS)[self.filter_key()]
+            pred = self._pred(self.filter_key())
             q = self.search_var.get().strip().lower()
             hide = self.hide_mixes.get()
             rows = [r for r in recs
@@ -327,6 +352,66 @@ class LibraryScreen(Screen):
             return
         self._write(pairs, f"Accept Discogs' genre for {ui.plural(len(pairs), 'track')}?",
                     then=lambda: [self.suggested.pop(r.path, None) for r, _ in pairs])
+
+    # -- artist and title --------------------------------------------------
+    def swap_names(self):
+        """For tracks tagged the wrong way round: put each name in its own field."""
+        recs = self._selected()
+        if not recs:
+            messagebox.showinfo(APP, "Select the tracks whose artist and title are the "
+                                     "wrong way round first.\n\nShow 'Artist and title "
+                                     "look swapped' to let Sortero find the likely ones, "
+                                     "or sort by artist and pick them out yourself.")
+            return
+        changes = fixtags.swap(recs)
+        if not changes:
+            messagebox.showinfo(APP, "Nothing to swap: these tracks have no artist or "
+                                     "title to move.")
+            return
+        self._write_names(changes,
+                          f"Swap artist and title on {ui.plural(len(changes), 'track')}?",
+                          "swap-names")
+
+    def names_from_file(self):
+        """When the tags are a mess but the filenames are right."""
+        recs = self._selected()
+        if not recs:
+            messagebox.showinfo(APP, "Select the tracks to re-read first.")
+            return
+        order = settings.get("name_order")
+        order = order if order in NAME_ORDERS else ARTIST_TITLE
+        changes = fixtags.from_filename(recs, order=order)
+        if not changes:
+            messagebox.showinfo(APP, "Nothing to change: these tags already match the "
+                                     "filenames, or the filenames have no ' - ' to "
+                                     "split on.")
+            return
+        self._write_names(
+            changes, f"Take artist and title from the filename of "
+                     f"{ui.plural(len(changes), 'track')}, read as "
+                     f"{NAME_ORDER_LABELS[order]}?\n\n"
+                     "Tidy up → Clean tags is where that order is set.",
+            "names-from-filename")
+
+    def _write_names(self, changes, question, kind):
+        shown = _example_lines(changes)
+        more = (f"\n…and {len(changes) - len(shown):,} more."
+                if len(changes) > len(shown) else "")
+        if not messagebox.askyesno(APP, question + "\n\n" + "\n".join(shown) + more
+                                        + "\n\nYou can undo this from History."):
+            return
+        root = self.app.root_dir.get()
+
+        def work(progress, log):
+            return fixtags.apply(root, changes, log=log, progress=progress, kind=kind)
+
+        def done(res):
+            _, n, failed = res
+            messagebox.showinfo(APP, f"Updated {ui.plural(n, 'track')}."
+                                     + (f"\n{failed} couldn't be written." if failed else ""))
+            self.app.changed()
+
+        self.app.task.run(work, done, "Writing tags")
 
     def _write(self, pairs, question, then=None):
         if not messagebox.askyesno(APP, question + "\n\nYou can undo this from History."):

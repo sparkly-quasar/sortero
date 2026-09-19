@@ -1,7 +1,8 @@
 """Tag repair: spam removal, artist/title inference, genre normalisation,
 and promoting Mixed In Key data out of the comment field into sortable tags."""
 import os, re, collections
-from .common import is_spam, clean_stem, split_artist_title, parse_mik, to_camelot
+from .common import (ARTIST_TITLE, is_spam, clean_stem, fold, split_artist_title,
+                     parse_mik, to_camelot)
 from .tagio import Track
 from .journal import Journal
 from .organize import canon_genre
@@ -15,8 +16,23 @@ FIX_LABELS = {
 }
 
 
-def plan(recs, fixes, log=None):
-    """Compute tag changes without writing. Returns list of (rec, {field: (old,new)})."""
+def tagged_names(r):
+    """The artist and title actually written to the file.
+
+    A scan fills a missing name in from the filename so the rest of the app has
+    something to show, but nothing is on disk yet. Tag repair has to know the
+    difference: that guess is what these fixes are here to write, not something
+    already written.
+    """
+    return ((None if r.artist_from_name else r.artist) or None,
+            (None if r.title_from_name else r.title) or None)
+
+
+def plan(recs, fixes, log=None, order=ARTIST_TITLE):
+    """Compute tag changes without writing. Returns list of (rec, {field: (old,new)}).
+
+    `order` is how a "A - B" filename is read when filling in a missing name.
+    """
     out = []
     for r in recs:
         if r.protected:
@@ -43,11 +59,12 @@ def plan(recs, fixes, log=None):
                 ch["comment"] = (r.comment, None)
 
         if "artist" in fixes:
-            a, t = split_artist_title(clean_stem(r.path))
-            if not r.artist and a:
+            a, t = split_artist_title(clean_stem(r.path), order)
+            cur_a, cur_t = tagged_names(r)
+            if not cur_a and a:
                 ch["artist"] = (None, a)
-            if not r.title and t:
-                ch["title"] = (r.title, t)
+            if not cur_t and t:
+                ch["title"] = (None, t)
 
         if "genre" in fixes:
             cur = ch.get("genre", (r.genre, r.genre))[1] if "genre" in ch else r.genre
@@ -56,6 +73,51 @@ def plan(recs, fixes, log=None):
                 if c and c != cur:
                     ch["genre"] = (r.genre, c)
 
+        if ch:
+            out.append((r, ch))
+    return out
+
+
+def swap(recs):
+    """Plan a straight artist <-> title swap, for tags that went in backwards.
+
+    A track with only one of the two set still swaps: the whole "Title - Artist"
+    string sitting in the artist field is exactly the mess this fixes. A track
+    with no artist or title tag at all is left alone - there is nothing written
+    to put the wrong way round, and swapping a name Sortero itself read off the
+    filename would only undo a correct reading.
+    """
+    out = []
+    for r in recs:
+        if r.protected:
+            continue
+        a, t = tagged_names(r)
+        if not (a or t) or fold(a) == fold(t):
+            continue
+        out.append((r, {"artist": (a, t), "title": (t, a)}))
+    return out
+
+
+def from_filename(recs, order=ARTIST_TITLE):
+    """Plan re-reading artist and title off the filename in the given order.
+
+    Unlike the "artist" fix this overwrites names that are already there, which
+    is the point: it's for a batch whose tags were filled in the wrong order.
+    Files with nothing to split on are left alone.
+    """
+    out = []
+    for r in recs:
+        if r.protected:
+            continue
+        a, t = split_artist_title(clean_stem(r.path), order)
+        if not a:
+            continue
+        cur_a, cur_t = tagged_names(r)
+        ch = {}
+        if fold(cur_a) != fold(a):
+            ch["artist"] = (cur_a, a)
+        if fold(cur_t) != fold(t):
+            ch["title"] = (cur_t, t)
         if ch:
             out.append((r, ch))
     return out
@@ -70,8 +132,10 @@ def summarize(changes):
     return c
 
 
-def apply(root, changes, log=print, progress=None):
-    j = Journal("fixtags", root)
+def apply(root, changes, log=print, progress=None, kind="fixtags"):
+    """Write a plan out. `kind` names the batch in History, so an undo is easy
+    to find later."""
+    j = Journal(kind, root)
     total = len(changes) or 1
     failed = 0
     for i, (r, ch) in enumerate(changes):

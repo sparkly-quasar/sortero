@@ -86,15 +86,62 @@ def clean_stem(name):
     return re.sub(r"\s{2,}", " ", s).strip(" -–_")
 
 
-def split_artist_title(stem):
-    """Best-effort 'Artist - Title' split. Returns (artist, title) or (None, stem)."""
+# How the two halves of a "Something - Something" filename are meant to be read.
+# Most collections are Artist - Title; plenty of rips and Bandcamp downloads are
+# the other way round, and reading them the wrong way puts the artist in the
+# title tag and the title in the artist tag.
+ARTIST_TITLE = "artist-title"
+TITLE_ARTIST = "title-artist"
+NAME_ORDERS = (ARTIST_TITLE, TITLE_ARTIST)
+NAME_ORDER_LABELS = {ARTIST_TITLE: "Artist - Title", TITLE_ARTIST: "Title - Artist"}
+
+
+def name_order_note(votes):
+    """One line on what the filenames themselves suggest, or "" when nothing is
+    settled. `votes` is library.name_order_votes(); it says which evidence won,
+    and the wording has to match it or it misleads."""
+    if not votes or not votes.get("sure"):
+        return ""
+    order = votes["order"]
+    n = votes["title_artist"] if order == TITLE_ARTIST else votes["artist_title"]
+    half = "second" if order == TITLE_ARTIST else "first"
+    why = ("is an artist your tags already name" if votes.get("how") == "tags"
+           else "is a name that keeps coming back, the way an artist does")
+    # never settled under 8 files, so "files" is always the right word here
+    return (f"These look like {NAME_ORDER_LABELS[order]}: on {n:,} files the "
+            f"{half} half {why}.")
+
+
+def split_artist_title(stem, order=ARTIST_TITLE):
+    """Best-effort split of a two-part stem. Returns (artist, title) or (None, stem).
+
+    `order` says which half is which: ARTIST_TITLE for "Deadmau5 - Strobe",
+    TITLE_ARTIST for "Strobe - Deadmau5".
+    """
     for sep in (" - ", " – ", " -", "- "):
         if sep in stem:
-            a, _, t = stem.partition(sep)
-            a, t = a.strip(" -–"), t.strip(" -–")
+            left, _, right = stem.partition(sep)
+            left, right = left.strip(" -–"), right.strip(" -–")
+            a, t = (right, left) if order == TITLE_ARTIST else (left, right)
             if a and t and len(a) < 80:
                 return a, t
     return None, stem
+
+
+def halves(stem):
+    """The two sides of a split stem, in the order they appear. (None, None) if single."""
+    for sep in (" - ", " – ", " -", "- "):
+        if sep in stem:
+            left, _, right = stem.partition(sep)
+            left, right = left.strip(" -–"), right.strip(" -–")
+            if left and right:
+                return left, right
+    return None, None
+
+
+def fold(value):
+    """Compare names without caring about case or spacing."""
+    return re.sub(r"\s+", " ", (value or "").strip()).casefold()
 
 
 def walk_audio(root):

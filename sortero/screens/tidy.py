@@ -4,7 +4,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 from .. import ui, organize, dupes, fixtags, settings
-from ..common import human_size
+from ..common import (human_size, name_order_note, ARTIST_TITLE, NAME_ORDERS,
+                      NAME_ORDER_LABELS)
 from .base import Screen, APP
 
 
@@ -18,8 +19,9 @@ class TidyUpScreen(Screen):
         app = self.app
         for title, text, button, command in (
                 ("Clean tags",
-                 "Clear download-site spam from tags, fill in missing artists, and make "
-                 "energy ratings visible to DJ apps.", "Open", lambda: app.show("tags")),
+                 "Clear download-site spam from tags, fill in missing artists, put "
+                 "artist and title the right way round, and make energy ratings "
+                 "visible to DJ apps.", "Open", lambda: app.show("tags")),
                 ("Find duplicates",
                  "Find extra copies of the same track and set them aside. Nothing is "
                  "deleted.", "Open", lambda: app.show("dupes")),
@@ -51,8 +53,13 @@ class CleanTagsScreen(ToolScreen):
     details = ("Download sites put their names into genre and comment tags, which then "
                "clutter your DJ software. Sortero can clear those, take a missing artist "
                "from the filename, tidy genre names, and copy Mixed In Key's energy rating "
-               "into a field DJ apps display. Tick what you want, preview, then write. "
-               "You can undo it from History.")
+               "into a field DJ apps display. Tick what you want, preview, then write.\n\n"
+               "Sortero reads a filename like 'Deadmau5 - Strobe' as artist first. If "
+               "yours are the other way round, say so under 'Filenames are' and the "
+               "artist goes in the artist tag, not the title. For tags that are already "
+               "in backwards, More offers a straight swap - on everything here, or on "
+               "just the tracks you pick in Library.\n\n"
+               "You can undo any of it from History.")
 
     def build(self):
         box = ttk.Frame(self)
@@ -64,18 +71,66 @@ class CleanTagsScreen(ToolScreen):
             self.vars[k] = v
             ttk.Checkbutton(box, text=fixtags.FIX_LABELS[k], variable=v).pack(anchor="w",
                                                                            pady=2)
+        row = ttk.Frame(box)
+        row.pack(anchor="w", fill="x", pady=(ui.GAP, 0))
+        ttk.Label(row, text="Filenames are").pack(side="left")
+        self.order_box = ttk.Combobox(row, state="readonly", width=16,
+                                      values=[NAME_ORDER_LABELS[o] for o in NAME_ORDERS])
+        self.order_box.set(NAME_ORDER_LABELS[self.order()])
+        self.order_box.pack(side="left", padx=(ui.GAP, 0))
+        self.order_box.bind("<<ComboboxSelected>>", lambda e: self._order_chosen())
+        self.detected = ui.WrapLabel(row, style="Muted.TLabel")
+        self.detected.pack(side="left", fill="x", expand=True, padx=(ui.GAP, 0))
+
         self.result = ttk.Label(self, style="Muted.TLabel")
         self.result.pack(anchor="w", pady=(0, 4))
         f, self.tv = ui.tree(self, [("track", "Track", 300), ("field", "Tag", 80),
                                     ("before", "Now", 240), ("after", "Becomes", 240)],
                              height=13)
         f.pack(fill="both", expand=True)
+        self.bar.set_more([
+            ("Swap artist and title on every track…", self.preview_swap),
+            ("Read artist and title from the filenames again…", self.preview_from_names),
+            None,
+            ("Fix only some tracks…", lambda: self.app.show_library("swapped")),
+        ])
         self.changes = None
         self._reset()
 
     def invalidate(self):
+        self._show_detected()
         self._reset(clear=True)
 
+    # -- how filenames are read -------------------------------------------
+    def order(self):
+        o = settings.get("name_order")
+        return o if o in NAME_ORDERS else ARTIST_TITLE
+
+    def _order_chosen(self):
+        chosen = next((o for o in NAME_ORDERS
+                       if NAME_ORDER_LABELS[o] == self.order_box.get()), ARTIST_TITLE)
+        if chosen == self.order():
+            return
+        settings.set("name_order", chosen)
+        self._show_detected()
+        self._reset(clear=True)
+        # Tracks with no artist tag are shown under the name Sortero read off
+        # the filename, so the whole app has to read them again the new way.
+        if self.app.recs and not self.app.task.running:
+            self.app.scan()
+
+    def _show_detected(self):
+        """Say what the collection itself suggests, when it suggests anything."""
+        votes = (self.app.health or {}).get("name_order")
+        note = name_order_note(votes)
+        if not note:
+            self.detected.configure(text="")
+        elif votes["order"] == self.order():
+            self.detected.configure(text="Matches how your filenames look.")
+        else:
+            self.detected.configure(text=note)
+
+    # -- previewing --------------------------------------------------------
     def _reset(self, clear=False):
         self.changes = None
         if clear:
@@ -90,34 +145,75 @@ class CleanTagsScreen(ToolScreen):
         if not fixes:
             messagebox.showinfo(APP, "Tick at least one fix.")
             return
+        order = self.order()
 
         def work(progress, log):
-            return fixtags.plan(self.app.recs, fixes)
+            return fixtags.plan(self.app.recs, fixes, order=order)
 
-        def done(changes):
-            self.tv.delete(*self.tv.get_children())
-            shown = 0
-            for r, ch in changes:
-                for field, (old, new) in ch.items():
-                    if shown >= 2000:
-                        break
-                    self.tv.insert("", "end", values=(
-                        os.path.basename(r.path), field,
-                        "" if old is None else str(old)[:120],
-                        "(cleared)" if new is None else str(new)[:120]))
-                    shown += 1
-            if not changes:
-                self.result.configure(text="Nothing to fix. Your tags are already clean.")
-                self.bar.set_primary("Preview again", self.preview)
-                return
-            c = fixtags.summarize(changes)
-            self.result.configure(text=" · ".join(f"{v} {k}" for k, v in c.most_common()))
-            self.changes = changes
-            self.bar.set_primary(f"Write to {ui.plural(len(changes), 'file')}…", self.apply)
+        self.app.task.run(work, lambda changes: self._show(
+            changes, "Nothing to fix. Your tags are already clean."), "Checking tags")
 
-        self.app.task.run(work, done, "Checking tags")
+    def preview_swap(self):
+        if self.need_scan():
+            return
+        if not messagebox.askyesno(
+                APP, "Swap the artist and title tag of every track?\n\n"
+                     "This is for a collection that went in backwards all the way "
+                     "through. If only some tracks are wrong, use Library instead: "
+                     "show 'Artist and title look swapped', pick the ones you mean, and "
+                     "swap those.\n\nNothing is written until you've seen the list."):
+            return
 
-    def apply(self):
+        def work(progress, log):
+            return fixtags.swap([r for r in self.app.recs if not r.protected])
+
+        self.app.task.run(work, lambda changes: self._show(
+            changes, "Nothing to swap: no track has an artist or title to move.",
+            kind="swap-names"), "Reading tags")
+
+    def preview_from_names(self):
+        if self.need_scan():
+            return
+        order = self.order()
+        if not messagebox.askyesno(
+                APP, "Read artist and title from the filenames again?\n\n"
+                     f"Filenames are read as {NAME_ORDER_LABELS[order]}, which you can "
+                     "change above. Tracks whose name has no ' - ' in it are left alone."
+                     "\n\nThis overwrites the artist and title tags that are there "
+                     "now, so check the list before writing."):
+            return
+
+        def work(progress, log):
+            return fixtags.from_filename([r for r in self.app.recs if not r.protected],
+                                         order=order)
+
+        self.app.task.run(work, lambda changes: self._show(
+            changes, "Nothing to change: the tags already match the filenames.",
+            kind="names-from-filename"), "Reading filenames")
+
+    def _show(self, changes, empty, kind="fixtags"):
+        self.tv.delete(*self.tv.get_children())
+        shown = 0
+        for r, ch in changes:
+            for field, (old, new) in ch.items():
+                if shown >= 2000:
+                    break
+                self.tv.insert("", "end", values=(
+                    os.path.basename(r.path), field,
+                    "" if old is None else str(old)[:120],
+                    "(cleared)" if new is None else str(new)[:120]))
+                shown += 1
+        if not changes:
+            self.result.configure(text=empty)
+            self.bar.set_primary("Preview again", self.preview)
+            return
+        c = fixtags.summarize(changes)
+        self.result.configure(text=" · ".join(f"{v} {k}" for k, v in c.most_common()))
+        self.changes = changes
+        self.bar.set_primary(f"Write to {ui.plural(len(changes), 'file')}…",
+                             lambda: self.apply(kind))
+
+    def apply(self, kind="fixtags"):
         if not self.changes:
             return
         if not messagebox.askyesno(APP, f"Write tags on {ui.plural(len(self.changes), 'file')}?"
@@ -127,7 +223,7 @@ class CleanTagsScreen(ToolScreen):
         changes = self.changes
 
         def work(progress, log):
-            return fixtags.apply(root, changes, log=log, progress=progress)
+            return fixtags.apply(root, changes, log=log, progress=progress, kind=kind)
 
         def done(res):
             _, n, failed = res

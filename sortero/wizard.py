@@ -13,7 +13,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 from . import settings, library, auth, organize, fixtags, dupes, session, importer, review, processed, ui
-from .common import human_size
+from .common import human_size, name_order_note, ARTIST_TITLE, NAME_ORDERS, NAME_ORDER_LABELS
 
 TITLE = "Welcome to Sortero"
 
@@ -104,6 +104,13 @@ class Wizard(tk.Toplevel):
             done(box.get("result"))
 
         self.after(120, poll)
+
+    def _when_free(self, fn):
+        """Wait for the step's own check to finish before redrawing under it."""
+        if self.busy:
+            self.after(150, lambda: self._when_free(fn))
+        else:
+            fn()
 
     def _nav_state(self, state):
         for b in (self.next_btn, self.back_btn, self.skip_btn):
@@ -387,15 +394,18 @@ class Wizard(tk.Toplevel):
         if not self.recs:
             ttk.Label(self.body, text="Nothing scanned yet.").pack(anchor="w")
             return
+        self._name_order_row()
         self.tags_note = self._mono("Checking…")
         self.tags_btn, _ = self._action_row("Apply these fixes", self._apply_tags)
         self.tags_btn.configure(state="disabled")
 
         def work(progress):
-            return fixtags.plan(self.recs, set(fixtags.FIXES))
+            return fixtags.plan(self.recs, set(fixtags.FIXES), order=self._order())
 
         def done(changes):
             self._tag_changes = changes
+            if not self.tags_note.winfo_exists():
+                return                    # step redrawn under us
             if not changes:
                 self.tags_note.configure(text="Nothing to fix here — tags look fine.")
                 return
@@ -405,6 +415,34 @@ class Wizard(tk.Toplevel):
             self.tags_btn.configure(state="normal")
 
         self._run(work, done, "Checking tags")
+
+    def _order(self):
+        o = settings.get("name_order")
+        return o if o in NAME_ORDERS else ARTIST_TITLE
+
+    def _name_order_row(self):
+        """Which half of 'A - B' is the artist. Getting this wrong at setup time
+        writes every filename into the wrong tag, so it's asked here."""
+        row = ttk.Frame(self.body)
+        row.pack(anchor="w", fill="x", pady=(6, 0))
+        ttk.Label(row, text="My filenames are").pack(side="left")
+        box = ttk.Combobox(row, state="readonly", width=16,
+                           values=[NAME_ORDER_LABELS[o] for o in NAME_ORDERS])
+        box.set(NAME_ORDER_LABELS[self._order()])
+        box.pack(side="left", padx=(8, 0))
+        note = ttk.Label(row, style="Muted.TLabel", wraplength=380, justify="left",
+                         text=name_order_note((self.health or {}).get("name_order")))
+        note.pack(side="left", padx=10)
+
+        def chosen(_e=None):
+            settings.set("name_order", next(
+                (o for o in NAME_ORDERS if NAME_ORDER_LABELS[o] == box.get()),
+                ARTIST_TITLE))
+            # read the collection again so every later step sees the names the
+            # new way round, then re-plan this step against them
+            self._when_free(lambda: self.rescan(then=self.render))
+
+        box.bind("<<ComboboxSelected>>", chosen)
 
     def _apply_tags(self):
         changes = getattr(self, "_tag_changes", None)

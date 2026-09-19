@@ -10,6 +10,8 @@ KINDS = {
     "organize": "Reorganised the collection",
     "import": "Added music",
     "fixtags": "Cleaned tags",
+    "swap-names": "Swapped artist and title",
+    "names-from-filename": "Read names from filenames",
     "dedupe": "Set duplicates aside",
     "flatten": "Flattened release folders",
     "set-genre": "Set genres",

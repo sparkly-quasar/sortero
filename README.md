@@ -59,11 +59,11 @@ under **More** next to it.
 
 | Screen | What it's for |
 |---|---|
-| **To do** | Home. Cards for the jobs worth doing, most useful first, each with one button: analysed tracks waiting in `Processed`, tracks in `Unsorted`, tracks with no genre, tracks not analysed yet, tags full of download-site spam. The number beside it in the sidebar is how many jobs there are. |
+| **To do** | Home. Cards for the jobs worth doing, most useful first, each with one button: analysed tracks waiting in `Processed`, tracks in `Unsorted`, tracks with no genre, tracks not analysed yet, tracks whose artist and title are the wrong way round, tags full of download-site spam. The number beside it in the sidebar is how many jobs there are. |
 | **Add music** | Choose a folder or files. Analysed tracks go to the folder that already means their genre — yours if you have one. Anything missing a key lands in `To Be Processed`. Tracks with no genre to go on are **held back for you to place** instead of being dropped in `Unsorted`. Tracks already in the library are pointed out, not added twice. |
-| **Library** | Every track in one list. **Show** filters to what needs work (no genre, not analysed, no energy, no artist, no BPM, low bitrate); **Search** narrows it; click a column heading to sort. Select tracks and set a genre, send them to analysis, place them one by one, copy genres from folder names, or look them up on Discogs. Your own set recordings are hidden unless you ask. |
+| **Library** | Every track in one list. **Show** filters to what needs work (no genre, not analysed, no energy, no artist, artist and title swapped, no BPM, low bitrate); **Search** narrows it; click a column heading to sort. Select tracks and set a genre, swap artist and title, re-read both from the filename, send them to analysis, place them one by one, copy genres from folder names, or look them up on Discogs. Your own set recordings are hidden unless you ask. |
 | **Playlists** | Rebuild a Spotify or TIDAL playlist against your local files from a link, a pasted tracklist or a CSV. **More** rebuilds the folder playlists or repairs broken links. |
-| **Tidy up** | Tools for an existing collection: **Clean tags**, **Find duplicates**, **Place a folder's tracks by hand**, **Flatten release folders**, **Fix playlist links**, and **Reorganise the whole collection**. Every tool previews before it changes anything. |
+| **Tidy up** | Tools for an existing collection: **Clean tags** (including which way round filenames read), **Find duplicates**, **Place a folder's tracks by hand**, **Flatten release folders**, **Fix playlist links**, and **Reorganise the whole collection**. Every tool previews before it changes anything. |
 | **History** | Every operation, with undo, and the **safety net**. **Show log** reveals the detailed log. |
 | **Settings** | Collection folder, update checks, Discogs token, Spotify and TIDAL accounts, and the setup guide. |
 
@@ -117,6 +117,45 @@ Filing a track into `Tracks/<Genre>` also **writes that genre into the file**.
 Without it the folder knew the genre and the tag didn't, so rekordbox, Mixxx and
 Sortero's own Library all still saw the track as untagged. An existing genre
 tag is never overwritten.
+
+## Artist - Title, or Title - Artist?
+
+Sortero reads a filename like `Deadmau5 - Strobe.wav` as artist first. Plenty of
+collections are the other way round, and reading those backwards puts the title
+in the artist tag, files the track as `Strobe - Deadmau5.wav`, and sends the
+wrong words to Discogs.
+
+**Tidy up → Clean tags → Filenames are** settles it: `Artist - Title` or
+`Title - Artist`. Everything that reads a name off a filename then follows it —
+filling in missing tags, adding new music, repairing playlist links.
+
+Sortero also works out which way your collection actually reads, and says so
+next to that choice. It uses evidence, not a guess:
+
+- **What your tags already know.** If the right-hand half of a filename is an
+  artist that *another* file's tags name, and the left-hand half is nobody,
+  that file reads title-first. A file never votes on the strength of its own
+  tags, so a wrong guess can't confirm itself.
+- **What repeats.** When every tag went in backwards there is no witness left,
+  but the names still tell: an artist comes back across many files, a title
+  comes back once. The side that repeats is the artist side.
+
+Neither is trusted on a handful of files — it takes at least 8 and a clear
+majority before Sortero says anything, and it only ever suggests.
+
+For tags that are already in backwards there are two fixes, both previewed
+before anything is written and both undoable from History:
+
+- **A few tracks.** **Library → Show: Artist and title look swapped** lists the
+  ones the tags themselves give away. Select them and **More → Swap artist and
+  title on selected**. Anything you find yourself can be swapped the same way.
+- **The whole collection.** **Clean tags → More → Swap artist and title on
+  every track**, or **Read artist and title from the filenames again** when the
+  filenames are right and the tags are a mess.
+
+A track with no artist or title tag at all is never swapped: there is nothing
+written to put the wrong way round, and the name Sortero read off the filename
+is already being read the way you asked.
 
 ## When there's no genre to infer
 

@@ -129,26 +129,27 @@ wrong words to Discogs.
 `Title - Artist`. Everything that reads a name off a filename then follows it —
 filling in missing tags, adding new music, repairing playlist links.
 
-Sortero also works out which way your collection actually reads, and says so
-next to that choice. It uses evidence, not a guess:
+That choice is yours to make, and mostly Sortero cannot make it for you.
+Nothing about `A - B` says which half is the artist: `Strobe - Deadmau5` and
+`Deadmau5 - Strobe` are the same two words either way. A folder of untagged
+files gets no opinion from Sortero at all — you tell it, once.
 
-- **What your tags already know.** If the right-hand half of a filename is an
-  artist that *another* file's tags name, and the left-hand half is nobody,
-  that file reads title-first. A file never votes on the strength of its own
-  tags, so a wrong guess can't confirm itself.
-- **What repeats.** When every tag went in backwards there is no witness left,
-  but the names still tell: an artist comes back across many files, a title
-  comes back once. The side that repeats is the artist side.
-
-Neither is trusted on a handful of files — it takes at least 8 and a clear
-majority before Sortero says anything, and it only ever suggests.
+The one case where it can tell you something is when your tags already know an
+artist. If the right-hand half of a filename is an artist that *another* file's
+tags name, and the left-hand half is nobody, that file reads title-first. A
+file never votes on the strength of its own tags, so a wrong assumption can't
+confirm itself, and a filename whose halves are both known artists doesn't vote
+at all. It takes at least 8 files and a clear majority before Sortero says
+anything, and it only ever says it next to the choice — it never changes it.
 
 For tags that are already in backwards there are two fixes, both previewed
 before anything is written and both undoable from History:
 
 - **A few tracks.** **Library → Show: Artist and title look swapped** lists the
-  ones the tags themselves give away. Select them and **More → Swap artist and
-  title on selected**. Anything you find yourself can be swapped the same way.
+  ones the tags themselves give away — it reads tags only, so a file with no
+  metadata never appears in it. Select them and **More → Swap artist and title
+  on selected**. Anything you spot yourself can be swapped the same way,
+  whatever the filter thinks.
 - **The whole collection.** **Clean tags → More → Swap artist and title on
   every track**, or **Read artist and title from the filenames again** when the
   filenames are right and the tags are a mess.

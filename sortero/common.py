@@ -97,19 +97,21 @@ NAME_ORDER_LABELS = {ARTIST_TITLE: "Artist - Title", TITLE_ARTIST: "Title - Arti
 
 
 def name_order_note(votes):
-    """One line on what the filenames themselves suggest, or "" when nothing is
-    settled. `votes` is library.name_order_votes(); it says which evidence won,
-    and the wording has to match it or it misleads."""
+    """One line on what the tags say about the filenames, or "" when they can't.
+
+    `votes` is library.name_order_votes(). It only ever speaks from tags that
+    name an artist elsewhere in the collection: nothing about "A - B" by itself
+    says which half is the artist, so a collection without those tags gets no
+    note and the choice stays the user's.
+    """
     if not votes or not votes.get("sure"):
         return ""
     order = votes["order"]
     n = votes["title_artist"] if order == TITLE_ARTIST else votes["artist_title"]
     half = "second" if order == TITLE_ARTIST else "first"
-    why = ("is an artist your tags already name" if votes.get("how") == "tags"
-           else "is a name that keeps coming back, the way an artist does")
     # never settled under 8 files, so "files" is always the right word here
     return (f"These look like {NAME_ORDER_LABELS[order]}: on {n:,} files the "
-            f"{half} half {why}.")
+            f"{half} half is an artist your other tags name.")
 
 
 def split_artist_title(stem, order=ARTIST_TITLE):

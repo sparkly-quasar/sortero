@@ -182,26 +182,6 @@ def _vote(stem, path, known):
     return ARTIST_TITLE if left_is else TITLE_ARTIST
 
 
-def _repeat_votes(recs):
-    """Which side of the filename comes back again and again, the way an artist does?
-
-    This is what's left when the tags can't help: an artist turns up across
-    many files, a title turns up once. Counts only the files where exactly one
-    of the two sides repeats, so a compilation of one-offs stays silent.
-    """
-    lefts, rights, pairs = collections.Counter(), collections.Counter(), []
-    for r in recs:
-        left, right = halves(clean_stem(r.path))
-        if not left:
-            continue
-        lefts[fold(left)] += 1
-        rights[fold(right)] += 1
-        pairs.append((fold(left), fold(right)))
-    at = sum(1 for a, b in pairs if lefts[a] > 1 and rights[b] == 1)
-    ta = sum(1 for a, b in pairs if rights[b] > 1 and lefts[a] == 1)
-    return at, ta
-
-
 def _settled(a, b):
     """One stray match shouldn't re-tag anybody's library: want a real majority."""
     winner, loser = max(a, b), min(a, b)
@@ -209,30 +189,24 @@ def _settled(a, b):
 
 
 def name_order_votes(recs):
-    """Work out how this collection's filenames are ordered, from evidence.
+    """How this collection's filenames are ordered, where the tags can say.
 
-    First ask the tags: for every two-part filename, is the left or the right
-    half an artist that some *other* file's tags name? That settles it for a
-    collection whose tags are mostly right.
+    For every two-part filename, ask whether the left or the right half is an
+    artist that some *other* file's tags name. That settles it for a collection
+    whose tags are mostly right, and it stays quiet for one whose tags are
+    missing or backwards throughout: there is nothing to cross-reference, and
+    nothing about the words themselves says which is an artist and which is a
+    title. That case is the user's to answer, in Clean tags.
 
-    A collection that went in backwards all the way through has no such
-    evidence - its artist tags hold titles - so fall back to how the names
-    repeat instead. Returns {"order", "artist_title", "title_artist", "sure",
-    "how"}, where "how" is "tags", "repeats", or None when nothing is settled.
+    Returns {"order", "artist_title", "title_artist", "sure"}.
     """
     live = [r for r in recs if not r.protected]
     known = known_artists(live)
     tally = collections.Counter(
         v for v in (_vote(clean_stem(r.path), r.path, known) for r in live) if v)
     at, ta = tally[ARTIST_TITLE], tally[TITLE_ARTIST]
-    how = "tags"
-    if not _settled(at, ta):
-        at, ta = _repeat_votes(live)
-        how = "repeats"
-    sure = _settled(at, ta)
     return {"order": TITLE_ARTIST if ta > at else ARTIST_TITLE,
-            "artist_title": at, "title_artist": ta,
-            "sure": sure, "how": how if sure else None}
+            "artist_title": at, "title_artist": ta, "sure": _settled(at, ta)}
 
 
 def looks_swapped(recs):

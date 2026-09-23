@@ -1,8 +1,10 @@
-# Selling Sortero Pro
+# Selling the Supporter licence
 
-Sortero is free and open source. **Sortero Pro** is the ready-to-run app for
-Mac, Windows and Linux, plus one-click updates. This folder is the small server
-that turns a Stripe payment into a licence key and hands out the builds.
+Sortero is free and open source. A **Supporter licence** is a one-time,
+pay-what-you-want payment; as a thank-you it brings the ready-to-run app for
+Mac, Windows and Linux, plus one-click updates. (The code still calls this
+"Sortero Pro".) This folder is the small server that turns a Stripe payment
+into a licence key and hands out the builds.
 
 ```
 buyer ── Stripe Payment Link ── pays ──▶ /success     licence key + download buttons
@@ -54,9 +56,10 @@ From then on, pushing a `v*` tag builds all three platforms, uploads the zips to
 
 In the Stripe dashboard:
 
-1. **Product catalogue → Add product**: "Sortero Pro". Give it a one-time price
-   and a recurring price (monthly or yearly, or add both).
-2. **Payment Links → New** for each price. On the **After payment** tab choose
+1. **Product catalogue → Add product**: "Sortero Supporter licence". Give it a
+   one-time price and choose **Customer chooses price**, with a minimum (e.g.
+   $15) and a suggested amount (e.g. $25). No recurring price.
+2. **Payment Links → New** for that price. On the **After payment** tab choose
    *Don't show confirmation page* and redirect to
 
    ```
@@ -65,7 +68,7 @@ In the Stripe dashboard:
 
    Type `{CHECKOUT_SESSION_ID}` exactly like that; Stripe fills it in. You get
    the real Worker address in step 4, so come back and fix this.
-3. Note each link's id (`plink_…`, in the link's details) and URL
+3. Note the link's id (`plink_…`, in the link's details) and URL
    (`https://buy.stripe.com/…`).
 
 If you'll sell outside your own country, look at **Stripe Tax**, which can
@@ -117,30 +120,27 @@ and send it again.
 Edit `sortero/store.py`:
 
 - `SERVER`: your Worker address
-- each plan's `price` (the label shown, e.g. `"$29"`) and `url` (its
-  `https://buy.stripe.com/…` link)
+- the Supporter licence's `price` (the label shown, e.g.
+  `"pay what you want, from $15"`) and `url` (its `https://buy.stripe.com/…` link)
 
 Release a new version so the built app knows where to go.
 
 ## 7. Try it
 
 1. Push a tag and check its zips appear on `sortero-builds`.
-2. Open **Sortero Pro** in the app, press **Buy…** and pay with Stripe's test
+2. Open **Support Sortero** in the app, press **Buy…** and pay with Stripe's test
    card `4242 4242 4242 4242`, any future date, any CVC.
 3. The page you land on shows a key and download buttons. Download a build.
 4. Paste the key into Sortero and press **Activate**. **Help → Check for
    Updates…** now offers to install newer versions.
-5. For the subscription, cancel it in the dashboard: downloads and updates stop
-   once the paid period ends. The app itself keeps working.
-
 Then switch Stripe to live mode, repeat steps 3–5 with live links and a live
 restricted key, and update `store.py`.
 
 ## Your own key
 
 ```bash
-python tools/licence_admin.py gift --note "Elle"
-python tools/licence_admin.py show SRT1.…      # check any key
+python3 tools/licence_admin.py gift --note "Elle"
+python3 tools/licence_admin.py show SRT1.…      # check any key
 ```
 
 Gift keys never expire, and get downloads and updates like a one-time licence.

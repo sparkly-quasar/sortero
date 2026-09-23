@@ -87,8 +87,8 @@ jobs:
             exit 1
           fi
 
-      # The ready-to-run app is Sortero Pro, so the builds go to a private
-      # repository, and the Sortero Pro server hands them to licence holders.
+      # The ready-to-run app is a thank-you for supporters, so the builds go to a
+      # private repository, and the licence server hands them to licence holders.
       - name: Publish builds privately
         uses: softprops/action-gh-release@v2
         with:
@@ -110,12 +110,13 @@ jobs:
             Sortero is free and open source: build it yourself by following
             [Building from source](https://github.com/sparkly-quasar/sortero#building-from-source).
 
-            The ready-to-run app for macOS, Windows and Linux, with one-click
-            updates, comes with **Sortero Pro** — open *Sortero Pro* in the app.
+            If Sortero has been useful to you, please consider buying a
+            Supporter licence: open *Support Sortero* in the app. You choose
+            what to pay, once. Sortero is an independent project, built and
+            released at its author's own expense with the help of Claude Code,
+            and supporters are what keep it improving.
 
-            If Sortero has been useful to you, please consider getting Pro.
-            Sortero is an independent project, built and released at its
-            author's own expense with the help of Claude Code, and Pro is what
-            keeps it going.
+            As a thank-you, supporters get the ready-to-run app for macOS,
+            Windows and Linux, with one-click updates.
 
             ---

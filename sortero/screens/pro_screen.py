@@ -1,4 +1,5 @@
-"""Sortero Pro: the ready-to-run app and one-click updates, and the licence key."""
+"""Support Sortero: the Supporter licence, which brings the ready-to-run app and
+one-click updates as a thank-you."""
 import datetime, webbrowser
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -7,9 +8,9 @@ from .. import ui, licence, settings, store
 from .base import Screen, APP
 
 
-SUPPORT = ("Sortero is an independent project. Its author paid to build and release it, "
-           "with the help of Claude Code. If Sortero has been useful to you, please "
-           "consider getting Sortero Pro: it's what keeps Sortero going.")
+SUPPORT = ("Sortero is made by one independent developer, who pays to build and release "
+           "it, with the help of Claude Code. Supporter licences are what pay for fixes, "
+           "new features and the ready-to-run builds.")
 
 
 def _date(ts):
@@ -18,16 +19,17 @@ def _date(ts):
 
 
 class ProScreen(Screen):
-    title = "Sortero Pro"
-    summary = ("Sortero is free and open source. Pro gets you the ready-to-run app and "
+    title = "Support Sortero"
+    summary = ("Sortero is free and open source. If it's useful to you, please buy a "
+               "Supporter licence to keep it improving.")
+    details = ("Every feature is free, for everyone, and the source code is on GitHub. "
+               "If Sortero saves you time with your music, a Supporter licence is how you "
+               "help keep it going. As a thank-you, supporters get the app ready to run on "
+               "Mac, Windows and Linux, and updates that install with one click from "
+               "Help → Check for Updates.\n\nYou choose what to pay, once. Payment happens "
+               "on Stripe's own secure page, so Sortero never sees your card. Afterwards you "
+               "get a licence key and download links. Paste the key below to turn on "
                "one-click updates.")
-    details = ("Anyone can build Sortero from its source code on GitHub, free, with every "
-               "feature. Sortero Pro is for everyone who'd rather not: the app ready to run "
-               "on Mac, Windows and Linux, and updates you install with one click from "
-               "Help → Check for Updates.\n\nPayment happens on Stripe's own secure page, so "
-               "Sortero never sees your card. Afterwards you get a licence key and download "
-               "links. Paste the key below to turn on updates. A one-time licence includes "
-               "every future update; a subscription includes updates while it's active.")
 
     def build(self):
         self.state = ttk.Frame(self)
@@ -75,12 +77,12 @@ class ProScreen(Screen):
             elif s.kind == "gift":
                 text = "You have a gift licence, so one-click updates are on."
             else:
-                text = "One-click updates are on, for good. Thank you!"
-            ui.Card(self.state, "Sortero Pro is on", text, tone="good").pack(fill="x")
+                text = "Thank you for supporting Sortero! One-click updates are on, for good."
+            ui.Card(self.state, "You're a Sortero supporter", text, tone="good").pack(fill="x")
         else:
             ui.Card(self.state, "Updates aren't turned on",
-                    s.note or "This copy of Sortero works fully. Add a licence key to "
-                              "install new versions with one click.",
+                    s.note or "This copy of Sortero works fully, with every feature. A "
+                              "Supporter licence adds one-click updates.",
                     tone="warn" if s.note else None).pack(fill="x")
 
         if not s.pro or s.kind == "sub":
@@ -135,10 +137,10 @@ class ProScreen(Screen):
             self.key_var.set("")
             self.render()
             if res[1].pro:
-                messagebox.showinfo(APP, "Sortero Pro is on. Updates will install with one "
-                                         "click. Thank you!")
+                messagebox.showinfo(APP, "Thank you for supporting Sortero! Updates will "
+                                         "now install with one click.")
             else:
-                messagebox.showwarning(APP, res[1].note or "That key didn't turn Pro on.")
+                messagebox.showwarning(APP, res[1].note or "That key didn't turn on updates.")
 
         self.app.task.run(work, done, "Checking licence")
 

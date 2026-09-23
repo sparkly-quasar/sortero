@@ -1,7 +1,7 @@
-"""Sortero Pro licences.
+"""Supporter licences (called Sortero Pro in the code).
 
-Sortero is free and open source; Sortero Pro is the ready-to-run app and its
-one-click updates. A licence key is what the updater presents to the Sortero
+Sortero is free and open source. A Supporter licence brings the ready-to-run
+app and its one-click updates as a thank-you. A licence key is what the updater presents to the Sortero
 server to get a new build.
 
 A licence key is a small signed statement: what kind of licence it is and the
@@ -186,8 +186,8 @@ def latest_build(timeout=20):
     """
     key = settings.get("licence_key") or ""
     if not read_key(key):
-        raise LicenceError("One-click updates come with Sortero Pro. Add your licence "
-                           "key first.")
+        raise LicenceError("One-click updates come with a Supporter licence. Add your "
+                           "licence key first.")
     if not store.SERVER:
         raise LicenceError("This copy of Sortero doesn't know where to get updates.")
     try:

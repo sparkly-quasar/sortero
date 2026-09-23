@@ -151,7 +151,7 @@ class Sortero(tk.Tk):
 
         helpm = tk.Menu(menubar, tearoff=0, name="help")
         helpm.add_command(label="Setup Guide…", command=self.run_wizard)
-        helpm.add_command(label="Sortero Pro…", command=lambda: self.show("pro"))
+        helpm.add_command(label="Support Sortero…", command=lambda: self.show("pro"))
         helpm.add_separator()
         helpm.add_command(label="Check for Updates…",
                           command=lambda: self.check_updates(quiet=False))
@@ -180,7 +180,7 @@ class Sortero(tk.Tk):
         filler = tk.Frame(side)
         ui.paint(filler, bg="sidebar")
         filler.pack(fill="both", expand=True)
-        self._nav_item("pro", "Sortero Pro")
+        self._nav_item("pro", "Support Sortero")
         self._nav_item("settings", "Settings")
 
         self.coll_lab = tk.Label(side, font=ui.SMALL, anchor="w", justify="left",
@@ -657,7 +657,7 @@ class Sortero(tk.Tk):
             self.after(2500, lambda: self.check_updates(quiet=True))
 
     def _offer_install(self, res):
-        """Found a newer release. A Pro copy downloads it, swaps it in and relaunches."""
+        """Found a newer release. A supporter's copy downloads it, swaps it in and relaunches."""
         import webbrowser
         if not updater.running_frozen():
             if messagebox.askyesno(APP, res["message"] + "\n\nThis copy runs from source, "
@@ -667,7 +667,7 @@ class Sortero(tk.Tk):
             return
         if not licence.status().pro:
             if messagebox.askyesno(APP, res["message"] + "\n\nOne-click updates come with "
-                                        "Sortero Pro. See Sortero Pro?"):
+                                        "a Supporter licence. Find out more?"):
                 self.show("pro")
             return
         if not messagebox.askyesno(
@@ -710,7 +710,7 @@ class Sortero(tk.Tk):
             state = res["state"]
             if state == "update" and quiet and updater.running_frozen() \
                     and not licence.status().pro:
-                # no nagging on launch: without Pro there's nothing to install
+                # no nagging on launch: without a licence there's nothing to install
                 self.log(f"update check: {res['message']}")
             elif state == "update":
                 self._offer_install(res)

@@ -83,7 +83,7 @@ async function success(url, env) {
     return page("Payment not confirmed yet",
       "<p>Stripe hasn't confirmed this payment. If you've just paid, wait a moment and reload this page.</p>", 402);
   }
-  return page("Thanks for getting Sortero Pro", `
+  return page("Thank you for supporting Sortero", `
     <p>This is your licence key. Keep a copy: you'll need it to download Sortero again and to turn on updates.</p>
     <textarea id="key" readonly rows="4" spellcheck="false">${escape(key)}</textarea>
     <p><button id="copy" type="button" class="quiet">Copy key</button> <span id="copied"></span></p>
@@ -306,7 +306,7 @@ function downloadButtons(key) {
       <button type="submit">Download for ${p.label}</button> <span class="note">${p.note}</span>
     </form>`).join("");
   return `<h2>Download</h2>${buttons}
-    <p>Already have Sortero? Open <b>Sortero Pro</b> in the sidebar, paste your key under <b>Licence key</b>
+    <p>Already have Sortero? Open <b>Support Sortero</b> in the sidebar, paste your key under <b>Licence key</b>
     and press <b>Activate</b> to turn on one-click updates.</p>`;
 }
 

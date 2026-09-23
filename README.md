@@ -6,9 +6,10 @@ A cross-platform desktop app for getting a DJ collection under control: one
 canonical copy of every track, playlists that preserve your curation, clean
 tags, and an intake lane for new music. Runs on macOS, Windows and Linux.
 
-> **If Sortero has been useful to you, please consider [Sortero Pro](#sortero-pro).**
-> Sortero is an independent project: I paid to build and release it, with the
-> help of Claude Code, and Pro is what keeps it going.
+> **Sortero is free and open source.** If it's been useful to you, please
+> consider [buying a Supporter licence](#supporting-sortero). Sortero is an
+> independent project: I pay to build and release it, with the help of Claude
+> Code, and supporters are what keep it improving.
 
 ![Sortero icon](build/icon_1024.png)
 
@@ -252,7 +253,7 @@ explains the analysis loop. It appears once; after that Sortero opens straight
 onto To do. Reopen it any time from **Help → Setup Guide…** or Settings.
 
 **Help → Check for Updates…** compares your version against the latest GitHub
-release. If there's a newer one, a Sortero Pro copy offers to **download,
+release. If there's a newer one, a supporter's copy offers to **download,
 install and relaunch** in one step: Sortero fetches the build for your platform, hands the swap to a
 small helper, quits, and reopens on the new version.
 
@@ -261,8 +262,8 @@ copy aside until the new one is in place, and puts it back if the move fails —
 a failed update never leaves you without an application.
 
 Two caveats. Running from source it won't self-update, and points you at the
-new code instead; a built copy without a licence says where to get Pro. And macOS
-asks permission before one app modifies another in `/Applications`; if it's
+new code instead; a built copy without a licence says where to get a Supporter
+licence. And macOS asks permission before one app modifies another in `/Applications`; if it's
 refused, allow Sortero under **System Settings → Privacy & Security → App
 Management**, or keep Sortero somewhere in your home folder.
 
@@ -272,8 +273,8 @@ Settings.
 
 Sortero runs on **macOS, Windows and Linux**, two ways:
 
-- **Sortero Pro** — the ready-to-run app and one-click updates. See
-  [Sortero Pro](#sortero-pro).
+- **With a Supporter licence**: the ready-to-run app and one-click updates. See
+  [Supporting Sortero](#supporting-sortero).
 - **From source, free** — every feature; see [Building from source](#building-from-source)
   or [Running without building](#running-without-building).
 
@@ -349,16 +350,19 @@ Files whose tags were edited won't be byte-identical afterwards — rewriting an
 ID3 tag rebuilds the tag container's padding and frame order. The audio streams
 are bit-identical; verified with a decode-and-compare.
 
-## Sortero Pro
+## Supporting Sortero
 
-Sortero is free and open source, with every feature, for anyone who builds it
-from this repository. **Sortero Pro** is for everyone who'd rather not: the
-ready-to-run app for macOS, Windows and Linux, and one-click updates.
+Sortero is free and open source. Every feature is free for everyone, and anyone
+can build it from this repository. If Sortero is useful to you, please buy a
+**Supporter licence** to fund ongoing fixes and improvements.
 
-Buy it from **Sortero Pro** in the app, as a one-time purchase (every future
-update included) or a subscription (updates while it's active), through Stripe.
-After paying you land on a page with your licence key and download buttons.
-Paste the key into Sortero to turn on updates.
+It's a single payment and you choose the amount. There's no subscription. As a
+thank-you, supporters get the ready-to-run app for macOS, Windows and Linux, and
+one-click updates for good.
+
+Buy it from **Support Sortero** in the app, through Stripe. After paying you land
+on a page with your licence key and download buttons. Paste the key into Sortero
+to turn on updates.
 
 Selling it is set up in [`server/README.md`](server/README.md). Free keys for
 yourself or anyone you like come from `tools/licence_admin.py gift`.

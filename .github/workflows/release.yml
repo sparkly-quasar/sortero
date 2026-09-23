@@ -15,6 +15,9 @@ on:
 permissions:
   contents: write
 
+env:
+  LAST_PUBLIC: v0.18.0
+
 jobs:
   # Which commit a hand-started run builds was nobody's decision: checkout took
   # the branch the run began on, while the release took its name from the tag
@@ -134,32 +137,59 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-      - name: Publish release
+      - name: Check the builds token is set
+        env:
+          BUILDS_TOKEN: ${{ secrets.BUILDS_TOKEN }}
+        run: |
+          if [ -z "$BUILDS_TOKEN" ]; then
+            echo "::error::Add a BUILDS_TOKEN secret so the builds can go to the private builds repository. See server/README.md."
+            exit 1
+          fi
+
+      # The ready-to-run app is a thank-you for supporters, so the builds go to a
+      # private repository, and the licence server hands them to licence holders.
+      - name: Publish builds privately
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: ${{ vars.BUILDS_REPO || 'sparkly-quasar/sortero-builds' }}
+          token: ${{ secrets.BUILDS_TOKEN }}
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: Sortero ${{ github.event.inputs.tag || github.ref_name }}
+          files: artifacts/**/*.zip
+          fail_on_unmatched_files: true
+          body: Sortero ${{ github.event.inputs.tag || github.ref_name }}
+
+      - name: Publish release notes publicly
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           name: Sortero ${{ github.event.inputs.tag || github.ref_name }}
           generate_release_notes: true
-          files: artifacts/**/*.zip
           body: |
-            ## Installing
+            ${{ (github.event.inputs.tag || github.ref_name) == env.LAST_PUBLIC && 'This is the last release with public downloads. Updating to it gives every copy the new updater; later updates install with one click for Supporter licence holders.' || '' }}
 
-            **macOS** — the app is signed ad-hoc, not notarised (notarising needs a
-            paid Apple Developer account), so macOS blocks the first launch.
+            Sortero is free and open source: build it yourself by following
+            [Building from source](https://github.com/sparkly-quasar/sortero#building-from-source).
 
-            1. Drag `Sortero.app` where you want it; Applications is fine.
-            2. Open it once — macOS refuses, and it may bounce in the Dock with no
-               window.
-            3. **System Settings → Privacy & Security**, scroll to Security, click
-               **Open Anyway**.
-            4. **Quit the bouncing icon if it's still there**, then open it again.
+            If Sortero has been useful to you, please consider buying a
+            Supporter licence: open *Support Sortero* in the app. You choose
+            what to pay, once. Sortero is an independent project, built and
+            released at its author's own expense with the help of Claude Code,
+            and supporters are what keep it improving.
 
-            Step 4 matters: the blocked launch leaves a stuck process behind, and
-            opening the app again just brings that one to the front. Once per download.
-
-            **Windows** — unzip and run `Sortero.exe`. SmartScreen may warn about an
-            unknown publisher; choose More info → Run anyway.
-
-            **Linux** — unzip and run `./Sortero`. Needs Tk (`apt install python3-tk`).
+            As a thank-you, supporters get the ready-to-run app for macOS,
+            Windows and Linux, with one-click updates.
 
             ---
+
+      # Copies from before the Supporter licence update from the public release
+      # and can't present a key. LAST_PUBLIC also goes out publicly, so every
+      # copy can update onto the licence-aware updater; after it, builds are
+      # private only.
+      - name: Attach builds publicly (last public release only)
+        if: (github.event.inputs.tag || github.ref_name) == env.LAST_PUBLIC
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          files: artifacts/**/*.zip
+          fail_on_unmatched_files: true

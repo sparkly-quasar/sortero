@@ -207,5 +207,7 @@ def install(new_path, target=None):
 def prepare(asset, progress=None):
     """Download and unpack; returns the path to the new application."""
     tmp = tempfile.mkdtemp(prefix="sortero-dl-")
-    zip_path = download(asset["browser_download_url"], tmp, progress=progress)
+    # a GitHub asset, or a Sortero Pro build from licence.latest_build()
+    url = asset.get("browser_download_url") or asset.get("url")
+    zip_path = download(url, tmp, progress=progress)
     return extract(zip_path, os.path.join(tmp, "unpacked"))

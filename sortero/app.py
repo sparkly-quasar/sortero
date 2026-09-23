@@ -4,7 +4,8 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 from . import (library, organize, journal, playlists, paths, settings, updates, wizard,
-               session, updater, review, flatten, processed, importer, ui)
+               session, updater, review, flatten, processed, importer, ui, licence,
+               supporter)
 from .screens.base import APP, RESCAN, changes
 from .screens.todo import TodoScreen
 from .screens.add_music import AddMusicScreen
@@ -14,6 +15,7 @@ from .screens.tidy import (TidyUpScreen, CleanTagsScreen, FixBpmScreen, Duplicat
                            ReorganiseScreen)
 from .screens.history import HistoryScreen
 from .screens.settings_screen import SettingsScreen
+from .screens.pro_screen import ProScreen
 from .version import __version__
 
 NAV = [("todo", "To do"), ("add", "Add music"), ("library", "Library"),
@@ -21,7 +23,7 @@ NAV = [("todo", "To do"), ("add", "Add music"), ("library", "Library"),
 SCREENS = {"todo": TodoScreen, "add": AddMusicScreen, "library": LibraryScreen,
            "playlists": PlaylistsScreen, "tidy": TidyUpScreen, "tags": CleanTagsScreen,
            "bpm": FixBpmScreen, "dupes": DuplicatesScreen, "reorganise": ReorganiseScreen,
-           "history": HistoryScreen, "settings": SettingsScreen}
+           "history": HistoryScreen, "settings": SettingsScreen, "pro": ProScreen}
 MOD = "Command" if paths.IS_MAC else "Control"
 ACCEL = "Cmd-" if paths.IS_MAC else "Ctrl+"
 
@@ -110,6 +112,7 @@ class Sortero(tk.Tk):
         self.refresh_banner()
         self.show("todo")
         self.after(250, self._first_run)
+        self.after(4000, self._maybe_check_licence)
 
     # -- window chrome -----------------------------------------------------
     def _build_menu(self):
@@ -150,6 +153,7 @@ class Sortero(tk.Tk):
 
         helpm = tk.Menu(menubar, tearoff=0, name="help")
         helpm.add_command(label="Setup Guide…", command=self.run_wizard)
+        helpm.add_command(label="Support Sortero…", command=lambda: self.show("pro"))
         helpm.add_separator()
         helpm.add_command(label="Check for Updates…",
                           command=lambda: self.check_updates(quiet=False))
@@ -178,6 +182,7 @@ class Sortero(tk.Tk):
         filler = tk.Frame(side)
         ui.paint(filler, bg="sidebar")
         filler.pack(fill="both", expand=True)
+        self._nav_item("pro", "Support Sortero")
         self._nav_item("settings", "Settings")
 
         self.coll_lab = tk.Label(side, font=ui.SMALL, anchor="w", justify="left",
@@ -236,6 +241,8 @@ class Sortero(tk.Tk):
             b = tk.Button(self.banner, text=text, command=command)
             ui.paint(b, highlightbackground="banner")
             b.pack(side="right", padx=padx)
+
+        self.nudge = ttk.Frame(main, padding=(ui.PAD, ui.GAP, ui.PAD, 0))
 
         self.stack = ttk.Frame(main)
         self.stack.pack(fill="both", expand=True)
@@ -314,6 +321,7 @@ class Sortero(tk.Tk):
         """After anything that moved or rewrote files: refresh History, then re-read."""
         self.screens["history"].refresh()
         self.refresh_banner()
+        self.refresh_nudge()
         self.scan(then=self.offer_playlist_repair if repair else None)
 
     # -- shared actions ----------------------------------------------------
@@ -501,6 +509,28 @@ class Sortero(tk.Tk):
             self.banner.pack(fill="x", before=self.stack)
         self.screens["history"].refresh_net()
 
+    def refresh_nudge(self):
+        """Every hundred tracks sorted without a licence, a card asking for support."""
+        for w in self.nudge.winfo_children():
+            w.destroy()
+        n = supporter.due()
+        if not n:
+            self.nudge.pack_forget()
+            return
+
+        def close(then=None):
+            supporter.dismiss()
+            self.nudge.pack_forget()
+            if then:
+                then()
+
+        ui.Card(self.nudge, f"You've sorted {n:,} tracks with Sortero",
+                "Sortero is free and open source. If it's saving you time, a $15 "
+                "Supporter licence helps keep it improving.",
+                "Support Sortero…", lambda: close(lambda: self.show("pro")),
+                link_text="Not now", link_command=close).pack(fill="x")
+        self.nudge.pack(fill="x", before=self.stack)
+
     def testing_start(self):
         d = self.require_root()
         if not d:
@@ -626,39 +656,70 @@ class Sortero(tk.Tk):
         wizard.Wizard(self, on_finish=lambda d: (self.root_dir.set(d), self.scan())
                       if d else None)
 
+    def _maybe_check_licence(self):
+        """Confirm a subscription every few days, quietly, off the UI thread."""
+        if not licence.due():
+            return
+        box = {}
+
+        def work():
+            try:
+                licence.refresh()
+            except Exception as e:
+                box["error"] = str(e)
+            box["done"] = True
+
+        def poll():
+            if "done" not in box:
+                self.after(500, poll)
+                return
+            if "error" in box:
+                self.log(f"licence check: {box['error']}")
+            self.screens["pro"].render()
+
+        threading.Thread(target=work, daemon=True).start()
+        self.after(500, poll)
+
     def _maybe_auto_update(self):
         if settings.get("check_updates_on_launch") and updates.due():
             self.after(2500, lambda: self.check_updates(quiet=True))
 
     def _offer_install(self, res):
-        """Found a newer release - download, swap it in, and relaunch."""
+        """Found a newer release. A supporter's copy downloads it, swaps it in and relaunches."""
         import webbrowser
         if not updater.running_frozen():
-            if messagebox.askyesno(APP, res["message"] + "\n\nThis copy is running "
-                                        "from source, so it can't replace itself. "
-                                        "Open the download page?"):
-                webbrowser.open(res["url"])
+            if messagebox.askyesno(APP, res["message"] + "\n\nThis copy runs from source, "
+                                        "so update it from GitHub. Open the project's "
+                                        "releases?"):
+                webbrowser.open(res.get("url") or updates.RELEASES_URL)
+            return
+        if not licence.status().pro:
+            if messagebox.askyesno(APP, res["message"] + "\n\nOne-click updates come with "
+                                        "a Supporter licence. Find out more?"):
+                self.show("pro")
             return
         if not messagebox.askyesno(
                 APP, res["message"] + "\n\nDownload it, install it and restart "
                      "Sortero now?\n\nAnything unsaved is finished first — this "
                      "only quits once the new version is ready."):
             return
-        try:
-            asset = updater.pick_asset(res.get("assets") or [])
-        except updater.UpdateError as e:
-            messagebox.showerror(APP, str(e))
-            return
 
         def work(progress, log):
-            log(f"downloading {asset['name']}…")
-            new = updater.prepare(asset, progress=progress)
-            log(f"unpacked to {new}")
-            return new
-
-        def done(new_path):
             try:
-                updater.install(new_path)
+                build = licence.latest_build()
+            except licence.LicenceError as e:
+                return ("error", str(e))
+            log(f"downloading {build.get('name') or 'the update'}…")
+            new = updater.prepare(build, progress=progress)
+            log(f"unpacked to {new}")
+            return ("ok", new)
+
+        def done(out):
+            if out[0] == "error":
+                messagebox.showwarning(APP, out[1])
+                return
+            try:
+                updater.install(out[1])
             except updater.UpdateError as e:
                 messagebox.showerror(APP, str(e))
                 return
@@ -675,7 +736,11 @@ class Sortero(tk.Tk):
 
         def done(res):
             state = res["state"]
-            if state == "update":
+            if state == "update" and quiet and updater.running_frozen() \
+                    and not licence.status().pro:
+                # no nagging on launch: without a licence there's nothing to install
+                self.log(f"update check: {res['message']}")
+            elif state == "update":
                 self._offer_install(res)
             elif not quiet:
                 if state == "private":

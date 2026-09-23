@@ -58,6 +58,11 @@ class Journal:
                 session.export()
         except Exception:
             pass
+        try:
+            from . import supporter
+            supporter.count(self.entries)
+        except Exception:
+            pass
         return self.path
 
 

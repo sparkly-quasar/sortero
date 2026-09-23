@@ -6,3 +6,9 @@ build/work/
 build/Sortero.iconset/
 build/Sortero.spec
 .DS_Store
+
+# Sortero Pro server and signing keys: never commit these
+server/.wrangler/
+server/.dev.vars
+node_modules/
+*signing-key*

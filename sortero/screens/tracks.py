@@ -343,7 +343,7 @@ class LibraryScreen(Screen):
                                      "More → Look up selected on Discogs.")
             return
         self._write(pairs, f"Accept Discogs' genre for {ui.plural(len(pairs), 'track')}?",
-                    then=lambda: [self.suggested.pop(r.path, None) for r, _ in pairs])
+                    then=lambda done: [self.suggested.pop(r.path, None) for r, _ in done])
 
     # -- artist and title --------------------------------------------------
     def swap_names(self):
@@ -418,7 +418,7 @@ class LibraryScreen(Screen):
             messagebox.showinfo(APP, f"Updated {ui.plural(n, 'track')}."
                                      + (f"\n{failed} couldn't be written." if failed else ""))
             if then:
-                then()
+                then(pairs)
             self.app.changed()
 
         self.app.task.run(work, done, "Writing genres")

@@ -26,6 +26,10 @@ class Journal:
         """changes: {field: {"old": ..., "new": ...}}"""
         self.entries.append({"op": "tag", "path": path, "changes": changes})
 
+    def mixxx(self, db, track_id, old, new):
+        """A track's BPM and beatgrid changed in Mixxx's library."""
+        self.entries.append({"op": "mixxx", "db": db, "id": track_id, "old": old, "new": new})
+
     def created(self, path):
         self.entries.append({"op": "create", "path": path})
 
@@ -101,6 +105,12 @@ def revert(journal_file, log=print):
                     for field, v in e["changes"].items():
                         t.set(field, v["old"])
                     ok += 1 if t.save() else 0
+            elif e["op"] == "mixxx":
+                from . import mixxx
+                old = e["old"]
+                mixxx.write(e["db"], [(e["id"], old["bpm"], bytes.fromhex(old["beats"]),
+                                       old["locked"])])
+                ok += 1
             elif e["op"] == "create":
                 p = e["path"]
                 if os.path.isfile(p):

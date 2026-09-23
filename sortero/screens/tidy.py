@@ -1,12 +1,13 @@
 """Tidy up: tools for fixing a collection that already exists."""
 import collections, os
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 
-from .. import ui, organize, dupes, fixtags, settings
+from .. import ui, organize, dupes, fixtags, settings, bpmfix, mixxx, tempo
+from ..transport import Transport
 from ..common import (human_size, name_order_note, ARTIST_TITLE, NAME_ORDERS,
                       NAME_ORDER_LABELS)
-from .base import Screen, APP, is_mix
+from .base import Screen, APP, RESCAN, is_mix
 
 
 class TidyUpScreen(Screen):
@@ -22,6 +23,10 @@ class TidyUpScreen(Screen):
                  "Clear download-site spam from tags, fill in missing artists, put "
                  "artist and title the right way round, and make energy ratings "
                  "visible to DJ apps.", "Open", lambda: app.show("tags")),
+                ("Fix wrong BPMs",
+                 "Find tracks whose BPM is a half, two-thirds or three-quarters of the "
+                 "real tempo, and correct them in the tags and in Mixxx.", "Open",
+                 lambda: app.show("bpm")),
                 ("Find duplicates",
                  "Find extra copies of the same track and set them aside. Nothing is "
                  "deleted.", "Open", lambda: app.show("dupes")),
@@ -346,6 +351,340 @@ class CleanTagsScreen(ToolScreen):
             self.app.changed()
 
         self.app.task.run(work, done, "Writing tags")
+
+
+# ------------------------------------------------------------------ BPM
+class FixBpmScreen(ToolScreen):
+    title = "Fix wrong BPMs"
+    summary = ("Find tracks tagged at a fraction of their real tempo, like a 140 techno "
+               "track tagged 93, and correct them.")
+    details = ("Beat detection often locks on to the wrong pulse: rolling percussion "
+               "makes a 140 track read as 93.33, and a sparse one as 70. Sortero looks at "
+               "tracks whose BPM is unusual for their genre, listens to a minute of each, "
+               "and only suggests a fix when the audio clearly supports a whole multiple "
+               "of the current value (x2, x3/2, x4/3). Genres without a typical tempo, "
+               "like downtempo and breaks, are left alone.\n\n"
+               "Mixxx keeps its own BPM and beatgrid and ignores the tag once it has "
+               "analysed a track, so Sortero can correct those too while Mixxx is closed. "
+               "It backs up Mixxx's library first and locks each corrected BPM so a "
+               "re-analysis doesn't bring the wrong one back. You can undo it from History.")
+
+    COLS = [("track", "Track", 300), ("genre", "Genre", 130), ("ratio", "Fix", 50),
+            ("tag", "Tag", 110), ("mixxx", "Mixxx", 130)]
+
+    def build(self):
+        # Which part of the collection to check: "" for all of it, else a folder
+        # relative to the collection root. Remembered between runs.
+        self.folder = settings.get("bpm_folder") or ""
+        self.scope = tk.StringVar(value="folder" if self.folder else "all")
+        self.scope.trace_add("write", lambda *a: self._scope_changed())
+        row = ttk.Frame(self)
+        row.pack(fill="x", pady=(0, 6))
+        ttk.Label(row, text="Check").pack(side="left", padx=(0, ui.GAP))
+        ttk.Radiobutton(row, text="the whole collection", value="all",
+                        variable=self.scope).pack(side="left", padx=(0, ui.GAP))
+        self.folder_radio = ttk.Radiobutton(row, value="folder", variable=self.scope)
+        self.folder_radio.pack(side="left")
+        ttk.Button(row, text="Choose folder…", command=self.choose_folder
+                   ).pack(side="left", padx=(ui.GAP, 0))
+        self._label_folder()
+
+        self.db = mixxx.find_db()
+        self.use_mixxx = tk.BooleanVar(value=bool(self.db))
+        if self.db:
+            self.use_mixxx.trace_add("write", lambda *a: self._reset(clear=True))
+            ttk.Checkbutton(self, text="Also correct Mixxx's library (quit Mixxx before "
+                                       "fixing)", variable=self.use_mixxx
+                            ).pack(anchor="w", pady=(0, ui.SECTION))
+        self.result = ttk.Label(self, style="Muted.TLabel")
+        self.result.pack(anchor="w", pady=(0, 4))
+        f, self.tv = ui.tree(self, self.COLS, height=12)
+        f.pack(fill="both", expand=True)
+        self.tv.bind("<<TreeviewSelect>>", lambda e: self._select())
+        self.tv.bind("<Double-1>", lambda e: self.player.toggle())
+        self.tv.bind("<KeyPress-t>", lambda e: self.player.tap())
+
+        # Listen before you fix: select a row to load it, tap along to the kick.
+        self.player = Transport(self, on_tap=self._tapped)
+        self.player.pack(fill="x", pady=(ui.GAP, 2))
+        self.listen = ttk.Label(self, style="Muted.TLabel",
+                                text="Select a track to listen to it. Tap along to the kick "
+                                     "(the Tap button, or T) to check the fix by ear.")
+        self.listen.pack(anchor="w", fill="x")
+        self.current = None
+        # Track names make these lines long: wrap them to the window's width.
+        self.bind("<Configure>", self._wrap, add="+")
+
+        # The main button fixes the selected track; More switches it to all of them.
+        self.fix_all = False
+        self._reset()
+
+    def invalidate(self):
+        self._reset(clear=True)
+
+    def hidden(self):
+        self.player.stop()
+
+    def _wrap(self, e=None):
+        width = max(200, self.winfo_width() - 2 * ui.PAD)
+        for lab in (self.result, self.listen):
+            lab.configure(wraplength=width, justify="left")
+
+    def _reset(self, clear=False):
+        self.fixes = None
+        if clear:
+            self.tv.delete(*self.tv.get_children())
+            self.result.configure(text="")
+            self._select()
+        self.bar.set_primary("Check BPMs", self.preview)
+        self._menu()
+
+    def _label_folder(self):
+        if self.folder:
+            self.folder_radio.configure(text=f"only {self.folder}", state="normal")
+        else:
+            self.folder_radio.configure(text="one folder", state="disabled")
+
+    def _scope_changed(self):
+        if self.scope.get() == "folder" and not self.folder:
+            self.choose_folder()
+            return
+        settings.set("bpm_folder", self.folder if self.scope.get() == "folder" else "")
+        self._reset(clear=True)
+
+    def choose_folder(self):
+        root = self.app.require_root()
+        if not root:
+            return
+        rootn = os.path.normpath(root)
+        start = os.path.join(rootn, self.folder) if self.folder else rootn
+        d = filedialog.askdirectory(title="Choose a folder to check",
+                                    initialdir=start if os.path.isdir(start) else rootn)
+        if not d:
+            if not self.folder:
+                self.scope.set("all")
+            return
+        # The picker can hand back ~/Dropbox/... for a collection stored as
+        # ~/Library/CloudStorage/Dropbox/..., so compare real paths.
+        real_root, real_d = os.path.realpath(rootn), os.path.realpath(d)
+        if real_d == real_root:
+            self.scope.set("all")
+            return
+        if not real_d.startswith(real_root + os.sep):
+            messagebox.showinfo(APP, "Pick a folder inside your collection.")
+            if not self.folder:
+                self.scope.set("all")
+            return
+        self.folder = os.path.relpath(real_d, real_root)
+        self._label_folder()
+        if self.scope.get() != "folder":
+            self.scope.set("folder")        # runs _scope_changed
+        else:
+            self._scope_changed()
+
+    def _recs(self):
+        """The tracks in scope: all of them, or those under the chosen folder."""
+        if self.scope.get() != "folder" or not self.folder:
+            return self.app.recs
+        pre = self.folder + os.sep
+        return [r for r in self.app.recs if r.rel.startswith(pre)]
+
+    @staticmethod
+    def _change(old, new):
+        return f"{old} → {new}"
+
+    # -- listening -------------------------------------------------------
+    @staticmethod
+    def _values(f):
+        """(current, suggested) BPM - the tag's if it has one, else Mixxx's."""
+        if f.tag:
+            return bpmfix._num(f.tag[0]), bpmfix._num(f.tag[1])
+        return f.mixxx["old_bpm"], f.mixxx["new_bpm"]
+
+    def _select(self):
+        sel = self.tv.selection()
+        f = None
+        if sel and self.fixes:
+            i = self.tv.index(sel[0])
+            f = self.fixes[i] if i < len(self.fixes) else None
+        if f is self.current:
+            return
+        self.current = f
+        self._buttons()
+        if f is None:
+            self.player.clear()
+            return
+        # Start where Sortero listened: past the intro, in the body of the track.
+        start, _ = tempo._span(f.rec.duration)
+        self.player.load(f.rec.path, f.rec.duration, start)
+
+    def _tapped(self, bpm):
+        f = self.current
+        if f is None:
+            return
+        old, new = self._values(f)
+        head = f"{os.path.basename(f.rec.path)}: {old:g} now, {new:g} suggested"
+        if bpm is None:
+            self.listen.configure(text=f"{head}. Tap along to the kick (Tap, or T) to check.")
+            return
+        self.listen.configure(text=f"{head} · you're tapping {bpm:.1f} · "
+                                   + bpmfix.verdict(bpm, old, new))
+
+    def _show(self):
+        self.current = None
+        self.player.clear()
+        self.tv.delete(*self.tv.get_children())
+        for f in self.fixes:
+            m = f.mixxx
+            self.tv.insert("", "end", values=(
+                os.path.basename(f.rec.path), f.genre, bpmfix.RATIO_NAMES[f.ratio],
+                self._change(*f.tag[:2]) if f.tag else "",
+                self._change(f"{m['old_bpm']:.2f}", f"{m['new_bpm']:.2f}") if m else ""))
+        self._buttons()
+        self._menu()
+
+    # -- buttons -----------------------------------------------------------
+    MODE_ALL = "Switch to fixing all tracks at once"
+    MODE_ONE = "Switch to fixing one track at a time"
+
+    def _menu(self):
+        self.bar.set_more([("Leave out selected tracks", self.leave_out),
+                           None,
+                           (self.MODE_ONE if self.fix_all else self.MODE_ALL,
+                            self._toggle_mode),
+                           None,
+                           ("Check again", self.preview)])
+        self.bar.enable("Leave out selected tracks", bool(self.fixes))
+
+    def _toggle_mode(self):
+        self.fix_all = not self.fix_all
+        self._menu()
+        self._buttons()
+
+    def _buttons(self):
+        if self.fixes is None:
+            return
+        if not self.fixes:
+            self.bar.set_primary("Check again", self.preview)
+        elif self.fix_all:
+            self.bar.set_primary(f"Fix all {ui.plural(len(self.fixes), 'track')}…",
+                                 self.apply)
+        else:
+            self.bar.set_primary("Fix this track", self.apply_one,
+                                 state="normal" if self.current else "disabled")
+
+    def preview(self):
+        if self.need_scan():
+            return
+        use = self.use_mixxx.get()
+        recs = self._recs()
+        if not recs:
+            messagebox.showinfo(APP, f"There are no tracks in {self.folder}. Choose another "
+                                     "folder, or read your collection again if you've "
+                                     f"added some ({RESCAN}).")
+            return
+
+        def work(progress, log):
+            return bpmfix.plan(recs, use_mixxx=use, progress=progress, log=log)
+
+        def done(res):
+            self.fixes, st = res
+            bits = [ui.plural(len(self.fixes), "track") + " to fix",
+                    f"{st['checked']:,} with an unusual BPM listened to"]
+            if st["unclear"]:
+                bits.append(f"{st['unclear']:,} left alone because the audio wasn't clear-cut")
+            if st["unreadable"]:
+                bits.append(f"{st['unreadable']:,} couldn't be read")
+            if st["mixxx_skipped"]:
+                bits.append(f"{st['mixxx_skipped']:,} locked or hand-edited in Mixxx, "
+                            "skipped there")
+            self.result.configure(text=" · ".join(bits) if self.fixes else
+                                  "No wrong BPMs found. " + " · ".join(bits[1:]))
+            self._show()
+
+        self.app.task.run(work, done, "Listening")
+
+    def leave_out(self):
+        sel = self.tv.selection()
+        if not self.fixes or not sel:
+            messagebox.showinfo(APP, "Select one or more rows in the list first.")
+            return
+        drop = {self.tv.index(i) for i in sel}
+        self.fixes = [f for i, f in enumerate(self.fixes) if i not in drop]
+        self._show()
+
+    def _mixxx_open(self, fixes):
+        if any(f.mixxx for f in fixes) and mixxx.running():
+            messagebox.showinfo(APP, "Quit Mixxx first, then try again.\n\nMixxx keeps its "
+                                     "library in memory and would overwrite these changes "
+                                     "when it closes.")
+            return True
+        return False
+
+    def apply_one(self):
+        """Fix the selected track, then move on to the next one in the list."""
+        f = self.current
+        if f is None or self._mixxx_open([f]):
+            return
+        root = self.app.root_dir.get()
+        old, new = self._values(f)
+
+        def work(progress, log):
+            return bpmfix.apply(root, [f], log=log)
+
+        def done(res):
+            _, failed = res
+            name = os.path.basename(f.rec.path)
+            if failed:
+                self.listen.configure(text=f"Couldn't write the tag in {name}.")
+                return
+            i = self.fixes.index(f)
+            self.fixes.remove(f)
+            self.tv.delete(self.tv.get_children()[i])
+            # No re-read: nothing moved, and a re-read would clear this list.
+            self.app.screens["history"].refresh()
+            self.app.refresh_banner()
+            rows = self.tv.get_children()
+            if rows:
+                nxt = rows[min(i, len(rows) - 1)]
+                self.tv.selection_set(nxt)
+                self.tv.focus(nxt)
+                self.tv.see(nxt)
+            else:
+                self._select()
+            self._buttons()
+            self._menu()
+            left = (f" {ui.plural(len(self.fixes), 'track')} to go." if self.fixes
+                    else " That was the last one.")
+            self.result.configure(text=f"Fixed {name}: {old:g} → {new:g}. You can undo it "
+                                       f"from History.{left}")
+
+        self.app.task.run(work, done, "Fixing BPM")
+
+    def apply(self):
+        if not self.fixes or self._mixxx_open(self.fixes):
+            return
+        in_mixxx = sum(1 for f in self.fixes if f.mixxx)
+        tags = sum(1 for f in self.fixes if f.tag)
+        msg = f"Correct the BPM tag in {ui.plural(tags, 'file')}"
+        if in_mixxx:
+            msg += (f" and {ui.plural(in_mixxx, 'track')} in Mixxx's library "
+                    "(backed up first)")
+        if not messagebox.askyesno(APP, msg + "?\n\nYou can undo this from History."):
+            return
+        root = self.app.root_dir.get()
+        fixes = self.fixes
+
+        def work(progress, log):
+            return bpmfix.apply(root, fixes, log=log, progress=progress)
+
+        def done(res):
+            _, failed = res
+            messagebox.showinfo(APP, "BPMs fixed." + (
+                f" {ui.plural(failed, 'file')} couldn't be written." if failed else ""))
+            self.app.changed()
+
+        self.app.task.run(work, done, "Fixing BPMs")
 
 
 # ------------------------------------------------------------ duplicates

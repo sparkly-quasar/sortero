@@ -11,7 +11,8 @@ from .screens.todo import TodoScreen
 from .screens.add_music import AddMusicScreen
 from .screens.tracks import LibraryScreen
 from .screens.playlist_builder import PlaylistsScreen
-from .screens.tidy import TidyUpScreen, CleanTagsScreen, DuplicatesScreen, ReorganiseScreen
+from .screens.tidy import (TidyUpScreen, CleanTagsScreen, FixBpmScreen, DuplicatesScreen,
+                           ReorganiseScreen)
 from .screens.history import HistoryScreen
 from .screens.settings_screen import SettingsScreen
 from .screens.pro_screen import ProScreen
@@ -21,7 +22,7 @@ NAV = [("todo", "To do"), ("add", "Add music"), ("library", "Library"),
        ("playlists", "Playlists"), ("tidy", "Tidy up"), ("history", "History")]
 SCREENS = {"todo": TodoScreen, "add": AddMusicScreen, "library": LibraryScreen,
            "playlists": PlaylistsScreen, "tidy": TidyUpScreen, "tags": CleanTagsScreen,
-           "dupes": DuplicatesScreen, "reorganise": ReorganiseScreen,
+           "bpm": FixBpmScreen, "dupes": DuplicatesScreen, "reorganise": ReorganiseScreen,
            "history": HistoryScreen, "settings": SettingsScreen, "pro": ProScreen}
 MOD = "Command" if paths.IS_MAC else "Control"
 ACCEL = "Cmd-" if paths.IS_MAC else "Ctrl+"
@@ -252,6 +253,7 @@ class Sortero(tk.Tk):
         scr = self.screens[key]
         if self.current is not scr:
             if self.current is not None:
+                self.current.hidden()
                 self.current.pack_forget()
                 self._paint_nav(self.current.nav or self.current.key, False)
             scr.pack(fill="both", expand=True)

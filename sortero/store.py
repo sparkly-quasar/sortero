@@ -16,5 +16,5 @@ PLANS = [
     {"id": "life", "name": "Supporter licence", "price": "pay what you want, from $15",
      "note": "One payment, no subscription. Includes the ready-to-run app for Mac, "
              "Windows and Linux, and one-click updates for good.",
-     "url": ""},
+     "url": "https://buy.stripe.com/3cI4gA7SQd5FeuQfPy83C00"},
 ]

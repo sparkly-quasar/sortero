@@ -4,7 +4,8 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 from . import (library, organize, journal, playlists, paths, settings, updates, wizard,
-               session, updater, review, flatten, processed, importer, ui, licence)
+               session, updater, review, flatten, processed, importer, ui, licence,
+               supporter)
 from .screens.base import APP, RESCAN, changes
 from .screens.todo import TodoScreen
 from .screens.add_music import AddMusicScreen
@@ -240,6 +241,8 @@ class Sortero(tk.Tk):
             ui.paint(b, highlightbackground="banner")
             b.pack(side="right", padx=padx)
 
+        self.nudge = ttk.Frame(main, padding=(ui.PAD, ui.GAP, ui.PAD, 0))
+
         self.stack = ttk.Frame(main)
         self.stack.pack(fill="both", expand=True)
         self.screens = {key: cls(self.stack, self, key) for key, cls in SCREENS.items()}
@@ -316,6 +319,7 @@ class Sortero(tk.Tk):
         """After anything that moved or rewrote files: refresh History, then re-read."""
         self.screens["history"].refresh()
         self.refresh_banner()
+        self.refresh_nudge()
         self.scan(then=self.offer_playlist_repair if repair else None)
 
     # -- shared actions ----------------------------------------------------
@@ -502,6 +506,28 @@ class Sortero(tk.Tk):
                      "Nothing is final until you keep it.")
             self.banner.pack(fill="x", before=self.stack)
         self.screens["history"].refresh_net()
+
+    def refresh_nudge(self):
+        """Every hundred tracks sorted without a licence, a card asking for support."""
+        for w in self.nudge.winfo_children():
+            w.destroy()
+        n = supporter.due()
+        if not n:
+            self.nudge.pack_forget()
+            return
+
+        def close(then=None):
+            supporter.dismiss()
+            self.nudge.pack_forget()
+            if then:
+                then()
+
+        ui.Card(self.nudge, f"You've sorted {n:,} tracks with Sortero",
+                "Sortero is free and open source. If it's saving you time, a $15 "
+                "Supporter licence helps keep it improving.",
+                "Support Sortero…", lambda: close(lambda: self.show("pro")),
+                link_text="Not now", link_command=close).pack(fill="x")
+        self.nudge.pack(fill="x", before=self.stack)
 
     def testing_start(self):
         d = self.require_root()

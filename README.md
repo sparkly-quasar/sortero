@@ -19,7 +19,8 @@ The consensus among working DJs is that the *filesystem* should be shallow and
 predictable, and the *software* should do the organising — crates and playlists
 reference a track, they don't copy it. Sortero applies that:
 
-- **One file per track**, at `Tracks/<Genre>/Artist - Title.ext`
+- **One file per track**, at `<Genre>/Artist - Title.ext`, straight inside the
+  collection folder
 - **Playlists as pointers.** Every folder you have today — Spotify/Tidal vibe
   imports, gig sets — becomes an `.m3u8` in `_Playlists/` pointing at that one
   file. A track curated into five vibes is five playlist entries and one file.
@@ -31,7 +32,7 @@ reference a track, they don't copy it. Sortero applies that:
 
 ```
 DJ Collection/
-  Tracks/<Genre>/Artist - Title.ext    canonical home for every track
+  <Genre>/Artist - Title.ext           canonical home for every track
   Sets/<Set Name>/                     optional: gig folders kept as folders
   Albums/<Album>/                      full releases, left intact
   Mixes/                               recordings over 20 minutes
@@ -52,23 +53,29 @@ value that matched no rule needs at least 8 tracks to earn one, so oddities like
 
 **Split by energy** is an optional tick in the same place. When on, each genre
 folder gains `Energy 1`…`Energy 10` subfolders, filed from the Mixed In Key
-rating (`Tracks/Techno/Energy 6/…`). Tracks with no rating — your own rips and
+rating (`Techno/Energy 6/…`). Tracks with no rating — your own rips and
 recordings — stay directly in the genre folder rather than in a catch-all.
 
 ## Finding your way around
 
 A sidebar on the left, one job per screen. Each screen has a one-line summary
 under its title, and an **ⓘ** beside the title for the longer explanation. The
-main action is always the blue button at the bottom right; everything else is
-under **More** next to it.
+main action is always the blue button at the bottom right, with **More** beside
+it for the rest.
+
+What **More** holds is the rest, though, not the point. If a screen has counted
+something for you — tracks whose tags look backwards, duplicate copies waiting,
+new music held back for you to place — the way to act on it sits next to the
+button, with the number in it, rather than behind a menu you had no reason to
+open.
 
 | Screen | What it's for |
 |---|---|
-| **To do** | Home. Cards for the jobs worth doing, most useful first, each with one button: analysed tracks waiting in `Processed`, tracks in `Unsorted`, tracks with no genre, tracks not analysed yet, tags full of download-site spam. The number beside it in the sidebar is how many jobs there are. |
+| **To do** | Home. Cards for the jobs worth doing, most useful first, each with one button: analysed tracks waiting in `Processed`, tracks in `Unsorted`, tracks with no genre, tracks not analysed yet, tracks whose artist and title are the wrong way round, tags full of download-site spam. The number beside it in the sidebar is how many jobs there are. |
 | **Add music** | Choose a folder or files. Analysed tracks go to the folder that already means their genre — yours if you have one. Anything missing a key lands in `To Be Processed`. Tracks with no genre to go on are **held back for you to place** instead of being dropped in `Unsorted`. Tracks already in the library are pointed out, not added twice. |
-| **Library** | Every track in one list. **Show** filters to what needs work (no genre, not analysed, no energy, no artist, no BPM, low bitrate); **Search** narrows it; click a column heading to sort. Select tracks and set a genre, send them to analysis, place them one by one, copy genres from folder names, or look them up on Discogs. Your own set recordings are hidden unless you ask. |
-| **Playlists** | Rebuild a Spotify or TIDAL playlist against your local files from a link, a pasted tracklist or a CSV. **More** rebuilds the folder playlists or repairs broken links. |
-| **Tidy up** | Tools for an existing collection: **Clean tags**, **Find duplicates**, **Place a folder's tracks by hand**, **Flatten release folders**, **Fix playlist links**, and **Reorganise the whole collection**. Every tool previews before it changes anything. |
+| **Library** | Every track in one list. **Show** filters to what needs work (no genre, not analysed, no energy, no artist, artist and title swapped, no BPM, low bitrate); **Search** narrows it; click a column heading to sort. Select tracks and set a genre, swap artist and title, re-read both from the filename, send them to analysis, place them one by one, copy genres from folder names, or look them up on Discogs. Your own set recordings are hidden unless you ask. |
+| **Playlists** | Rebuild a Spotify or TIDAL playlist against your local files from a link, a pasted tracklist or a CSV — all three offered together above the list. **More** rebuilds the folder playlists or repairs broken links. |
+| **Tidy up** | Tools for an existing collection: **Clean tags** (including which way round filenames read), **Find duplicates**, **Place a folder's tracks by hand**, **Flatten release folders**, **Fix playlist links**, and **Reorganise the whole collection**. Every tool previews before it changes anything. |
 | **History** | Every operation, with undo, and the **safety net**. **Show log** reveals the detailed log. |
 | **Settings** | Collection folder, update checks, Discogs token, Spotify and TIDAL accounts, and the setup guide. |
 
@@ -118,10 +125,86 @@ location. Matching is on artist and title, so it survives Platinum Notes
 renaming the file *and* changing its format — an MP3 that comes back as FLAC
 still lands back in its set.
 
-Filing a track into `Tracks/<Genre>` also **writes that genre into the file**.
+Filing a track into its genre folder also **writes that genre into the file**.
 Without it the folder knew the genre and the tag didn't, so rekordbox, Mixxx and
 Sortero's own Library all still saw the track as untagged. An existing genre
 tag is never overwritten.
+
+## Artist - Title, or Title - Artist?
+
+Sortero reads a filename like `Deadmau5 - Strobe.wav` as artist first. Plenty of
+collections are the other way round, and reading those backwards puts the title
+in the artist tag, files the track as `Strobe - Deadmau5.wav`, and sends the
+wrong words to Discogs.
+
+**Tidy up → Clean tags → Filenames are** settles it: `Artist - Title` or
+`Title - Artist`. Everything that reads a name off a filename then follows it —
+filling in missing tags, adding new music, repairing playlist links.
+
+Sortero also works out which way your collection reads and says so next to that
+choice. Nothing about one filename can tell it — `Strobe - Deadmau5` and
+`Deadmau5 - Strobe` are the same two words — but a collection is not one
+filename. Two kinds of evidence, strongest first:
+
+- **What your tags already know.** If the right-hand half of a filename is an
+  artist that *another* file's tags name, and the left-hand half is nobody,
+  that file reads title-first. No file votes on the strength of its own tags,
+  so a wrong assumption can't confirm itself, and a name whose halves are both
+  known artists doesn't vote at all.
+- **What comes back.** With no tags to go on — or every one of them backwards —
+  the names still carry it: an artist recurs across a collection and a title
+  recurs once. Mix and version wording is stripped before counting, because
+  `Strobe - Extended Mix` looks exactly like an `A - B` name and isn't, and a
+  side must carry at least three *different* recurring names to count, so one
+  token repeating 13 times (a label, a bootleg tag) proves nothing.
+
+Either way it takes at least 8 files and a clear majority before Sortero says
+anything, and the note tells you which evidence it used, because a guess from
+names alone is worth less than one your tags confirm. It only ever suggests:
+the setting is yours, and a collection where nothing recurs gets no opinion.
+
+For tags that are already in backwards, **Clean tags** carries a panel of its
+own, headed *Artist and title the wrong way round*. It counts the tracks whose
+tags look swapped and leads with whichever fix suits that count:
+
+- **A few of them** — it offers *Show the 14 tracks*, which opens the Library
+  filtered to exactly those, where you pick the ones you mean and swap those.
+  Swapping everything is still there, as the quieter second option.
+- **Most of them** — it offers *Swap every track…* first, because at that point
+  the whole collection is the problem, and says how many of how many it can
+  vouch for.
+
+The filter behind that count cross-references real tags, so a file with no
+metadata never appears in it and never needs to: nothing wrong is written to it
+yet, and the order setting above handles it from here.
+
+Whichever job you run, the screen names it — on the line above the list, on the
+button, and in the question before anything is written, which also shows a few
+of your own tracks as they will read afterwards:
+
+```
+Swap artist and title on 1,842 files?
+
+  Kaskade - Atmosphere      becomes      Atmosphere - Kaskade
+  Strobe - Deadmau5         becomes      Deadmau5 - Strobe
+  …and 1,839 more.
+
+1,804 of them look backwards to Sortero, so this fits.
+
+You can undo this from History, and swapping twice puts it back.
+```
+
+That last line is not reassurance, it is arithmetic: the swap exchanges two
+strings and nothing else, so running it twice returns the collection exactly
+where it started. When the evidence *disagrees* — you ask to swap everything
+and only three tracks look backwards — the same sentence says so instead.
+
+**More** keeps **Read artist and title from the filenames again**, for when the
+filenames are right and the tags are a mess.
+
+A track with no artist or title tag at all is never swapped: there is nothing
+written to put the wrong way round, and the name Sortero read off the filename
+is already being read the way you asked.
 
 ## When there's no genre to infer
 
@@ -200,11 +283,22 @@ and each group's action is its own undoable step.
 
 ## Your layout, not Sortero's
 
-Sortero's own layout is `Tracks/<Genre>`, but a library organised by hand as
-`House/`, `Techno/Hypnotic Techno/` is respected. Intake files a Tech House track
-into your existing `Tech House` folder rather than building a parallel
-`Tracks/Tech House`, and a genre that has no folder yet is created alongside
-yours. Folders are matched by name, so `Lez Dance` or `smooth vibes` — curation,
+Sortero files genres at the top of the collection, which is how most people do
+it by hand anyway, and a library already organised as `House/`,
+`Techno/Hypnotic Techno/` is simply carried on rather than replaced. Intake
+files a Tech House track into your existing `Tech House` folder, and a genre
+that has no folder yet is created alongside yours.
+
+A genre folder shares the top level with `Sets/`, `Albums/`, `Mixes/`,
+`_Playlists/`, `_Quarantine/` and the two staging folders, so a genre that
+would collide with one of those — a tag literally reading `Mixes` — is filed as
+`Mixes (genre)` instead. Otherwise its tracks would be taken for recordings and
+left alone forever.
+
+Collections Sortero filed under `Tracks/<Genre>` before this are left where
+they are, not split across two layouts. The next **Reorganise** moves them up
+and removes the empty `Tracks/`; you see every move in the preview first, and
+History undoes the lot. Folders are matched by name, so `Lez Dance` or `smooth vibes` — curation,
 not genres — never swallow tracks just because they share a word with one.
 The energy split's `Energy N` subfolders are part of the layout too: never
 flattened away, and never mistaken for a genre.

@@ -31,6 +31,10 @@ class PlaylistsScreen(Screen):
         self.opts.pack(fill="x", pady=(6, 0))
         self.paste_link = ui.link(self.opts, "Paste a tracklist instead", self.toggle_paste)
         self.paste_link.pack(side="left")
+        # A CSV is a third way of handing over a tracklist. The other two are
+        # right here; this one used to be in the menu.
+        ui.link(self.opts, "Load a CSV file…", self.load_csv).pack(side="left",
+                                                                  padx=(ui.SECTION, 0))
         ui.link(self.opts, "Accounts…", lambda: self.app.show("settings")).pack(side="right")
         self.acc_lab = ttk.Label(self.opts, style="Muted.TLabel")
         self.acc_lab.pack(side="right", padx=(0, ui.GAP))
@@ -52,8 +56,6 @@ class PlaylistsScreen(Screen):
         ttk.Entry(self.bar.left, textvariable=self.name, width=30).pack(side="left",
                                                                        padx=(ui.GAP, 0))
         self.bar.set_more([
-            ("Load a CSV file…", self.load_csv),
-            None,
             ("Fix broken playlist links…", self.app.repair_playlists),
             ("Rebuild playlists from folders…", self.rebuild),
         ])

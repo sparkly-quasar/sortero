@@ -1,7 +1,9 @@
 """Scan a DJ collection into track records and compute library health."""
 import os, re, collections
 from dataclasses import dataclass, field
-from .common import AUDIO_EXTS, is_spam, clean_stem, split_artist_title, to_camelot
+from . import settings
+from .common import (AUDIO_EXTS, ARTIST_TITLE, TITLE_ARTIST, is_spam, clean_stem, fold,
+                     halves, split_artist_title, strip_version_tail, to_camelot)
 from .tagio import Track
 
 # Folders Sortero never touches: the user's analysis staging lanes, plus
@@ -31,6 +33,10 @@ class Rec:
     duration: float = 0.0
     bitrate: int = 0
     protected: bool = False
+    # True when the tag was missing and the name had to be read off the
+    # filename. Only tagged names are evidence of how filenames are ordered.
+    artist_from_name: bool = False
+    title_from_name: bool = False
 
     @property
     def top(self):
@@ -85,8 +91,13 @@ def is_protected(rel):
     return any(p in PROTECTED for p in parts)
 
 
-def scan(root, progress=None):
-    """Walk root and read tags. Returns list[Rec]."""
+def scan(root, progress=None, order=None):
+    """Walk root and read tags. Returns list[Rec].
+
+    `order` says how to read a "A - B" filename when a track has no artist or
+    title tag of its own; it defaults to the collection's saved setting.
+    """
+    order = order or settings.get("name_order") or ARTIST_TITLE
     paths = []
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if not d.startswith(".")]
@@ -123,9 +134,11 @@ def scan(root, progress=None):
             r.duration = t.length or 0.0
             r.bitrate = t.bitrate or 0
         if not r.artist or not r.title:
-            a, ti = split_artist_title(clean_stem(p))
-            r.artist = r.artist or a
-            r.title = r.title or ti
+            a, ti = split_artist_title(clean_stem(p), order)
+            if not r.artist and a:
+                r.artist, r.artist_from_name = a, True
+            if not r.title and ti:
+                r.title, r.title_from_name = ti, True
         recs.append(r)
     if progress:
         progress(total, total)
@@ -137,6 +150,139 @@ def _clean(v):
         return None
     v = str(v).strip()
     return v or None
+
+
+# --- which way round are the filenames? --------------------------------------
+def known_artists(recs):
+    """Artists the tags themselves name, mapped to the files that name them.
+
+    Names filled in from a filename are left out on purpose: they only repeat
+    whatever order we already assumed, so counting them would prove nothing.
+    """
+    out = collections.defaultdict(set)
+    for r in recs:
+        if r.artist and not r.artist_from_name:
+            out[fold(r.artist)].add(r.path)
+    return out
+
+
+def _vote(stem, path, known):
+    """Which half of this stem is an artist another file's tags vouch for?
+
+    Returns ARTIST_TITLE, TITLE_ARTIST, or None when neither half (or both)
+    is a known artist. A file never votes on the strength of its own tags.
+    """
+    left, right = halves(stem)
+    if not left:
+        return None
+    left_is = bool(known.get(fold(left), set()) - {path})
+    right_is = bool(known.get(fold(right), set()) - {path})
+    if left_is == right_is:
+        return None
+    return ARTIST_TITLE if left_is else TITLE_ARTIST
+
+
+# A side has to carry this many different repeating names before it counts as
+# the artist side. One token repeating 12 times is a label, a mix designation
+# or a bootleg tag as easily as an artist; several different names each
+# recurring is what a collection of artists actually looks like.
+MIN_REPEATING_NAMES = 3
+
+
+def _repeat_votes(recs):
+    """Which side of the filename recurs, the way an artist does?
+
+    This is all there is when no tag can vouch for anyone: an artist comes back
+    across a collection, a title comes back once. Two things keep it honest -
+    mix and version wording is stripped before counting, because "Extended Mix"
+    recurs for reasons of its own, and a side must carry several different
+    recurring names to count at all.
+    """
+    lefts, rights, pairs = collections.Counter(), collections.Counter(), []
+    for r in recs:
+        left, right = halves(strip_version_tail(clean_stem(r.path)))
+        if not left:
+            continue
+        lefts[fold(left)] += 1
+        rights[fold(right)] += 1
+        pairs.append((fold(left), fold(right)))
+
+    def side(counted, facing, oriented):
+        """Files where the candidate artist side recurs and the other doesn't.
+
+        `oriented` puts the candidate first in every pair, so the same test
+        reads both ways round. Zero unless several different names carried it.
+        """
+        hits = [(name, other) for name, other in oriented
+                if counted[name] > 1 and facing[other] == 1]
+        return (len(hits) if len({name for name, _ in hits}) >= MIN_REPEATING_NAMES
+                else 0)
+
+    return (side(lefts, rights, pairs),
+            side(rights, lefts, [(b, a) for a, b in pairs]))
+
+
+def _settled(a, b):
+    """One stray match shouldn't re-tag anybody's library: want a real majority."""
+    winner, loser = max(a, b), min(a, b)
+    return winner >= 8 and winner >= 3 * max(loser, 1)
+
+
+def name_order_votes(recs):
+    """Work out how this collection's filenames are ordered, from evidence.
+
+    Ask the tags first: for every two-part filename, is the left or the right
+    half an artist that some *other* file's tags name? That settles it for a
+    collection whose tags are mostly right, and no file ever votes on the
+    strength of its own tags.
+
+    When the tags can't say - none written, or every one of them backwards -
+    fall back to which side recurs. Nothing about "A - B" names the artist on
+    its own, but a collection is not one filename: artists come back across it
+    and titles don't. It is the weaker of the two and says so, through "how".
+
+    Returns {"order", "artist_title", "title_artist", "sure", "how"}, where
+    "how" is "tags", "repeats", or None when neither could settle it.
+    """
+    live = [r for r in recs if not r.protected]
+    known = known_artists(live)
+    tally = collections.Counter(
+        v for v in (_vote(clean_stem(r.path), r.path, known) for r in live) if v)
+    at, ta = tally[ARTIST_TITLE], tally[TITLE_ARTIST]
+    how = "tags"
+    if not _settled(at, ta):
+        at, ta = _repeat_votes(live)
+        how = "repeats"
+    sure = _settled(at, ta)
+    return {"order": TITLE_ARTIST if ta > at else ARTIST_TITLE,
+            "artist_title": at, "title_artist": ta,
+            "sure": sure, "how": how if sure else None}
+
+
+def looks_swapped(recs):
+    """Tracks whose artist tag is really the title, and vice versa.
+
+    The evidence is the filename: its second half is an artist another file's
+    tags name, its first half is nobody we know of, and this track's own tags
+    follow that same wrong order. Everything found here is a suggestion for
+    the user to confirm, never something Sortero acts on by itself.
+
+    Only real tags count. A track whose names were read off the filename has
+    nothing wrong written to it yet - that one is the name-order setting's job.
+    """
+    live = [r for r in recs if not r.protected]
+    known = known_artists(live)
+    out = []
+    for r in live:
+        if not (r.artist and r.title) or r.artist_from_name or r.title_from_name:
+            continue
+        stem = clean_stem(r.path)
+        left, right = halves(stem)
+        if not left or _vote(stem, r.path, known) != TITLE_ARTIST:
+            continue
+        if fold(r.artist) == fold(left) and fold(r.title) == fold(right):
+            out.append(r)
+    return out
 
 
 def health(recs):
@@ -158,6 +304,8 @@ def health(recs):
         "spam_comment": spam_comment,
         "no_energy": [r for r in live if r.energy is None],
         "low_bitrate": [r for r in live if 0 < r.bitrate < 192000],
+        "swapped": looks_swapped(live),
+        "name_order": name_order_votes(live),
         "genres": collections.Counter(r.genre for r in live if r.genre and not is_spam(r.genre)),
         "keys": collections.Counter(r.camelot for r in live if r.camelot),
         "tops": collections.Counter(r.top for r in recs),

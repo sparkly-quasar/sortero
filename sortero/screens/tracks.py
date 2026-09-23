@@ -7,15 +7,19 @@ import os, re, threading
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from .. import ui, organize, genres, folders, review, paths
+from .. import ui, organize, genres, folders, review, paths, fixtags, settings
+from ..common import ARTIST_TITLE, NAME_ORDERS, NAME_ORDER_LABELS
 from .base import Screen, APP, needs_genre, is_mix
 
+# A predicate of None means the screen supplies it: the filter needs to look at
+# the whole collection, not one track.
 FILTERS = [
     ("all", "All tracks", lambda r: True),
     ("genre", "Needs a genre", needs_genre),
     ("key", "Not analysed yet (no key)", lambda r: not r.analyzed),
     ("energy", "No energy rating", lambda r: r.energy is None),
     ("artist", "No artist", lambda r: not r.artist),
+    ("swapped", "Artist and title look swapped", None),
     ("bpm", "No BPM", lambda r: not r.bpm),
     ("bitrate", "Low bitrate (under 192 kbps)",
      lambda r: 0 < (getattr(r, "bitrate", 0) or 0) < 192000),
@@ -56,6 +60,12 @@ class LibraryScreen(Screen):
     def build(self):
         top = ttk.Frame(self)
         top.pack(fill="x", pady=(0, ui.GAP))
+        # packed before the left-hand controls so its width is reserved; the
+        # filter, search box and their labels together overflow this row in a
+        # small window and would otherwise clip it
+        self.hide_mixes = tk.BooleanVar(value=True)
+        ttk.Checkbutton(top, text="Hide set recordings", variable=self.hide_mixes,
+                        command=self.refresh).pack(side="right")
         ttk.Label(top, text="Show").pack(side="left")
         self.filter_var = tk.StringVar(value=LABELS["all"])
         box = ttk.Combobox(top, textvariable=self.filter_var, width=26, state="readonly",
@@ -67,9 +77,6 @@ class LibraryScreen(Screen):
         ttk.Entry(top, textvariable=self.search_var, width=24).pack(side="left",
                                                                     padx=(ui.GAP, 0))
         self.search_var.trace_add("write", lambda *a: self._debounce())
-        self.hide_mixes = tk.BooleanVar(value=True)
-        ttk.Checkbutton(top, text="Hide set recordings", variable=self.hide_mixes,
-                        command=self.refresh).pack(side="right")
 
         # appears only while Discogs is being asked, or has answers waiting
         self.strip = ttk.Frame(self)
@@ -105,6 +112,9 @@ class LibraryScreen(Screen):
             ("Look up selected on Discogs…", self.lookup),
             ("Use folder names as genres…", self.apply_from_folder),
             None,
+            ("Swap artist and title on selected…", self.swap_names),
+            ("Read artist and title from the filename…", self.names_from_file),
+            None,
             ("Send selected to analysis…", self.stage),
             ("Place selected one by one…", self.review_one_by_one),
             ("Place a folder's tracks by hand…", lambda: self.app.review_folder()),
@@ -126,6 +136,13 @@ class LibraryScreen(Screen):
             if label == self.filter_var.get():
                 return k
         return "all"
+
+    def _pred(self, key):
+        """The test for the chosen filter, including the ones needing context."""
+        if key == "swapped":
+            suspect = {r.path for r in (self.app.health or {}).get("swapped", ())}
+            return lambda r: r.path in suspect
+        return dict((k, fn) for k, _, fn in FILTERS)[key]
 
     def set_filter(self, key):
         self.filter_var.set(LABELS.get(key, LABELS["all"]))
@@ -170,7 +187,7 @@ class LibraryScreen(Screen):
         self.rows = []
         recs = self.app.recs
         if recs:
-            pred = dict((k, fn) for k, _, fn in FILTERS)[self.filter_key()]
+            pred = self._pred(self.filter_key())
             q = self.search_var.get().strip().lower()
             hide = self.hide_mixes.get()
             rows = [r for r in recs
@@ -293,7 +310,7 @@ class LibraryScreen(Screen):
         for r in recs:
             d = os.path.dirname(r.rel)
             g = folders.genre_of_folder(d) if d else None
-            if (g and g not in (organize.UNSORTED, organize.TRACKS_DIR)
+            if (g and g not in organize.RESERVED_TOP and g != organize.UNSORTED
                     and not folders.looks_like_release(g)
                     and (g in organize.CANONICAL or folders.is_genre_name(g))
                     and g != (r.genre or "").strip()):
@@ -327,6 +344,66 @@ class LibraryScreen(Screen):
             return
         self._write(pairs, f"Accept Discogs' genre for {ui.plural(len(pairs), 'track')}?",
                     then=lambda done: [self.suggested.pop(r.path, None) for r, _ in done])
+
+    # -- artist and title --------------------------------------------------
+    def swap_names(self):
+        """For tracks tagged the wrong way round: put each name in its own field."""
+        recs = self._selected()
+        if not recs:
+            messagebox.showinfo(APP, "Select the tracks whose artist and title are the "
+                                     "wrong way round first.\n\nShow 'Artist and title "
+                                     "look swapped' to let Sortero find the likely ones, "
+                                     "or sort by artist and pick them out yourself.")
+            return
+        changes = fixtags.swap(recs)
+        if not changes:
+            messagebox.showinfo(APP, "Nothing to swap: these tracks have no artist or "
+                                     "title to move.")
+            return
+        self._write_names(changes,
+                          f"Swap artist and title on {ui.plural(len(changes), 'track')}?",
+                          "swap-names")
+
+    def names_from_file(self):
+        """When the tags are a mess but the filenames are right."""
+        recs = self._selected()
+        if not recs:
+            messagebox.showinfo(APP, "Select the tracks to re-read first.")
+            return
+        order = settings.get("name_order")
+        order = order if order in NAME_ORDERS else ARTIST_TITLE
+        changes = fixtags.from_filename(recs, order=order)
+        if not changes:
+            messagebox.showinfo(APP, "Nothing to change: these tags already match the "
+                                     "filenames, or the filenames have no ' - ' to "
+                                     "split on.")
+            return
+        self._write_names(
+            changes, f"Take artist and title from the filename of "
+                     f"{ui.plural(len(changes), 'track')}, read as "
+                     f"{NAME_ORDER_LABELS[order]}?\n\n"
+                     "Tidy up → Clean tags is where that order is set.",
+            "names-from-filename")
+
+    def _write_names(self, changes, question, kind):
+        shown = fixtags.example_lines(changes, 4)
+        more = (f"\n…and {len(changes) - len(shown):,} more."
+                if len(changes) > len(shown) else "")
+        if not messagebox.askyesno(APP, question + "\n\n" + "\n".join(shown) + more
+                                        + "\n\nYou can undo this from History."):
+            return
+        root = self.app.root_dir.get()
+
+        def work(progress, log):
+            return fixtags.apply(root, changes, log=log, progress=progress, kind=kind)
+
+        def done(res):
+            _, n, failed = res
+            messagebox.showinfo(APP, f"Updated {ui.plural(n, 'track')}."
+                                     + (f"\n{failed} couldn't be written." if failed else ""))
+            self.app.changed()
+
+        self.app.task.run(work, done, "Writing tags")
 
     def _write(self, pairs, question, then=None):
         if not messagebox.askyesno(APP, question + "\n\nYou can undo this from History."):

@@ -75,6 +75,10 @@ def plan(root, sources, library_recs, progress=None, hold_unsorted=True):
 
     from .library import Rec as _Rec
     from .common import clean_stem, split_artist_title
+    from . import settings
+
+    # new music is usually named the same way as the rest of the collection
+    order = settings.get("name_order")
 
     results = []
     total = len(files) or 1
@@ -98,9 +102,11 @@ def plan(root, sources, library_recs, progress=None, hold_unsorted=True):
             r.energylevel = (t.get("energylevel") or "").strip() or None
             r.duration = t.length or 0.0
         if not r.artist or not r.title:
-            a, ti = split_artist_title(clean_stem(p))
-            r.artist = r.artist or a
-            r.title = r.title or ti
+            a, ti = split_artist_title(clean_stem(p), order)
+            if not r.artist and a:
+                r.artist, r.artist_from_name = a, True
+            if not r.title and ti:
+                r.title, r.title_from_name = ti, True
 
         if r.size and (r.size, _sig(p, r.size)) in known_sig:
             results.append({"rec": r, "dest": None, "action": "duplicate",

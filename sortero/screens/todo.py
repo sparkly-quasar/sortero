@@ -2,8 +2,8 @@
 import os
 from tkinter import ttk
 
-from .. import ui, importer, paths, review
-from ..common import human_size
+from .. import ui, importer, paths, review, settings
+from ..common import human_size, NAME_ORDERS, NAME_ORDER_LABELS, ARTIST_TITLE
 from .base import Screen, needs_genre, is_mix, in_unsorted
 
 
@@ -98,6 +98,24 @@ class TodoScreen(Screen):
             self._job(f"{ui.plural(len(key), 'track')} not analysed yet",
                       "They have no key. Choose the ones you want and send them to your "
                       "analysis tool.", "Show them", lambda: app.show_library("key"))
+
+        swapped = [r for r in h.get("swapped", []) if not is_mix(r)]
+        if swapped:
+            self._job(f"{ui.plural(len(swapped), 'track')} with artist and title "
+                      "the wrong way round",
+                      "Their artist tag holds the title and the other way about. Check "
+                      "the list and swap the ones that are really wrong.",
+                      "Show them", lambda: app.show_library("swapped"))
+
+        votes = h.get("name_order") or {}
+        saved = settings.get("name_order")
+        saved = saved if saved in NAME_ORDERS else ARTIST_TITLE
+        if votes.get("sure") and votes["order"] != saved:
+            self._job(f"Your filenames look like {NAME_ORDER_LABELS[votes['order']]}",
+                      "Sortero is reading them the other way round, so names it takes "
+                      "from a filename land in the wrong tag. Set the order in Clean "
+                      "tags and it will read them your way.",
+                      "Clean tags…", lambda: app.show("tags"))
 
         spam = len(h["spam_genre"]) + len(h["spam_comment"])
         if spam:

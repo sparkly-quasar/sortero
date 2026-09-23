@@ -1,21 +1,52 @@
 name: Build and release
 
 # Push a tag like v0.1.0 to build all three platforms and attach them to a
-# GitHub release. Also runnable by hand from the Actions tab.
+# GitHub release. Also runnable by hand from the Actions tab, either to
+# rebuild a tag that exists or to cut a new one from the branch you run it on.
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to build and release (e.g. v0.1.0)"
+        description: "Tag to build and release (e.g. v0.1.0). An existing tag is rebuilt from itself; a new one is created on the branch you run this from"
         required: true
 
 permissions:
   contents: write
 
 jobs:
+  # Which commit a hand-started run builds was nobody's decision: checkout took
+  # the branch the run began on, while the release took its name from the tag
+  # typed in. Nothing tied the two together, so binaries could go out under a
+  # name that wasn't theirs. Decide it once here, and let the build follow.
+  ref:
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.pick.outputs.build }}
+    steps:
+      - name: Work out what to build
+        id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag }}
+          REPO: ${{ github.repository }}
+          TRIGGER: ${{ github.ref }}
+        run: |
+          # A tag push builds its own tag. A hand-started run builds the tag it
+          # names when that tag is already there, so a rebuild can't quietly
+          # pick up whatever the branch has moved on to. A tag that doesn't
+          # exist yet has nothing to check out, so the branch the run began on
+          # is built and the release step creates the tag against it.
+          REF="$TRIGGER"
+          if [ -n "$TAG" ] && gh api "repos/$REPO/git/ref/tags/$TAG" >/dev/null 2>&1; then
+            REF="refs/tags/$TAG"
+          fi
+          echo "build=$REF" >> "$GITHUB_OUTPUT"
+          echo "Building $REF"
+
   build:
+    needs: ref
     strategy:
       fail-fast: false
       matrix:
@@ -32,6 +63,31 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.ref.outputs.build }}
+
+      - name: Check the version matches the tag
+        shell: bash
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          # The release is named after the tag, but the app reports the version
+          # built into it, and the updater compares one against the other. Let
+          # the two drift apart and every copy out there is told an update is
+          # waiting that it already has, for good. Checked on each runner, so
+          # what it clears is the tree that binary is actually built from.
+          VERSION=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' sortero/version.py)
+          echo "tag $TAG, sortero/version.py says ${VERSION:-(unreadable)}"
+          if [ -z "$VERSION" ]; then
+            echo "::error::Couldn't read __version__ out of sortero/version.py," \
+                 "so there is nothing to check $TAG against."
+            exit 1
+          fi
+          if [ "$TAG" != "v$VERSION" ]; then
+            echo "::error::$TAG would ship a build that calls itself v$VERSION." \
+                 "Bump sortero/version.py to match the tag, or tag v$VERSION."
+            exit 1
+          fi
 
       # setup-python ships the python.org macOS build, which is universal2 -
       # that is what makes the universal Mac app possible.

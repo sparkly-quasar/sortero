@@ -10,6 +10,8 @@ DEFAULTS = {
     "check_updates_on_launch": True,
     "last_update_check": 0,
     "github_token": "",        # only needed while the repo is private
+    # how "A - B" filenames are read: "artist-title" or "title-artist"
+    "name_order": "artist-title",
 }
 
 

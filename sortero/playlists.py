@@ -366,6 +366,9 @@ def repair(root, recs, dry=True, log=print):
     """
     from .common import clean_stem, split_artist_title
     from .library import Rec
+    from . import settings
+
+    order = settings.get("name_order")
 
     d = playlist_dir(root)
     if not os.path.isdir(d):
@@ -394,7 +397,7 @@ def repair(root, recs, dry=True, log=print):
                 continue
 
             stem = clean_stem(target)
-            a, t = split_artist_title(stem)
+            a, t = split_artist_title(stem, order)
             probe = Rec(path=target, rel=os.path.basename(target), artist=a, title=t)
             hit = match([(a or "", t or stem)], recs)[0]
             if hit["rec"]:

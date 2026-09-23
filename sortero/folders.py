@@ -1,17 +1,20 @@
 """The folders a track can actually live in - this collection's, not a template.
 
-Sortero's own layout is Tracks/<Genre>, but people organise by hand too:
-House/, Techno/Hypnotic Techno/, with release folders underneath. Anything that
-files a track should offer, and prefer, the folders that already exist.
+Sortero's own layout is <Genre>/ at the top of the collection, and people
+organise the same way by hand: House/, Techno/Hypnotic Techno/, with release
+folders underneath. Anything that files a track should offer, and prefer, the
+folders that already exist - including the Tracks/<Genre> of a collection
+Sortero filed before it stopped nesting them.
 """
 import os, re
 
 from .common import AUDIO_EXTS
 from .library import PROTECTED, RECORDING_DIRS
-from .organize import TRACKS_DIR, UNSORTED, canon_genre, safe
+from .organize import RESERVED_TOP, TRACKS_DIR, UNSORTED, canon_genre, genre_dir, safe
 
 # Top-level folders that hold something other than genres.
-NOT_A_HOME = set(PROTECTED) | set(RECORDING_DIRS) | {"Sets", "Albums", "Compilations"}
+NOT_A_HOME = (set(RESERVED_TOP) | set(PROTECTED) | set(RECORDING_DIRS)
+              | {"Sets", "Albums", "Compilations"}) - {TRACKS_DIR}
 
 # Folder names that read like a single release rather than a genre.
 RELEASE_HINT = re.compile(
@@ -30,8 +33,8 @@ GENRE_WORDS = set(
     "driving lounge electro future acid vocal club".split())
 
 
-# The optional energy split files Tracks/<Genre>/Energy 6/... - those folders are
-# part of the layout: never a release to dissolve, and never a genre name.
+# The optional energy split files <Genre>/Energy 6/... - those folders are part
+# of the layout: never a release to dissolve, and never a genre name.
 ENERGY_DIR = re.compile(r"^Energy \d{1,2}$")
 
 
@@ -110,24 +113,23 @@ def homes(root):
 
 
 def uses_tracks_layout(root, choices=None):
-    """Does this collection keep genres under Tracks/, Sortero-style?
+    """Is this collection still filed the old way, under Tracks/?
 
-    True if Tracks/ exists, or if nothing at the top level is a genre folder yet
-    (a fresh collection gets Sortero's layout). False for a library already
-    organised as House/, Techno/ ... at the top.
+    Only when that folder is really there. Genres go at the top of the
+    collection now, so a fresh one is filed that way and so is a library
+    already organised as House/, Techno/ ... A collection Sortero nested
+    earlier is left as it is until a Reorganise moves it, rather than being
+    split across both layouts in the meantime.
     """
-    if os.path.isdir(os.path.join(root, TRACKS_DIR)):
-        return True
-    choices = homes(root) if choices is None else choices
-    return not any(os.sep not in rel and is_genre_name(rel) for rel, _ in choices)
+    return os.path.isdir(os.path.join(root, TRACKS_DIR))
 
 
 def new_home(root, genre, choices=None):
     """Where a genre folder that doesn't exist yet should be created."""
-    name = safe(genre, 60)
     if uses_tracks_layout(root, choices):
-        return os.path.join(root, TRACKS_DIR, name)
-    return os.path.join(root, name)
+        return os.path.join(root, TRACKS_DIR, safe(genre, 60))
+    # at the top level the name has to keep clear of the reserved folders
+    return os.path.join(root, genre_dir(genre))
 
 
 def existing_home(root, genre, choices=None):

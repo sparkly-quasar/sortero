@@ -9,7 +9,7 @@ preserved as M3U8 playlists first, so no curation is lost when files move to
 their canonical home.
 
     <root>/
-      Tracks/<Genre>/Artist - Title.ext     canonical home for every DJ track
+      <Genre>/Artist - Title.ext            canonical home for every DJ track
       Sets/<Set Name>/                      preserved gig folders (optional)
       Albums/<Album>/                       full releases, left intact
       Mixes/                                long-form recordings
@@ -23,6 +23,9 @@ from .library import PROTECTED, Rec
 from .journal import Journal, prune_empty
 from .tagio import Track
 
+# Kept for collections filed the old way, Tracks/<Genre>/. Genres are filed at
+# the top level now; a Reorganise moves an old collection over and the folder
+# goes with it.
 TRACKS_DIR = "Tracks"
 SETS_DIR = "Sets"
 ALBUMS_DIR = "Albums"
@@ -30,6 +33,13 @@ MIXES_DIR = "Mixes"
 PLAYLIST_DIR = "_Playlists"
 QUARANTINE = "_Quarantine"
 UNSORTED = "Unsorted"
+
+# Top-level folders that mean something other than a genre. Under Tracks/ a
+# genre could be called anything; at the top level it shares the floor with
+# these, and a genre folder named "Processed" would have its tracks taken for
+# staging and never touched again.
+RESERVED_TOP = set(PROTECTED) | {TRACKS_DIR, SETS_DIR, ALBUMS_DIR, MIXES_DIR,
+                                 "Compilations", "Recorded Mixes", "Recordings"}
 
 MIX_MIN_SECONDS = 20 * 60          # longer than this and it is a mix, not a track
 
@@ -112,16 +122,30 @@ def energy_folder(r):
     return f"Energy {e}" if e is not None else None
 
 
+def genre_dir(genre):
+    """The top-level folder a genre is filed in.
+
+    Names that would collide with a folder meaning something else get said so,
+    because at the top level "Mixes" the genre and "Mixes" the recordings
+    folder are the same path.
+    """
+    name = safe(genre, 60)
+    if name.casefold() in {r.casefold() for r in RESERVED_TOP}:
+        name = f"{name} (genre)"
+    return name
+
+
 def track_genre(root, dest):
     """The genre folder a planned track destination sits under, or None.
 
-    Robust to the optional Energy subfolder: the genre is always the first
-    segment under Tracks/, whether the path is Tracks/<Genre>/file or
-    Tracks/<Genre>/Energy 6/file.
+    The genre is the first segment, whether the path is <Genre>/file or
+    <Genre>/Energy 6/file, and whatever a legacy Tracks/<Genre>/... holds.
     """
     parts = os.path.relpath(dest, root).split(os.sep)
     if len(parts) >= 3 and parts[0] == TRACKS_DIR:
         return parts[1]
+    if len(parts) >= 2 and parts[0] not in RESERVED_TOP:
+        return parts[0]
     return None
 
 
@@ -276,7 +300,7 @@ def plan(root, recs, keep_sets=True, min_genre=None, route_unanalyzed=False,
         if cat == "track":
             if sub in small:
                 sub = UNSORTED
-            dest_dir = os.path.join(root, TRACKS_DIR, safe(sub, 60))
+            dest_dir = os.path.join(root, genre_dir(sub))
             if by_energy:
                 ef = energy_folder(r)
                 if ef:
@@ -319,7 +343,7 @@ def plan(root, recs, keep_sets=True, min_genre=None, route_unanalyzed=False,
         if r.protected:
             continue
         folder = os.path.dirname(r.rel)
-        if not folder:
+        if not folder or is_filing_folder(folder):
             continue
         name = safe(folder.replace(os.sep, " - "), 100)
         dest = resolve(r.path)
@@ -377,10 +401,30 @@ def write_playlists(root, playlists, journal=None, dry=False, min_tracks=2):
     return written
 
 
+def is_filing_folder(rel):
+    """Is this folder Sortero's own filing rather than somebody's curation?
+
+    Every folder a collection had becomes a playlist, which is how a gig set or
+    a vibe import survives being reorganised. A genre folder is not curation
+    though - it is where the track lives - so turning those into playlists
+    would fill _Playlists with a copy of the genre tree under another name.
+    That was a quiet oddity while genres sat under Tracks/; with them at the
+    top level a reorganise would name the playlist after the folder it just
+    filed the track into.
+    """
+    parts = (rel or "").split(os.sep)
+    if not parts or not parts[0]:
+        return False
+    if parts[0] in RESERVED_TOP or parts[0] == UNSORTED:
+        return True
+    return bool(canon_genre(parts[0], strict=True))
+
+
 def folder_playlist_name(rec):
-    """The playlist name a track's current folder maps to, or None at the root."""
+    """The playlist name a track's current folder maps to, or None when the
+    folder is the root or Sortero's own filing."""
     folder = os.path.dirname(rec.rel)
-    if not folder:
+    if not folder or is_filing_folder(folder):
         return None
     return safe(folder.replace(os.sep, " - "), 100)
 
@@ -404,7 +448,12 @@ def stage_for_analysis(root, recs, all_recs=None, detail="broad", log=print, pro
     owed = []
     for r in recs:
         n = folder_playlist_name(r)
-        from_genre_folder = r.rel.split(os.sep)[0] == TRACKS_DIR
+        # A track sitting in a genre folder is remembered as that genre; one in
+        # a folder somebody curated is remembered as a playlist to rejoin. With
+        # genres at the top level the two look alike, so ask the vocabulary.
+        top = r.rel.split(os.sep)[0]
+        from_genre_folder = (top == TRACKS_DIR or top == UNSORTED
+                             or bool(canon_genre(top, strict=True)))
         # store the canonical genre either way, so it comes back as a real
         # folder name rather than a raw tag like "Techno, Electronic, Minimal"
         owed.append((r, [] if from_genre_folder else ([n] if n else []),
@@ -479,14 +528,13 @@ def apply(root, moves, playlists, log=print, progress=None):
             # file too. Otherwise the folder knows the genre and the tag doesn't,
             # and every other tool - including Sortero's own Genres tab - still
             # sees the track as untagged.
-            parts = os.path.relpath(final, root).split(os.sep)
-            if (len(parts) > 2 and parts[0] == TRACKS_DIR
-                    and parts[1] != UNSORTED and not (r.genre or "").strip()):
+            genre = track_genre(root, final)
+            if genre and genre != UNSORTED and not (r.genre or "").strip():
                 t = Track(final)
                 if t.ok and not (t.get("genre") or "").strip():
-                    t.set("genre", parts[1])
+                    t.set("genre", genre)
                     if t.save():
-                        j.tagged(final, {"genre": {"old": None, "new": parts[1]}})
+                        j.tagged(final, {"genre": {"old": None, "new": genre}})
         except Exception as e:
             log(f"  ! {os.path.basename(r.path)}: {e}")
     # playlists reference post-move paths; honour any collision renames

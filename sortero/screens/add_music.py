@@ -56,9 +56,11 @@ class AddMusicScreen(Screen):
         f, self.tv = ui.tree(self, [("action", "What happens", 120), ("track", "Track", 280),
                                     ("dest", "Goes to", 280), ("why", "Why", 220)], height=11)
         f.pack(fill="both", expand=True)
-        self.bar.set_more([("Place held-back tracks…", self.open_review),
-                           None,
-                           ("Clear the list", self.clear)])
+        # Held-back tracks are the whole point of holding them back: when the
+        # preview says some are waiting, say so where the buttons are, not in
+        # a menu the user has no reason to open.
+        self.place_btn = ttk.Button(self.bar.left, command=self.open_review)
+        self.bar.set_more([("Clear the list", self.clear)])
         self.sources, self.results = [], None
         self._sync()
 
@@ -81,8 +83,13 @@ class AddMusicScreen(Screen):
             self.bar.set_primary(f"Add {ui.plural(n, 'track')}…", self.apply)
         else:
             self.bar.set_primary("Add tracks", self.apply, state="disabled")
-        self.bar.enable("Place held-back tracks…",
-                        any(x["action"] == "needs-folder" for x in res))
+        held = sum(1 for x in res if x["action"] == "needs-folder")
+        if held:
+            self.place_btn.configure(text=f"Place {ui.plural(held, 'held-back track')}…")
+            if not self.place_btn.winfo_ismapped():
+                self.place_btn.pack(side="left", padx=(0, ui.GAP))
+        else:
+            self.place_btn.pack_forget()
         self.bar.enable("Clear the list", bool(self.sources))
 
     def clear(self):

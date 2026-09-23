@@ -9,11 +9,24 @@ from .organize import canon_genre
 
 FIXES = ("energy", "spam", "artist", "genre")
 FIX_LABELS = {
-    "energy": "Copy Mixed In Key's energy rating into Grouping, where DJ apps can sort it",
+    "energy": "Copy Mixed In Key's key and energy (like '8A - Energy 6') into the "
+              "Grouping tag, a column DJ apps can show and sort by",
     "spam": "Clear download-site spam from Genre and Comment",
     "artist": "Fill in a missing artist or title from the filename",
     "genre": "Tidy genre names into one consistent set",
 }
+
+# What each tag is called on screen. "grouping" alone means nothing to most
+# people; what Sortero puts there is the key and energy.
+FIELD_LABELS = {
+    "grouping": "Key + energy (Grouping)", "key": "Key", "genre": "Genre",
+    "comment": "Comment", "artist": "Artist", "title": "Title", "bpm": "BPM",
+    "album": "Album",
+}
+
+
+def field_label(field):
+    return FIELD_LABELS.get(field, field.capitalize())
 
 
 def tagged_names(r):
@@ -143,7 +156,7 @@ def summarize(changes):
     c = collections.Counter()
     for r, ch in changes:
         for field, (old, new) in ch.items():
-            c[f"{field}: {'cleared' if new is None else 'set'}"] += 1
+            c[f"{field_label(field)}: {'cleared' if new is None else 'set'}"] += 1
     c["files affected"] = len(changes)
     return c
 

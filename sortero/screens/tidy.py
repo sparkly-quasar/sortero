@@ -131,7 +131,7 @@ class CleanTagsScreen(ToolScreen):
         self.pending.pack(anchor="w")
         self.result = ttk.Label(self, style="Muted.TLabel")
         self.result.pack(anchor="w", pady=(0, 4))
-        f, self.tv = ui.tree(self, [("track", "Track", 300), ("field", "Tag", 80),
+        f, self.tv = ui.tree(self, [("track", "Track", 300), ("field", "Tag", 170),
                                     ("before", "Now", 240), ("after", "Becomes", 240)],
                              height=11)
         f.pack(fill="both", expand=True)
@@ -285,7 +285,7 @@ class CleanTagsScreen(ToolScreen):
                 if shown >= 2000:
                     break
                 self.tv.insert("", "end", values=(
-                    os.path.basename(r.path), field,
+                    os.path.basename(r.path), fixtags.field_label(field),
                     "" if old is None else str(old)[:120],
                     "(cleared)" if new is None else str(new)[:120]))
                 shown += 1

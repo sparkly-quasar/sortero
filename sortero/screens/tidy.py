@@ -195,6 +195,12 @@ class CleanTagsScreen(ToolScreen):
                            if n else None)
         card.pack(fill="x")
 
+    def only(self, *fixes):
+        """Tick just these fixes. A To do card names one problem, so Clean tags
+        should open on that problem alone, not on everything it can do."""
+        for k, v in self.vars.items():
+            v.set(k in fixes)
+
     # -- how filenames are read -------------------------------------------
     def order(self):
         o = settings.get("name_order")

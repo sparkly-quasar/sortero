@@ -115,13 +115,13 @@ class TodoScreen(Screen):
                       "Sortero is reading them the other way round, so names it takes "
                       "from a filename land in the wrong tag. Set the order in Clean "
                       "tags and it will read them your way.",
-                      "Clean tags…", lambda: app.show("tags"))
+                      "Clean tags…", lambda: app.clean_tags("artist"))
 
         spam = len(h["spam_genre"]) + len(h["spam_comment"])
         if spam:
             self._job(f"{ui.plural(spam, 'tag')} full of download-site spam",
-                      "Clean tags clears it, and can fill in missing artists and energy "
-                      "ratings while it's there.", "Clean tags…", lambda: app.show("tags"))
+                      "Clean tags clears it. You'll see every change before anything "
+                      "is written.", "Clean tags…", lambda: app.clean_tags("spam"))
 
         waiting = count_in(root, importer.TO_PROCESS)
         if waiting:

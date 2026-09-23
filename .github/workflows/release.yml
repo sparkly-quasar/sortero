@@ -15,6 +15,9 @@ on:
 permissions:
   contents: write
 
+env:
+  LAST_PUBLIC: v0.18.0
+
 jobs:
   # Which commit a hand-started run builds was nobody's decision: checkout took
   # the branch the run began on, while the release took its name from the tag
@@ -163,6 +166,8 @@ jobs:
           name: Sortero ${{ github.event.inputs.tag || github.ref_name }}
           generate_release_notes: true
           body: |
+            ${{ (github.event.inputs.tag || github.ref_name) == env.LAST_PUBLIC && 'This is the last release with public downloads. Updating to it gives every copy the new updater; later updates install with one click for Supporter licence holders.' || '' }}
+
             Sortero is free and open source: build it yourself by following
             [Building from source](https://github.com/sparkly-quasar/sortero#building-from-source).
 
@@ -176,3 +181,15 @@ jobs:
             Windows and Linux, with one-click updates.
 
             ---
+
+      # Copies from before the Supporter licence update from the public release
+      # and can't present a key. LAST_PUBLIC also goes out publicly, so every
+      # copy can update onto the licence-aware updater; after it, builds are
+      # private only.
+      - name: Attach builds publicly (last public release only)
+        if: (github.event.inputs.tag || github.ref_name) == env.LAST_PUBLIC
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          files: artifacts/**/*.zip
+          fail_on_unmatched_files: true

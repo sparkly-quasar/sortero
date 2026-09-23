@@ -404,7 +404,7 @@ Sortero runs on **macOS, Windows and Linux**, two ways:
 - **From source, free** — every feature; see [Building from source](#building-from-source)
   or [Running without building](#running-without-building).
 
-Builds up to v0.13.0 are still on the [Releases page](../../releases).
+Builds up to v0.18.0 are still on the [Releases page](../../releases).
 
 ### macOS: first launch
 

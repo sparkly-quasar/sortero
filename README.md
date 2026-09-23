@@ -67,7 +67,7 @@ under **More** next to it.
 | **Add music** | Choose a folder or files. Analysed tracks go to the folder that already means their genre — yours if you have one. Anything missing a key lands in `To Be Processed`. Tracks with no genre to go on are **held back for you to place** instead of being dropped in `Unsorted`. Tracks already in the library are pointed out, not added twice. |
 | **Library** | Every track in one list. **Show** filters to what needs work (no genre, not analysed, no energy, no artist, no BPM, low bitrate); **Search** narrows it; click a column heading to sort. Select tracks and set a genre, send them to analysis, place them one by one, copy genres from folder names, or look them up on Discogs. Your own set recordings are hidden unless you ask. |
 | **Playlists** | Rebuild a Spotify or TIDAL playlist against your local files from a link, a pasted tracklist or a CSV. **More** rebuilds the folder playlists or repairs broken links. |
-| **Tidy up** | Tools for an existing collection: **Clean tags**, **Find duplicates**, **Place a folder's tracks by hand**, **Flatten release folders**, **Fix playlist links**, and **Reorganise the whole collection**. Every tool previews before it changes anything. |
+| **Tidy up** | Tools for an existing collection: **Clean tags**, **Fix wrong BPMs**, **Find duplicates**, **Place a folder's tracks by hand**, **Flatten release folders**, **Fix playlist links**, and **Reorganise the whole collection**. Every tool previews before it changes anything. |
 | **History** | Every operation, with undo, and the **safety net**. **Show log** reveals the detailed log. |
 | **Settings** | Collection folder, update checks, Discogs token, Spotify and TIDAL accounts, and the setup guide. |
 
@@ -220,6 +220,36 @@ like a whole label's archive or a Beatport top 100 dump, are listed but left
 unticked. Filenames are kept; a clash gets a number rather than overwriting. The
 release name can be kept in the Album tag, playlists follow the moved files, and
 undo puts the release folders back exactly.
+
+## Fixing wrong BPMs
+
+Beat detection often locks on to the wrong pulse. Rolling percussion in
+hypnotic techno makes a 140 track read as 93.33 (two-thirds), and a sparse one
+reads as 70 (half). The number is precise, just scaled, so DJ software shows
+it confidently and sync is useless.
+
+**Tidy up → Fix wrong BPMs** checks the whole collection or one folder you
+choose (remembered for next time). It looks only at tracks whose BPM is unusual for
+their genre (a techno track at 93), listens to a minute of each, and suggests
+a fix only when the audio's strongest tempo sits right on a whole multiple of
+the current value: x2, x3/2 or x4/3, or the inverse. For x3/2 and x4/3 the
+audio must also clearly prefer the new tempo, since a slow track with triplet
+hats pulses at both. Genres without a typical tempo (downtempo, breaks,
+hip-hop, disco) are never touched, and anything that isn't clear-cut is left
+alone.
+
+Before fixing anything you can listen: select a row and it plays from the
+part of the track Sortero checked, with a scrub bar and ±15s. Tap along to
+the kick (**Tap**, or **T**) and Sortero says whether your tempo matches the
+fix or the current BPM. Tapping every other kick counts too. Leave out any
+track that doesn't sound right.
+
+Mixxx keeps its own BPM and beatgrid and ignores the file's tag once it has
+analysed a track, so fixing the tag alone changes nothing there. If Sortero
+finds Mixxx's library it corrects that too, **while Mixxx is closed**. It
+backs the library up first, moves the grid's first beat onto a kick where
+needed, and locks the corrected BPM so a re-analysis doesn't bring back the
+wrong one. Tags and Mixxx changes both undo from History.
 
 ## Streaming playlists
 

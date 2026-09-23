@@ -51,6 +51,8 @@ TOLERANCE = 0.012       # how close a multiple must land to the measured tempo
 MARGIN = 0.05
 OCTAVES = (2.0, 0.5)
 
+_backed_up = set()      # Mixxx libraries already backed up this run
+
 RATIO_NAMES = {2.0: "x2", 1.5: "x3/2", 4 / 3: "x4/3",
                0.5: "x1/2", 2 / 3: "x2/3", 0.75: "x3/4"}
 
@@ -233,8 +235,10 @@ def apply(root, fixes, log=print, progress=None):
 
     if mx:
         db = mx[0]["db"]
-        backup = mixxx.backup(db)
-        log(f"Backed up Mixxx's library to {backup}")
+        # Once per run: fixing one track at a time shouldn't copy the library each time.
+        if db not in _backed_up:
+            log(f"Backed up Mixxx's library to {mixxx.backup(db)}")
+            _backed_up.add(db)
         # Lock the corrected BPM, or Mixxx's next re-analysis puts the wrong one back.
         mixxx.write(db, [(m["id"], m["new_bpm"], m["new_beats"], True) for m in mx])
         for m in mx:

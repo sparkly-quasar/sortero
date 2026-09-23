@@ -332,7 +332,9 @@ Before fixing anything you can listen: select a row and it plays from the
 part of the track Sortero checked, with a scrub bar and ±15s. Tap along to
 the kick (**Tap**, or **T**) and Sortero says whether your tempo matches the
 fix or the current BPM. Tapping every other kick counts too. Leave out any
-track that doesn't sound right.
+track that doesn't sound right. **Fix this track** corrects the selected one
+and moves to the next; **More → Switch to fixing all tracks at once** turns the
+button into one that fixes the whole list.
 
 Mixxx keeps its own BPM and beatgrid and ignores the file's tag once it has
 analysed a track, so fixing the tag alone changes nothing there. If Sortero

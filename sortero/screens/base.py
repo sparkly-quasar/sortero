@@ -62,6 +62,10 @@ class Screen(ttk.Frame):
     def shown(self):
         pass
 
+    def hidden(self):
+        """Runs when another screen takes this one's place."""
+        pass
+
     def need_scan(self):
         if self.app.recs:
             return False

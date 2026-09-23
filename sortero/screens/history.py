@@ -12,6 +12,7 @@ KINDS = {
     "fixtags": "Cleaned tags",
     "swap-names": "Swapped artist and title",
     "names-from-filename": "Read names from filenames",
+    "fix-bpm": "Fixed BPMs",
     "dedupe": "Set duplicates aside",
     "flatten": "Flattened release folders",
     "set-genre": "Set genres",

@@ -165,7 +165,7 @@ class CleanTagsScreen(ToolScreen):
         suspects, judged = self._suspects()
         n = len(suspects)
         share = n / len(judged) if judged else 0.0
-        title = "Artist and title the wrong way round"
+        title = "Artist and title the wrong way round?"
         # Lead with the whole-collection swap only when the evidence is that the
         # whole collection is the problem. With a handful of suspects the
         # precise instrument is the right one to offer first.
@@ -286,7 +286,8 @@ class CleanTagsScreen(ToolScreen):
                     break
                 self.tv.insert("", "end", values=(
                     os.path.basename(r.path), fixtags.field_label(field),
-                    "" if old is None else str(old)[:120],
+                    # a blank cell reads as missing data; say the tag is empty now
+                    "(empty)" if old in (None, "") else str(old)[:120],
                     "(cleared)" if new is None else str(new)[:120]))
                 shown += 1
         if not changes:

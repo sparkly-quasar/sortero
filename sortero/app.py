@@ -261,6 +261,11 @@ class Sortero(tk.Tk):
         self._paint_nav(scr.nav or scr.key, True)
         scr.shown()
 
+    def clean_tags(self, *fixes):
+        """Open Clean tags with only these fixes ticked."""
+        self.screens["tags"].only(*fixes)
+        self.show("tags")
+
     def show_library(self, filter_key):
         self.screens["library"].set_filter(filter_key)
         self.show("library")

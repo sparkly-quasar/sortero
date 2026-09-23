@@ -7,7 +7,7 @@ and the server's address are public by design.
 # The Cloudflare Worker from server/, for example
 # "https://sortero-pro.yourname.workers.dev". Updates, downloads and
 # subscription checks all go through it.
-SERVER = ""
+SERVER = "https://sortero-pro.habituatingtowholeness.workers.dev"
 
 # One entry per Stripe Payment Link. Leave "url" empty to show a plan as not on
 # sale yet. Only https://buy.stripe.com/ links are opened. The Supporter licence

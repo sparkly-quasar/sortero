@@ -200,12 +200,13 @@ class FixBpmScreen(ToolScreen):
         self.listen = ttk.Label(self, style="Muted.TLabel",
                                 text="Select a track to listen to it. Tap along to the kick "
                                      "(the Tap button, or T) to check the fix by ear.")
-        self.listen.pack(anchor="w")
+        self.listen.pack(anchor="w", fill="x")
         self.current = None
+        # Track names make these lines long: wrap them to the window's width.
+        self.bind("<Configure>", self._wrap, add="+")
 
-        self.bar.set_more([("Leave out selected tracks", self.leave_out),
-                           None,
-                           ("Check again", self.preview)])
+        # The main button fixes the selected track; More switches it to all of them.
+        self.fix_all = False
         self._reset()
 
     def invalidate(self):
@@ -214,6 +215,11 @@ class FixBpmScreen(ToolScreen):
     def hidden(self):
         self.player.stop()
 
+    def _wrap(self, e=None):
+        width = max(200, self.winfo_width() - 2 * ui.PAD)
+        for lab in (self.result, self.listen):
+            lab.configure(wraplength=width, justify="left")
+
     def _reset(self, clear=False):
         self.fixes = None
         if clear:
@@ -221,7 +227,7 @@ class FixBpmScreen(ToolScreen):
             self.result.configure(text="")
             self._select()
         self.bar.set_primary("Check BPMs", self.preview)
-        self.bar.enable("Leave out selected tracks", False)
+        self._menu()
 
     def _label_folder(self):
         if self.folder:
@@ -294,6 +300,7 @@ class FixBpmScreen(ToolScreen):
         if f is self.current:
             return
         self.current = f
+        self._buttons()
         if f is None:
             self.player.clear()
             return
@@ -323,12 +330,38 @@ class FixBpmScreen(ToolScreen):
                 os.path.basename(f.rec.path), f.genre, bpmfix.RATIO_NAMES[f.ratio],
                 self._change(*f.tag[:2]) if f.tag else "",
                 self._change(f"{m['old_bpm']:.2f}", f"{m['new_bpm']:.2f}") if m else ""))
-        n = len(self.fixes)
-        if n:
-            self.bar.set_primary(f"Fix {ui.plural(n, 'track')}…", self.apply)
-        else:
+        self._buttons()
+        self._menu()
+
+    # -- buttons -----------------------------------------------------------
+    MODE_ALL = "Switch to fixing all tracks at once"
+    MODE_ONE = "Switch to fixing one track at a time"
+
+    def _menu(self):
+        self.bar.set_more([("Leave out selected tracks", self.leave_out),
+                           None,
+                           (self.MODE_ONE if self.fix_all else self.MODE_ALL,
+                            self._toggle_mode),
+                           None,
+                           ("Check again", self.preview)])
+        self.bar.enable("Leave out selected tracks", bool(self.fixes))
+
+    def _toggle_mode(self):
+        self.fix_all = not self.fix_all
+        self._menu()
+        self._buttons()
+
+    def _buttons(self):
+        if self.fixes is None:
+            return
+        if not self.fixes:
             self.bar.set_primary("Check again", self.preview)
-        self.bar.enable("Leave out selected tracks", bool(n))
+        elif self.fix_all:
+            self.bar.set_primary(f"Fix all {ui.plural(len(self.fixes), 'track')}…",
+                                 self.apply)
+        else:
+            self.bar.set_primary("Fix this track", self.apply_one,
+                                 state="normal" if self.current else "disabled")
 
     def preview(self):
         if self.need_scan():
@@ -370,15 +403,58 @@ class FixBpmScreen(ToolScreen):
         self.fixes = [f for i, f in enumerate(self.fixes) if i not in drop]
         self._show()
 
-    def apply(self):
-        if not self.fixes:
-            return
-        in_mixxx = sum(1 for f in self.fixes if f.mixxx)
-        if in_mixxx and mixxx.running():
+    def _mixxx_open(self, fixes):
+        if any(f.mixxx for f in fixes) and mixxx.running():
             messagebox.showinfo(APP, "Quit Mixxx first, then try again.\n\nMixxx keeps its "
                                      "library in memory and would overwrite these changes "
                                      "when it closes.")
+            return True
+        return False
+
+    def apply_one(self):
+        """Fix the selected track, then move on to the next one in the list."""
+        f = self.current
+        if f is None or self._mixxx_open([f]):
             return
+        root = self.app.root_dir.get()
+        old, new = self._values(f)
+
+        def work(progress, log):
+            return bpmfix.apply(root, [f], log=log)
+
+        def done(res):
+            _, failed = res
+            name = os.path.basename(f.rec.path)
+            if failed:
+                self.listen.configure(text=f"Couldn't write the tag in {name}.")
+                return
+            i = self.fixes.index(f)
+            self.fixes.remove(f)
+            self.tv.delete(self.tv.get_children()[i])
+            # No re-read: nothing moved, and a re-read would clear this list.
+            self.app.screens["history"].refresh()
+            self.app.refresh_banner()
+            rows = self.tv.get_children()
+            if rows:
+                nxt = rows[min(i, len(rows) - 1)]
+                self.tv.selection_set(nxt)
+                self.tv.focus(nxt)
+                self.tv.see(nxt)
+            else:
+                self._select()
+            self._buttons()
+            self._menu()
+            left = (f" {ui.plural(len(self.fixes), 'track')} to go." if self.fixes
+                    else " That was the last one.")
+            self.result.configure(text=f"Fixed {name}: {old:g} → {new:g}. You can undo it "
+                                       f"from History.{left}")
+
+        self.app.task.run(work, done, "Fixing BPM")
+
+    def apply(self):
+        if not self.fixes or self._mixxx_open(self.fixes):
+            return
+        in_mixxx = sum(1 for f in self.fixes if f.mixxx)
         tags = sum(1 for f in self.fixes if f.tag)
         msg = f"Correct the BPM tag in {ui.plural(tags, 'file')}"
         if in_mixxx:

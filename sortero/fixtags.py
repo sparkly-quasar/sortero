@@ -152,6 +152,51 @@ def example_lines(changes, n=3):
     return out
 
 
+def _short(v, n=48):
+    v = str(v)
+    return v if len(v) <= n else v[:n - 1] + "…"
+
+
+def overview_lines(changes):
+    """What a clean-up does, one line per kind of change, largest first.
+
+    The name-based example lines only fit jobs that change names. For a clean-up
+    that clears a genre, they show the same name either side of 'becomes', which
+    reads as nothing happening.
+    """
+    c = collections.Counter()
+    for r, ch in changes:
+        for field, (old, new) in ch.items():
+            how = "clear" if new is None else "fill" if old in (None, "") else "change"
+            c[(field, how)] += 1
+    verbs = {"clear": "Clear download-site text from {} on {}",
+             "fill": "Fill in {} on {}", "change": "Change {} on {}"}
+    out = []
+    for (field, how), k in c.most_common():
+        files = f"{k:,} file" + ("" if k == 1 else "s")
+        out.append("• " + verbs[how].format(field_label(field), files))
+    return out
+
+
+def change_lines(changes, n=3):
+    """A few real changes, each saying which tag goes from what to what."""
+    out = []
+    for r, ch in changes[:n]:
+        name = (f"{r.artist} - {r.title}" if r.artist and r.title
+                else os.path.basename(r.path))
+        parts = []
+        for field, (old, new) in ch.items():
+            label = field_label(field)
+            if new is None:
+                parts.append(f"{label} '{_short(old)}' is cleared")
+            elif old in (None, ""):
+                parts.append(f"{label} is set to '{_short(new)}'")
+            else:
+                parts.append(f"{label} '{_short(old)}' becomes '{_short(new)}'")
+        out.append(f"{_short(name, 60)}: " + "; ".join(parts))
+    return out
+
+
 def summarize(changes):
     c = collections.Counter()
     for r, ch in changes:

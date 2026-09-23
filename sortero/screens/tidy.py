@@ -326,11 +326,20 @@ class CleanTagsScreen(ToolScreen):
             return
         spec = JOBS[job]
         msg = spec["confirm"].format(n=ui.plural(len(self.changes), "file"))
-        lines = fixtags.example_lines(self.changes)
-        if lines:
-            msg += "\n\n" + "\n".join(lines)
+        if job == "fixes":
+            # a clean-up doesn't touch names, so say which tags change and how
+            msg += "\n\n" + "\n".join(fixtags.overview_lines(self.changes))
+            lines = fixtags.change_lines(self.changes)
+            msg += "\n\nFor example:\n" + "\n".join(lines)
             if len(self.changes) > len(lines):
-                msg += f"\n…and {len(self.changes) - len(lines):,} more."
+                msg += f"\n…and {len(self.changes) - len(lines):,} more files."
+            msg += "\n\nOnly these tags change. The audio isn't touched."
+        else:
+            lines = fixtags.example_lines(self.changes)
+            if lines:
+                msg += "\n\n" + "\n".join(lines)
+                if len(self.changes) > len(lines):
+                    msg += f"\n…and {len(self.changes) - len(lines):,} more."
         if job == "swap":
             msg += "\n\n" + self._evidence_note()
             msg += "\n\nYou can undo this from History, and swapping twice puts it back."

@@ -28,6 +28,35 @@ reference a track, they don't copy it. Sortero applies that:
 - **Nothing is deleted.** Extra copies go to `_Quarantine/`. Every operation is
   journalled and reversible from History.
 
+## Screenshots
+
+Taken on Linux with a sample collection of made-up artists.
+
+**To do** lists what needs your attention, most useful first.
+
+![To do](docs/screenshots/todo.png)
+
+**Library** shows every track with its key, BPM, energy and genre.
+
+![Library](docs/screenshots/library.png)
+
+**Tidy up** gathers the tools for fixing the collection you already have.
+
+![Tidy up](docs/screenshots/tidy-up.png)
+
+**Clean tags** lists every change before anything is written.
+
+![Clean tags](docs/screenshots/clean-tags.png)
+
+**Duplicates** finds extra copies and picks one to keep.
+
+![Duplicates](docs/screenshots/duplicates.png)
+
+**Reorganise** previews the move into one genre-folder layout, keeping your
+folders as playlists.
+
+![Reorganise](docs/screenshots/reorganise.png)
+
 ## Layout it produces
 
 ```

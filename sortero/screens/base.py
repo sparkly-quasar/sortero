@@ -4,6 +4,7 @@ from tkinter import ttk, messagebox
 
 from .. import ui, organize, paths
 from ..common import is_spam
+from ..library import genre_ignored, set_genre_ignored   # noqa: F401 (screens use them)
 
 APP = "Sortero"
 RESCAN = "Cmd-R" if paths.IS_MAC else "Ctrl+R"
@@ -11,7 +12,7 @@ RESCAN = "Cmd-R" if paths.IS_MAC else "Ctrl+R"
 
 def needs_genre(r):
     g = (r.genre or "").strip()
-    return not g or is_spam(g)
+    return (not g or is_spam(g)) and not genre_ignored(r)
 
 
 def is_mix(r):

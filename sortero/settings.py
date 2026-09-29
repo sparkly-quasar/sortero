@@ -12,6 +12,8 @@ DEFAULTS = {
     "github_token": "",        # only needed while the repo is private
     # how "A - B" filenames are read: "artist-title" or "title-artist"
     "name_order": "artist-title",
+    # filenames (lowercased) of tracks never flagged as needing a genre
+    "genre_ignored": [],
 }
 
 

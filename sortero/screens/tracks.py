@@ -7,15 +7,16 @@ import os, re, threading
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from .. import ui, organize, genres, folders, review, paths, fixtags, settings
+from .. import ui, organize, genres, folders, review, paths, fixtags, settings, library
 from ..common import ARTIST_TITLE, NAME_ORDERS, NAME_ORDER_LABELS
-from .base import Screen, APP, needs_genre, is_mix
+from .base import Screen, APP, needs_genre, is_mix, genre_ignored, set_genre_ignored
 
 # A predicate of None means the screen supplies it: the filter needs to look at
 # the whole collection, not one track.
 FILTERS = [
     ("all", "All tracks", lambda r: True),
     ("genre", "Needs a genre", needs_genre),
+    ("genre_ignored", "Ignored for genres", genre_ignored),
     ("key", "Not analysed yet (no key)", lambda r: not r.analyzed),
     ("energy", "No energy rating", lambda r: r.energy is None),
     ("artist", "No artist", lambda r: not r.artist),
@@ -50,7 +51,9 @@ class LibraryScreen(Screen):
     details = ("Choose what to show, then select tracks. Shift-click selects a range. "
                "Click a column heading to sort by it: sorting by artist or folder lets "
                "you select whole groups at once. Set a genre directly, or use More to "
-               "copy genres from folder names or look them up on Discogs.\n\n"
+               "copy genres from folder names or look them up on Discogs. Tracks that "
+               "should never have a genre can be ignored from More, so they stop "
+               "being flagged.\n\n"
                "Tracks with no key need your analysis tool. Show 'Not analysed yet', "
                "select them and send them to analysis: they move to 'To Be Processed', "
                "and once you've saved the results into 'Processed', To do offers to sort "
@@ -111,6 +114,8 @@ class LibraryScreen(Screen):
             None,
             ("Look up selected on Discogs…", self.lookup),
             ("Use folder names as genres…", self.apply_from_folder),
+            ("Ignore selected for genres", lambda: self.ignore_genre(True)),
+            ("Stop ignoring selected for genres", lambda: self.ignore_genre(False)),
             None,
             ("Swap artist and title on selected…", self.swap_names),
             ("Read artist and title from the filename…", self.names_from_file),
@@ -324,6 +329,24 @@ class LibraryScreen(Screen):
             return
         self._write(pairs, f"Set {ui.plural(len(pairs), 'track')} to the genre of the "
                            "folder they're in?")
+
+    def ignore_genre(self, on):
+        """Some tracks never get a genre (intros, edits, samples): stop flagging them."""
+        recs = self._selected()
+        if not recs:
+            messagebox.showinfo(APP, "Select some tracks first."
+                                + ("" if on else "\n\nShow 'Ignored for genres' to see "
+                                                 "the ones you've ignored."))
+            return
+        set_genre_ignored(recs, on)
+        if self.app.health:
+            self.app.health.update(library.genre_health(self.app.recs))
+        self.refresh()
+        messagebox.showinfo(
+            APP, f"{ui.plural(len(recs), 'track')} "
+                 + ("won't be flagged as needing a genre any more.\n\nShow 'Ignored for "
+                    "genres' to find them again." if on else
+                    "will be flagged again if they have no genre."))
 
     def review_one_by_one(self):
         recs = self._selected() or self.rows

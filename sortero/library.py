@@ -285,6 +285,44 @@ def looks_swapped(recs):
     return out
 
 
+_genre_ignored = None
+
+
+def _ignore_key(r):
+    # by filename, not path: filing a track moves it but keeps its name
+    return os.path.basename(r.path).lower()
+
+
+def _ignored():
+    global _genre_ignored
+    if _genre_ignored is None:
+        _genre_ignored = set(settings.get("genre_ignored") or [])
+    return _genre_ignored
+
+
+def genre_ignored(r):
+    """Tracks you've said never need a genre, so they stop being flagged."""
+    return _ignore_key(r) in _ignored()
+
+
+def set_genre_ignored(recs, on):
+    global _genre_ignored
+    keys = {_ignore_key(r) for r in recs}
+    _genre_ignored = (_ignored() | keys) if on else (_ignored() - keys)
+    settings.set("genre_ignored", sorted(_genre_ignored))
+
+
+def genre_health(recs):
+    """The genre half of health(), cheap enough to redo when the ignore list changes.
+
+    Ignored tracks count on neither side of the percentage.
+    """
+    counted = [r for r in recs if not r.protected and not genre_ignored(r)]
+    missing = [r for r in counted if not r.genre or is_spam(r.genre)]
+    return {"no_genre": missing,
+            "pct_genre": 100.0 * (len(counted) - len(missing)) / (len(counted) or 1)}
+
+
 def health(recs):
     """Summary stats the dashboard renders."""
     live = [r for r in recs if not r.protected]
@@ -298,7 +336,6 @@ def health(recs):
         "bytes": sum(r.size for r in recs),
         "analyzed": sum(1 for r in live if r.analyzed),
         "needs_analysis": [r for r in live if not r.analyzed],
-        "no_genre": [r for r in live if not r.genre or is_spam(r.genre)],
         "no_artist": [r for r in live if not r.artist],
         "spam_genre": spam_genre,
         "spam_comment": spam_comment,
@@ -311,6 +348,6 @@ def health(recs):
         "tops": collections.Counter(r.top for r in recs),
     }
     h["pct_analyzed"] = 100.0 * h["analyzed"] / n
-    h["pct_genre"] = 100.0 * (len(live) - len(h["no_genre"])) / n
+    h.update(genre_health(recs))
     h["pct_energy"] = 100.0 * (len(live) - len(h["no_energy"])) / n
     return h

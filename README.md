@@ -11,6 +11,12 @@ tags, and an intake lane for new music. Runs on macOS, Windows and Linux.
 > independent project: I pay to build and release it, with the help of Claude
 > Code, and supporters are what keep it improving.
 
+### ⬇️ [Try Sortero free (v0.18.0)](https://github.com/sparkly-quasar/sortero/releases/tag/v0.18.0) · [How to install](#install--update)
+
+Ready-to-run for macOS, Windows and Linux. The app isn't code-signed, so your
+computer warns you once on first launch; [the install steps](#install--update)
+show you how to get past it.
+
 ![Sortero icon](build/icon_1024.png)
 
 ## The idea
@@ -424,35 +430,98 @@ Management**, or keep Sortero somewhere in your home folder.
 
 It can also check automatically on launch (at most once a day) — toggle that in
 Settings.
-## Running it
+## Install & update
 
-Sortero runs on **macOS, Windows and Linux**, two ways:
+There are three ways to run Sortero. All of them have every feature.
 
-- **With a Supporter licence**: the ready-to-run app and one-click updates. See
-  [Supporting Sortero](#supporting-sortero).
-- **From source, free** — every feature; see [Building from source](#building-from-source)
-  or [Running without building](#running-without-building).
+- **Try it free:** download the ready-to-run app from
+  **[v0.18.0](https://github.com/sparkly-quasar/sortero/releases/tag/v0.18.0)**,
+  the last release with public downloads. It's a few versions behind, but it's
+  the quickest way to see whether Sortero suits you.
+- **Supporter licence:** the latest app for macOS, Windows and Linux, with
+  one-click updates. See [Supporting Sortero](#supporting-sortero).
+- **From source, free and always current:** see
+  [Building from source](#building-from-source).
 
-Builds up to v0.18.0 are still on the [Releases page](../../releases).
+On the release page, open **Assets** and download the zip for your computer:
 
-### macOS: first launch
+| Your computer | Download |
+| --- | --- |
+| Mac (Apple Silicon or Intel) | `Sortero-macOS-universal2.zip` |
+| Windows (64-bit) | `Sortero-windows-x86_64.zip` |
+| Linux (64-bit) | `Sortero-linux-x86_64.zip` |
 
-Builds are signed ad-hoc, not notarised — notarising requires a paid Apple
-Developer account — so macOS blocks the first launch.
+The app isn't code-signed, so your computer warns you once on first launch.
+The steps below get you past it.
 
-1. Drag `Sortero.app` wherever you want it; Applications is fine.
-2. Open it once. macOS refuses, and the icon may bounce in the Dock without a
-   window appearing.
-3. **System Settings → Privacy & Security**, scroll to Security, click
-   **Open Anyway** next to Sortero.
-4. **Quit the bouncing icon if it's still there**, then open Sortero again.
+### macOS (Apple Silicon and Intel)
 
-Step 4 matters: the blocked launch leaves a stuck process behind, and while it's
-running, opening the app again just brings that stuck copy to the front rather
-than starting a working one. Only needed once per download.
+1. Download **`Sortero-macOS-universal2.zip`** and double-click it to unzip.
+2. Drag **Sortero.app** into **Applications**, or anywhere in your home folder.
+3. Open Sortero. macOS refuses because the app isn't notarised: click **Done**.
+   The icon may bounce in the Dock without a window appearing.
+4. **If the icon is still in the Dock, quit it** (right-click → Quit, or
+   Force Quit from the Apple menu).
+5. Go to **System Settings → Privacy & Security**, scroll down to Security, and
+   click **Open Anyway** next to *"Sortero" was blocked*.
+6. Open Sortero again and click **Open**. You only do this once per download.
 
-**Windows** — SmartScreen may warn about an unknown publisher; More info → Run anyway.
-**Linux** — needs Tk (`apt install python3-tk`).
+Step 4 matters: the blocked launch leaves a stuck process behind. While it's
+running, opening Sortero again just brings that stuck copy to the front instead
+of starting a working one.
+
+On macOS 15 Sequoia and later, right-click → Open no longer gets past the
+block, so use step 5. In Terminal, this does the same thing:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Sortero.app
+```
+
+### Windows
+
+1. Download **`Sortero-windows-x86_64.zip`**.
+2. Right-click it → **Extract All…**, and pick a folder to keep it in, such as
+   `Documents` or `C:\Program Files`. Run Sortero from the extracted folder,
+   not from inside the zip.
+3. Open the **Sortero** folder and double-click **`Sortero.exe`**.
+4. Windows shows **"Windows protected your PC"**: click **More info**, then
+   **Run anyway**. You only do this once.
+5. To find it again easily, right-click `Sortero.exe` → **Pin to Start**, or
+   **Send to → Desktop (create shortcut)**.
+
+Keep `Sortero.exe` inside its folder. It needs the files next to it.
+
+### Linux
+
+1. Download **`Sortero-linux-x86_64.zip`** and unzip it:
+
+   ```bash
+   unzip Sortero-linux-x86_64.zip -d ~/Applications
+   ```
+
+2. Run it:
+
+   ```bash
+   ~/Applications/Sortero/Sortero
+   ```
+
+If it doesn't start, install Tk (`sudo apt install python3-tk` on
+Debian/Ubuntu, `sudo dnf install python3-tkinter` on Fedora) and try again.
+
+### Updating
+
+**Help → Check for Updates…** compares your copy with the latest release. With a
+Supporter licence, Sortero downloads, installs and relaunches the new version in
+one step. Without one, it tells you where to get one, or you can
+[build the latest from source](#building-from-source). Details are under
+[First run](#first-run).
+
+**Your collection and history are safe either way.** Sortero never stores
+anything inside the app. Your music stays in your collection folder, and the
+journals that make every change reversible live in your app-data folder
+(`~/Library/Application Support/Sortero` on macOS, `%APPDATA%\Sortero` on
+Windows, `$XDG_DATA_HOME/sortero` on Linux). Replacing or deleting the app
+never touches them.
 
 ### Building from source
 

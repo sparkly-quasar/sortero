@@ -168,6 +168,13 @@ jobs:
           body: |
             ${{ (github.event.inputs.tag || github.ref_name) == env.LAST_PUBLIC && 'This is the last release with public downloads. Updating to it gives every copy the new updater; later updates install with one click for Supporter licence holders.' || '' }}
 
+            **How to install:** step-by-step instructions for macOS, Windows
+            and Linux, including how to get past the one-time warning for an
+            unsigned app, are in
+            [Install & update](https://github.com/sparkly-quasar/sortero#install--update).
+            To try Sortero for free, download it from
+            [v0.18.0](https://github.com/sparkly-quasar/sortero/releases/tag/v0.18.0).
+
             Sortero is free and open source: build it yourself by following
             [Building from source](https://github.com/sparkly-quasar/sortero#building-from-source).
 

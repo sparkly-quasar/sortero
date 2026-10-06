@@ -1,4 +1,4 @@
-# Sortero
+# <img src="build/icon_1024.png" alt="" width="48" align="top"> Sortero
 
 [![License: GPL v3+](https://img.shields.io/badge/License-GPLv3+-blue.svg)](LICENSE)
 
@@ -17,7 +17,7 @@ Ready-to-run for macOS, Windows and Linux. The app isn't code-signed, so your
 computer warns you once on first launch; [the install steps](#install--update)
 show you how to get past it.
 
-![Sortero icon](build/icon_1024.png)
+![Sortero's Library screen, listing tracks with their key, BPM, energy and genre](docs/screenshots/library.png)
 
 ## The idea
 

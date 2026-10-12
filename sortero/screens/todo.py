@@ -1,10 +1,10 @@
 """To do: the home screen. One card per job worth doing, most useful first."""
 import os
-from tkinter import ttk
+from tkinter import ttk, messagebox
 
-from .. import ui, importer, paths, review, settings
+from .. import ui, importer, paths, review, settings, headers
 from ..common import human_size, NAME_ORDERS, NAME_ORDER_LABELS, ARTIST_TITLE
-from .base import Screen, needs_genre, is_mix, in_unsorted
+from .base import Screen, APP, needs_genre, is_mix, in_unsorted
 
 
 def count_in(root, folder):
@@ -73,6 +73,15 @@ class TodoScreen(Screen):
             f"{h['pct_genre']:.0f}% have a genre",
             f"{h['pct_energy']:.0f}% have an energy rating"]))
         live = [r for r in app.recs if not r.protected and not is_mix(r)]
+
+        # First, because a file a player refuses is worse than one badly tagged.
+        damaged = h.get("stray_id3", [])
+        if damaged:
+            self._job(f"{ui.plural(len(damaged), 'AIFF or WAV file')} with a damaged header",
+                      "An older Sortero wrote their tags in front of the audio instead of "
+                      "inside the file. Forgiving players skip over it; stricter ones, "
+                      "possibly CDJs among them, may refuse to play the file.",
+                      "Repair…", lambda: self._repair(damaged), tone="warn")
 
         n = count_in(root, importer.PROCESSED)
         if n:
@@ -143,6 +152,32 @@ class TodoScreen(Screen):
 
     def _done(self, n):
         self.app.set_badge("todo", n)
+
+    def _repair(self, recs):
+        root = self.app.root_dir.get()
+        paths_ = [r.path for r in recs]
+        names = [os.path.relpath(p, root) for p in paths_[:5]]
+        more = len(paths_) - len(names)
+        msg = (f"Repair {ui.plural(len(paths_), 'file')}?\n\n" + "\n".join(names)
+               + (f"\n…and {more:,} more." if more else "")
+               + "\n\nEach file's tags move inside it, where rekordbox and Mixed In Key "
+                 "keep them. The audio isn't touched. The damaged original is set aside "
+                 f"in _Quarantine/{headers.QUARANTINE_SUB}, and you can undo this from "
+                 "History.")
+        if not messagebox.askyesno(APP, msg):
+            return
+
+        def work(progress, log):
+            return headers.repair(root, paths_, log=log, progress=progress)
+
+        def done(res):
+            _, n, failed = res
+            messagebox.showinfo(APP, f"Repaired {ui.plural(n, 'file')}."
+                                + (f"\n{failed} couldn't be repaired. History → Show log "
+                                   "says why." if failed else ""))
+            self.app.changed()
+
+        self.app.task.run(work, done, "Repairing headers")
 
     def _place(self, recs):
         review.ReviewDialog(self.app, self.app, recs,

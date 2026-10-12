@@ -106,7 +106,7 @@ open.
 
 | Screen | What it's for |
 |---|---|
-| **To do** | Home. Cards for the jobs worth doing, most useful first, each with one button: analysed tracks waiting in `Processed`, tracks in `Unsorted`, tracks with no genre, tracks not analysed yet, tracks whose artist and title are the wrong way round, tags full of download-site spam. The number beside it in the sidebar is how many jobs there are. |
+| **To do** | Home. Cards for the jobs worth doing, most useful first, each with one button: AIFF or WAV files whose header an older Sortero damaged (see [below](#aiff-and-wav-files-with-a-damaged-header)), analysed tracks waiting in `Processed`, tracks in `Unsorted`, tracks with no genre, tracks not analysed yet, tracks whose artist and title are the wrong way round, tags full of download-site spam. The number beside it in the sidebar is how many jobs there are. |
 | **Add music** | Choose a folder or files. Analysed tracks go to the folder that already means their genre — yours if you have one. Anything missing a key lands in `To Be Processed`. Tracks with no genre to go on are **held back for you to place** instead of being dropped in `Unsorted`. Tracks already in the library are pointed out, not added twice. |
 | **Library** | Every track in one list. **Show** filters to what needs work (no genre, not analysed, no energy, no artist, artist and title swapped, no BPM, low bitrate); **Search** narrows it; click a column heading to sort. Select tracks and set a genre, swap artist and title, re-read both from the filename, send them to analysis, place them one by one, copy genres from folder names, or look them up on Discogs. Your own set recordings are hidden unless you ask. |
 | **Playlists** | Rebuild a Spotify or TIDAL playlist against your local files from a link, a pasted tracklist or a CSV — all three offered together above the list. **More** rebuilds the folder playlists or repairs broken links. |
@@ -400,6 +400,20 @@ Without connecting, Spotify links fall back to a public preview capped at 50
 tracks, and TIDAL links need a connection. Pasting a tracklist as
 `Artist - Title` lines, or loading a CSV export, always works.
 
+## AIFF and WAV files with a damaged header
+
+AIFF and WAV files keep their tags in a chunk inside the file, which is where
+rekordbox and Mixed In Key write them. Sortero up to 0.20.0 wrote tags to the
+front of these files instead, so they started with `ID3` where every player
+expects `FORM` or `RIFF`. Forgiving players skip over it; stricter ones may
+refuse the file. It also hid the tags in the chunk from Sortero, so a track
+Mixed In Key had analysed could show up as not analysed.
+
+Sortero now writes into the chunk, and **To do** lists any file already
+affected. **Repair…** moves the stray tag inside the file, keeping the newer
+value wherever the two disagree, and leaves the audio untouched. The damaged
+original is set aside in `_Quarantine/damaged headers`, and History undoes it.
+
 ## Why energy ends up in Grouping
 
 Mixed In Key writes `Cm - Energy 6` into the **comment** field. The key half
@@ -550,6 +564,15 @@ interpreter — see `.github/workflows/release.yml`.
 ```bash
 ./.venv/bin/python run.py
 ```
+
+### Running the tests
+
+```bash
+./.venv/bin/python -m unittest discover tests
+```
+
+The tests make their own small audio files and never touch your collection or
+app data. One test needs ffmpeg and is skipped without it.
 
 ## Safety net
 

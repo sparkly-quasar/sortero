@@ -14,6 +14,11 @@ DEFAULTS = {
     "name_order": "artist-title",
     # filenames (lowercased) of tracks never flagged as needing a genre
     "genre_ignored": [],
+    # Gig prep: which players to prepare for, what files that won't play there
+    # become, and where those copies go ("" = next to the collection)
+    "gig_profile": "universal",
+    "gig_target": "mp3",
+    "gig_library": "",
 }
 
 

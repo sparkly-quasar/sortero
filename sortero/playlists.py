@@ -340,6 +340,18 @@ def existing(root):
     return sorted(f[:-5] for f in os.listdir(d) if f.endswith(".m3u8"))
 
 
+def entries(root, name):
+    """The paths a playlist points at, in order, whether or not they still exist."""
+    d = playlist_dir(root)
+    out = []
+    with open(os.path.join(d, name + ".m3u8"), encoding="utf-8") as fh:
+        for line in fh:
+            s = line.strip()
+            if s and not s.startswith("#"):
+                out.append(os.path.normpath(os.path.join(d, s)))
+    return out
+
+
 def write(root, name, paths, journal=None):
     d = playlist_dir(root)
     os.makedirs(d, exist_ok=True)

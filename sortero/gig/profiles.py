@@ -273,32 +273,47 @@ def _list(items):
     return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " or " + items[-1]
 
 
+def _say(profile, one, every):
+    """A sentence about one player ("The CDJ-2000 doesn't ..."), or about all of them."""
+    return every if profile is UNIVERSAL or profile.key == "universal" else (
+        one.format(who=f"The {profile.name}"))
+
+
 def check_audio(profile, info):
     """Problems a player would have with this file. Empty when it plays."""
-    who = profile.name
     if not profile.formats_known:
-        return [Problem(WARN, f"{who}'s manual couldn't be found, so Sortero can't "
-                              "say whether it plays this file.")]
+        return [Problem(WARN, f"The {profile.name}'s manual couldn't be found, so Sortero "
+                              "can't say whether it plays this file.")]
     fmt = profile.formats.get(info.format)
     label = FORMAT_NAMES.get(info.format, info.format.upper())
     if fmt is None:
-        return [Problem(FAIL, f"{who} doesn't play {label} files.")]
+        return [Problem(FAIL, _say(profile, f"{{who}} doesn't play {label} files.",
+                                   f"Not every Pioneer player plays {label} files."))]
     out = []
     if info.ext.lower() not in fmt.exts:
-        out.append(Problem(FAIL, f"{who} only reads {label} files named "
-                                 f"{_list(sorted(fmt.exts))}, not {info.ext}."))
+        named = f"{label} files named {_list(sorted(fmt.exts))}, not {info.ext}"
+        out.append(Problem(FAIL, _say(profile, f"{{who}} only reads {named}.",
+                                      f"Pioneer players only read {named}.")))
     if info.rate not in fmt.rates:
-        out.append(Problem(FAIL, f"{who} doesn't play {label} at {_khz(info.rate)} "
-                                 f"(only {_list(_khz(r) for r in sorted(fmt.rates))})."))
+        ok = _list(_khz(r) for r in sorted(fmt.rates))
+        out.append(Problem(FAIL, _say(
+            profile, f"{{who}} doesn't play {label} at {_khz(info.rate)} (only {ok}).",
+            f"Not every Pioneer player plays {label} at {_khz(info.rate)} "
+            f"(they all play {ok}).")))
     if fmt.depths and info.depth not in fmt.depths:
-        depth = f"{info.depth}-bit" if info.depth else "this bit depth"
-        out.append(Problem(FAIL, f"{who} doesn't play {depth} {label} "
-                                 f"(only {_list(f'{d}-bit' for d in sorted(fmt.depths))})."))
+        depth = f"{info.depth}-bit" if info.depth else "this bit depth of"
+        ok = _list(f"{d}-bit" for d in sorted(fmt.depths))
+        out.append(Problem(FAIL, _say(
+            profile, f"{{who}} doesn't play {depth} {label} (only {ok}).",
+            f"Not every Pioneer player plays {depth} {label} (they all play {ok}).")))
     if fmt.kbps and info.kbps and not fmt.kbps[0] <= info.kbps <= fmt.kbps[1]:
-        out.append(Problem(FAIL, f"{who} plays {label} at {fmt.kbps[0]}-{fmt.kbps[1]} kbps, "
-                                 f"not {info.kbps} kbps."))
+        span = f"{label} at {fmt.kbps[0]}-{fmt.kbps[1]} kbps, not {info.kbps} kbps"
+        out.append(Problem(FAIL, _say(profile, f"{{who}} plays {span}.",
+                                      f"Pioneer players play {span}.")))
     if info.format == "aac" and info.aac_profile and info.aac_profile.upper() != "LC":
-        out.append(Problem(FAIL, f"{who} only plays AAC-LC, not {info.aac_profile}."))
+        out.append(Problem(FAIL, _say(
+            profile, f"{{who}} only plays AAC-LC, not {info.aac_profile}.",
+            f"Pioneer players only play AAC-LC, not {info.aac_profile}.")))
     return out
 
 
@@ -308,17 +323,21 @@ def check_volume(profile, file_system, partitions=1, scheme=None):
     `file_system` is one of FAT16, FAT32, EXFAT, HFS, NTFS; `scheme` is "MBR",
     "GPT" or None when unknown.
     """
-    who = profile.name
     out = []
     if file_system not in profile.file_systems:
-        out.append(Problem(FAIL, f"{who} can't read {file_system}. Format the stick "
-                                 f"as {FAT32}."))
+        out.append(Problem(FAIL, _say(
+            profile, f"{{who}} can't read {file_system}. Format the stick as {FAT32}.",
+            f"Not every Pioneer player can read {file_system}. Format the stick as "
+            f"{FAT32}.")))
     if partitions > 1:
         if profile.partitions == MAY_FAIL:
-            out.append(Problem(FAIL, f"{who} may not recognise a stick with more than "
-                                     "one partition."))
+            out.append(Problem(FAIL, _say(
+                profile, "{who} may not recognise a stick with more than one partition.",
+                "Older players (CDJ-900, CDJ-2000) may not recognise a stick with more "
+                "than one partition.")))
         elif profile.partitions == FIRST_ONLY:
-            out.append(Problem(WARN, f"{who} only reads the first partition."))
+            out.append(Problem(WARN, _say(profile, "{who} only reads the first partition.",
+                                          "Players only read the first partition.")))
         else:
             out.append(Problem(WARN, "The stick has more than one partition, and not "
                                      "every player says what it does with that."))

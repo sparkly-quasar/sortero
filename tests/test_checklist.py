@@ -24,7 +24,7 @@ class Steps(unittest.TestCase):
     def test_nothing_chosen_yet(self):
         st = K.State()
         self.assertEqual(statuses(st), {"playlists": K.NEXT, "check": K.WAITING,
-                                        "copies": K.WAITING, "stick": K.SOON,
+                                        "copies": K.WAITING, "stick": K.WAITING,
                                         "verify": K.WAITING})
         self.assertIsNone(K.next_step(K.steps(st)))
 
@@ -43,6 +43,20 @@ class Steps(unittest.TestCase):
     def test_nothing_needs_a_copy_goes_straight_to_the_stick(self):
         st = K.State(["Warmup"], 2, items=[item(C.READY), item(C.READY)])
         self.assertEqual(statuses(st)["copies"], K.DONE)
+        nxt = K.next_step(K.steps(st))
+        self.assertEqual((nxt.key, nxt.button), ("stick", "Write to a stick…"))
+        # a rekordbox stick can be checked without writing a backup first
+        self.assertEqual(statuses(st)["verify"], K.NEXT)
+
+    def test_after_writing_the_backup(self):
+        class Written:
+            written, unchanged, skipped = ["a", "b"], ["c"], [("d", "why")]
+        st = K.State(["Warmup", "Peak"], 4, items=[item(C.READY)], backup=Written(),
+                     stick_name="GIG")
+        stick = next(s for s in K.steps(st) if s.key == "stick")
+        self.assertEqual(stick.status, K.DONE)
+        self.assertIn("3 tracks in 2 numbered folders on GIG", stick.text)
+        self.assertIn("1 skipped", stick.text)
         self.assertEqual(K.next_step(K.steps(st)).key, "verify")
 
     def test_copied_tracks_still_count_as_needing_a_copy(self):
@@ -52,7 +66,7 @@ class Steps(unittest.TestCase):
 
     def test_waiting_steps_are_just_a_title(self):
         for s in K.steps(K.State()):
-            if s.status in (K.WAITING, K.SOON):
+            if s.status == K.WAITING:
                 self.assertEqual(s.text, "", s.key)
 
     def test_after_copying(self):

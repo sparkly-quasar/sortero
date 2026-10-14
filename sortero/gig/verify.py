@@ -8,7 +8,8 @@ Six checks, each pass, warn or fail:
   Formats          every audio file plays on the chosen players
   Decode test      every audio file decodes from start to finish
   Names and sizes  nothing a FAT32 stick or a player can't handle
-  Checksums        optional: files match the originals they came from
+  Checksums        files match the originals they came from: always on a
+                   stick Sortero wrote, otherwise when originals are given
 
 Any fail means NOT READY. Warnings are listed but don't stop the gig.
 
@@ -355,6 +356,10 @@ def verify(stick, profile=None, decode=True, sources=None, vol=None, progress=No
     report.checks.append(exp)
     report.checks += check_audio(stick, entries, profile, decode, progress)
     report.checks.append(check_names(entries, profile))
+    from . import backup
+    # A stick Sortero wrote knows exactly where each file came from, which beats
+    # matching by name and size.
+    sources = backup.sources(stick) or sources
     if sources:
         report.checks.append(check_checksums(entries, sources))
     return report

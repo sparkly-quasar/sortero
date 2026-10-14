@@ -4,12 +4,13 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 from .. import ui, paths, playlists, settings
-from ..gig import checklist, convert, ffmpeg, profiles, verify
-from ..gig.checklist import DONE, NEXT, WAITING, SOON
+from ..common import human_size
+from ..gig import backup, checklist, convert, ffmpeg, profiles, verify
+from ..gig.checklist import DONE, NEXT, WAITING
 from .base import Screen, APP
 
 TARGETS = [(convert.MP3, "MP3 320 kbps (smaller)"), (convert.AIFF, "AIFF 16-bit (lossless)")]
-TONES = {DONE: "good", NEXT: None, WAITING: "faint", SOON: "faint"}
+TONES = {DONE: "good", NEXT: None, WAITING: "faint"}
 
 
 def _profile_label(p):
@@ -160,6 +161,7 @@ class GigScreen(Screen):
     def _reset(self):
         """Anything chosen differently means the tracks need checking again."""
         self.state.items, self.state.copied = None, False
+        self.state.backup = None
         self.refresh()
 
     # ------------------------------------------------------------ drawing
@@ -171,7 +173,7 @@ class GigScreen(Screen):
         for w in self.steps_frame.winfo_children():
             w.destroy()
         actions = {"check": self.check_tracks, "copies": self.make_copies,
-                   "verify": self.check_stick}
+                   "stick": self.write_stick, "verify": self.check_stick}
         for i, s in enumerate(all_steps, 1):
             ui.Card(self.steps_frame, f"{checklist.MARKS[s.status]}  {i}. {s.title}", s.text,
                     s.button, actions.get(s.key), tone=TONES[s.status]
@@ -184,7 +186,7 @@ class GigScreen(Screen):
         else:
             self.bar.set_primary("Check a stick…", self.check_stick)
         done = sum(1 for s in all_steps if s.status == DONE)
-        self.header.set_summary(f"{done} of {len(all_steps) - 1} steps done." if done
+        self.header.set_summary(f"{done} of {len(all_steps)} steps done." if done
                                 else self.summary)
 
     def _show(self, lines, verdict=None, ready=None):
@@ -257,12 +259,70 @@ class GigScreen(Screen):
 
         self.app.task.run(work, done, "Making gig-safe copies")
 
-    def check_stick(self, decode=True):
+    def _choose_stick(self):
         start = "/Volumes" if paths.IS_MAC and os.path.isdir("/Volumes") else None
-        stick = filedialog.askdirectory(title="Choose the USB stick", initialdir=start,
-                                        mustexist=True)
+        return filedialog.askdirectory(title="Choose the USB stick", initialdir=start,
+                                       mustexist=True)
+
+    def write_stick(self):
+        root = self.app.require_root()
+        items = self.state.items
+        if not root or not items:
+            return
+        sets, missing = backup.sets_from(items, root, self.chosen)
+        stick = self._choose_stick()
         if not stick:
             return
+        try:
+            p = backup.plan(stick, sets)
+        except backup.BackupError as e:
+            messagebox.showwarning(APP, str(e))
+            return
+        name = os.path.basename(os.path.normpath(stick)) or stick
+        free = backup.free_space(stick)
+        if p.bytes > free:
+            messagebox.showwarning(APP, f"{name} needs {human_size(p.bytes)} free and has "
+                                        f"{human_size(free)}. Free some space, or use a "
+                                        "bigger stick.")
+            return
+        lines = [f"Write {ui.plural(len(sets), 'playlist')} to {name} as folders?",
+                 ""]
+        lines += [f"    {folder}" for folder in p.folders]
+        lines.append("")
+        if p.copy:
+            lines.append(f"{ui.plural(len(p.copy), 'track')} to copy, "
+                         f"{human_size(p.bytes)}.")
+        if p.keep:
+            lines.append(f"{len(p.keep):,} already there from last time.")
+        if p.remove:
+            lines.append(f"{len(p.remove):,} left from an earlier backup will be removed.")
+        if p.blocked or missing:
+            lines.append(f"{len(p.blocked) + len(missing):,} can't go on; the report will "
+                         "say why.")
+        lines.append("\nFiles Sortero didn't put on the stick are never touched. "
+                     "Afterwards the stick is checked.")
+        if not messagebox.askyesno(APP, "\n".join(lines)):
+            return
+
+        def work(progress, log):
+            return backup.run(p, progress=progress, log=log)
+
+        def done(res):
+            res.skipped += [(f"{pl}: {os.path.basename(src)}", "it has no playable copy "
+                             "(see Check the tracks)") for pl, src in missing]
+            self.state.backup, self.state.stick_name = res, name
+            self._show(res.lines())
+            self.refresh()
+            self._verify(stick, decode=True)
+
+        self.app.task.run(work, done, "Writing the stick")
+
+    def check_stick(self, decode=True):
+        stick = self._choose_stick()
+        if stick:
+            self._verify(stick, decode)
+
+    def _verify(self, stick, decode=True):
         try:
             ffmpeg.require("ffprobe")
             ffmpeg.require("ffmpeg")

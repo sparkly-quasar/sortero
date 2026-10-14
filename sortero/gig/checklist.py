@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 
 from . import convert
 
-DONE, NEXT, WAITING, SOON = "done", "next", "waiting", "soon"
-MARKS = {DONE: "✓", NEXT: "→", WAITING: "○", SOON: "○"}
+DONE, NEXT, WAITING = "done", "next", "waiting"
+MARKS = {DONE: "✓", NEXT: "→", WAITING: "○"}
 
 # Bytes per second of audio, for the space a copy will take.
 RATE_BYTES = {convert.MP3: 320_000 // 8, convert.AIFF: 44_100 * 2 * 2}
@@ -21,6 +21,8 @@ class State:
     items: list = None          # convert.plan's result, once the tracks are checked
     copied: bool = False        # convert.run has finished on these items
     report: object = None       # the last verify.Report, if a stick was checked
+    backup: object = None       # the last backup.Result, if a stick was written
+    stick_name: str = ""        # the stick it was written to
 
 
 @dataclass
@@ -111,9 +113,23 @@ def steps(st):
                         copies_text(st.items) if st.copied else "Nothing needs a copy.",
                         DONE))
 
-    out.append(Step("stick", "Put them on a stick (coming next)", "", SOON))
-
     copies_done = st.items is not None and not pending
+    if not copies_done:
+        out.append(Step("stick", "Put them on a stick", "", WAITING))
+    elif st.backup is not None:
+        b = st.backup
+        n = len(b.written) + len(b.unchanged)
+        text = (f"{_plural(n, 'track')} in {_plural(len(st.playlists), 'numbered folder')} "
+                f"on {st.stick_name}.")
+        if b.skipped:
+            text += f" {len(b.skipped):,} skipped; the report says why."
+        out.append(Step("stick", "Put them on a stick", text, DONE, "Write again…"))
+    else:
+        out.append(Step("stick", "Put them on a stick",
+                        "Write the playlists to a stick as numbered folders: a backup a "
+                        "player or a laptop can browse if rekordbox fails. (A rekordbox XML "
+                        "to export from is coming next.)", NEXT, "Write to a stick…"))
+
     if st.report is not None:
         out.append(Step("verify", "Check the stick", st.report.verdict,
                         DONE if st.report.ready else NEXT, "Check a stick…"))

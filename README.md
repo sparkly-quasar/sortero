@@ -433,14 +433,21 @@ with the next step always on the blue button.
    grid; artwork too big for older players is shrunk. A file that is already
    lossy is decoded to AIFF rather than encoded lossy a second time. Copies are
    remembered, so the next gig only converts what's new.
-4. **Put them on a stick.** Coming next: plain numbered folders for a backup
-   stick, and a rekordbox XML to export from.
+4. **Put them on a stick.** Writes each playlist as a numbered folder, its
+   tracks numbered in set order (`01 Warmup/01 Artist - Title.mp3`), so a
+   player browsing folders, or a laptop running Traktor, can find the next track
+   fast if rekordbox fails. Running it again brings the stick up to date: what's
+   already there is left alone, tracks no longer in the set are removed, and
+   files Sortero didn't put on the stick are never touched. macOS `._` files are
+   cleared, and the stick is checked straight afterwards, every file compared
+   with its original. (A rekordbox XML to export from is coming next.)
 5. **Check the stick.** Plug it in and choose it. Sortero checks the file system
    and partitions (FAT32 on one MBR partition is what every player reads), the
    rekordbox export if there is one (every track it lists is on the stick),
    every file's format, every file decoded from start to finish, FAT32 name and
-   size limits, and macOS `._` files. It ends with **GIG READY** or **NOT
-   READY**, with what to fix first.
+   size limits, macOS `._` files, and, on a stick Sortero wrote, every file
+   against its original. It ends with **GIG READY** or **NOT READY**, with
+   what to fix first.
 
 The same check runs from a terminal:
 

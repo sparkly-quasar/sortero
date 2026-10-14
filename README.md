@@ -110,11 +110,12 @@ open.
 | **Add music** | Choose a folder or files. Analysed tracks go to the folder that already means their genre — yours if you have one. Anything missing a key lands in `To Be Processed`. Tracks with no genre to go on are **held back for you to place** instead of being dropped in `Unsorted`. Tracks already in the library are pointed out, not added twice. |
 | **Library** | Every track in one list. **Show** filters to what needs work (no genre, not analysed, no energy, no artist, artist and title swapped, no BPM, low bitrate); **Search** narrows it; click a column heading to sort. Select tracks and set a genre, swap artist and title, re-read both from the filename, send them to analysis, place them one by one, copy genres from folder names, or look them up on Discogs. Your own set recordings are hidden unless you ask. |
 | **Playlists** | Rebuild a Spotify or TIDAL playlist against your local files from a link, a pasted tracklist or a CSV — all three offered together above the list. **More** rebuilds the folder playlists or repairs broken links. |
+| **Gig prep** | Get a USB stick that plays on any Pioneer player, and check it before you leave. Tick the playlists you're playing, in set order; Sortero makes gig-safe copies of any track that won't play everywhere, then checks the stick and ends with **GIG READY** or **NOT READY**. See [Gig prep](#gig-prep). |
 | **Tidy up** | Tools for an existing collection: **Clean tags** (including which way round filenames read), **Fix wrong BPMs**, **Find duplicates**, **Place a folder's tracks by hand**, **Flatten release folders**, **Fix playlist links**, and **Reorganise the whole collection**. Every tool previews before it changes anything. |
 | **History** | Every operation, with undo, and the **safety net**. **Show log** reveals the detailed log. |
 | **Settings** | Collection folder, update checks, Discogs token, Spotify and TIDAL accounts, and the setup guide. |
 
-`Cmd-1`…`Cmd-6` (`Ctrl` on Windows and Linux) jump between screens, `Cmd-,`
+`Cmd-1`…`Cmd-7` (`Ctrl` on Windows and Linux) jump between screens, `Cmd-,`
 opens Settings and `Cmd-R` reads the collection again. Sortero follows your
 system's light or dark appearance.
 
@@ -413,6 +414,42 @@ Sortero now writes into the chunk, and **To do** lists any file already
 affected. **Repair…** moves the stray tag inside the file, keeping the newer
 value wherever the two disagree, and leaves the audio untouched. The damaged
 original is set aside in `_Quarantine/damaged headers`, and History undoes it.
+
+## Gig prep
+
+A gig stick has to play on whatever players the venue has, and the time to find
+out it doesn't is before you leave. **Gig prep** walks through it as a checklist,
+with the next step always on the blue button.
+
+1. **Choose the playlists.** Tick them in the order you'll play them.
+2. **Check the tracks.** Each one is checked against what Pioneer's own manuals
+   say the players read. **Players** picks which: *Any Pioneer player* (the
+   default) allows only what every player from the CDJ-900 and CDJ-2000 to the
+   CDJ-3000X and OPUS-QUAD plays.
+3. **Make gig-safe copies** of the tracks that won't play everywhere: MP3 320
+   kbps or 16-bit AIFF, in a *Gig Library* folder next to your collection.
+   Tracks that already play are used as they are, and your originals are never
+   changed. Every tag comes across, including Mixed In Key's cue points and beat
+   grid; artwork too big for older players is shrunk. A file that is already
+   lossy is decoded to AIFF rather than encoded lossy a second time. Copies are
+   remembered, so the next gig only converts what's new.
+4. **Put them on a stick.** Coming next: plain numbered folders for a backup
+   stick, and a rekordbox XML to export from.
+5. **Check the stick.** Plug it in and choose it. Sortero checks the file system
+   and partitions (FAT32 on one MBR partition is what every player reads), the
+   rekordbox export if there is one (every track it lists is on the stick),
+   every file's format, every file decoded from start to finish, FAT32 name and
+   size limits, and macOS `._` files. It ends with **GIG READY** or **NOT
+   READY**, with what to fix first.
+
+The same check runs from a terminal:
+
+```bash
+python -m sortero.gig.verify /Volumes/GIG [--player cdj-2000] [--quick]
+```
+
+Gig prep needs ffmpeg. Builds from source use the one on your PATH
+(`brew install ffmpeg` on a Mac).
 
 ## Why energy ends up in Grouping
 

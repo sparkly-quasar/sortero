@@ -72,9 +72,13 @@ class Report:
                     f"{'warning' if self.warnings == 1 else 'warnings'} worth a look.")
         return "GIG READY"
 
-    def lines(self):
+    def lines(self, problems_first=False):
         out = [f"Checking {self.stick} for {profiles.where(self.profile)}", ""]
-        for c in self.checks:
+        checks = self.checks
+        if problems_first:
+            rank = {FAIL: 0, WARN: 1, PASS: 2}
+            checks = sorted(checks, key=lambda c: rank[c.level])
+        for c in checks:
             out.append(f"{c.level.upper():4}  {c.title}: {c.summary}")
             for d in c.details[:SHOWN]:
                 out.append(f"        {d}")

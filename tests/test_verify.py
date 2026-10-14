@@ -224,6 +224,7 @@ class ReportText(unittest.TestCase):
         self.assertEqual(lines[0], "Checking /Volumes/GIG for every Pioneer player")
         self.assertIn("        …and 2 more", lines)
         self.assertEqual(lines[-1], "NOT READY: 1 problem to fix.")
+        self.assertTrue(r.lines(problems_first=True)[2].startswith("FAIL"))
 
 
 class DiskTools(unittest.TestCase):

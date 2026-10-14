@@ -428,7 +428,21 @@ with the next step always on the blue button.
 
 ![Gig prep, with every step done and the stick checked: GIG READY](docs/screenshots/gig-prep.png)
 
-1. **Choose the playlists.** Tick them in the order you'll play them.
+1. **Choose the playlists.** Tick them in the order you'll play them. Your
+   Sortero playlists are listed already; **Add playlists…** brings in ones you
+   have elsewhere:
+   - **Playlist files** (`.m3u`, `.m3u8`) exported from rekordbox, Traktor,
+     Mixxx, VirtualDJ or Apple Music, one at a time or every one in a folder.
+   - **A folder of tracks**, played in filename order, so number the files
+     (`01`, `02`, …) to set it.
+   - **Playlists from a rekordbox XML** (in rekordbox, *File → Export Collection
+     in xml format*), picked from rekordbox's own folders.
+   - **Playlists and crates from Mixxx**, read straight from its library. A
+     crate has no order of its own, so it plays in filename order.
+
+   Sortero only reads these, and reads them again each time, so a change made
+   in the app they came from is picked up. Right-click one to take it off the
+   list; the playlist itself isn't touched.
 2. **Check the tracks.** Each one is checked against what Pioneer's own manuals
    say the players read. **Players** picks which: *Any Pioneer player* (the
    default) allows only what every player from the CDJ-900 and CDJ-2000 to the

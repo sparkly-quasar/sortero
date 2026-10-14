@@ -259,18 +259,18 @@ def _prune(stick, folders):
             pass
 
 
-def sets_from(items, root, names):
-    """[(playlist, [playable paths])] in set order, from Gig prep's checked tracks.
+def sets_from(items, chosen):
+    """[(playlist, [playable paths])] in set order, from Gig prep's checked tracks
+    and the [(playlist, [original paths])] they were checked from.
 
     Returns (sets, missing): tracks with nothing playable yet are left out and
     named in missing.
     """
-    from .. import playlists
     playable = {os.path.normcase(it.src): it.playable for it in items}
     sets, missing = [], []
-    for name in names:
+    for name, originals in chosen:
         tracks = []
-        for src in playlists.entries(root, name):
+        for src in originals:
             p = playable.get(os.path.normcase(src))
             if p:
                 tracks.append(p)

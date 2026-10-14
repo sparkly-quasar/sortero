@@ -24,7 +24,7 @@ what changed, and a track that was moved or renamed is not converted again.
 import concurrent.futures, hashlib, json, os, shutil
 from dataclasses import dataclass, field
 
-from .. import paths, playlists
+from .. import paths
 from . import ffmpeg, profiles, tagcopy
 from .probe import ProbeError, is_lossless, probe
 
@@ -75,11 +75,11 @@ def library_dir(root, chosen=""):
     return lib
 
 
-def playlist_paths(root, names):
-    """Every track in these playlists, in order, each once."""
+def playlist_paths(sets):
+    """Every track in these [(name, [paths])] playlists, in order, each once."""
     seen, out = set(), []
-    for name in names:
-        for p in playlists.entries(root, name):
+    for _, tracks in sets:
+        for p in tracks:
             key = os.path.normcase(p)
             if key not in seen:
                 seen.add(key)

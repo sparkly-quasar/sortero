@@ -19,6 +19,9 @@ DEFAULTS = {
     "gig_profile": "universal",
     "gig_target": "mp3",
     "gig_library": "",
+    # playlists Gig prep reads from outside the collection's _Playlists folder:
+    # [{"kind", "path", "name", "ref"}] (see gig/sources.py)
+    "gig_sources": [],
     # a rekordbox collection XML to take cue points from ("" = none)
     "gig_rekordbox_xml": "",
     # move cues on MP3 copies 25 ms later, for a rekordbox that ignores the

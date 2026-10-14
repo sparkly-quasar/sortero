@@ -25,6 +25,7 @@ class State:
     stick_name: str = ""        # the stick it was written to
     xml_path: str = ""          # the rekordbox XML, once made
     xml_cues: dict = field(default_factory=dict)    # source -> tracks it gave marks to
+    sets: list = None           # [(playlist, [paths])] as read when the tracks were checked
 
 
 @dataclass

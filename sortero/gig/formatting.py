@@ -1,4 +1,4 @@
-"""Erase a USB stick as FAT32 on one MBR partition: the layout every Pioneer player reads.
+"""Erase a USB stick as FAT32 on one MBR partition: every Pioneer and Denon player reads FAT32.
 
 macOS only, through diskutil:
 

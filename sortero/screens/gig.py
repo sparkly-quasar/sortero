@@ -1,4 +1,4 @@
-"""Gig prep: a stick that plays on any Pioneer player, checked before you leave."""
+"""Gig prep: a stick that plays on any Pioneer or Denon player, checked before you leave."""
 import os
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
@@ -23,19 +23,20 @@ def _short(path):
 
 
 def _profile_label(p):
-    return "Any Pioneer player (safest)" if p.key == profiles.UNIVERSAL.key else p.name
+    return f"{p.name} (safest)" if p.key == profiles.EVERY.key else p.name
 
 
 class GigScreen(Screen):
     title = "Gig prep"
-    summary = "Get a USB stick that plays on any Pioneer player, and check it before you leave."
+    summary = ("Get a USB stick that plays on any Pioneer or Denon player, and check it "
+               "before you leave.")
     details = ("Tick the playlists you're playing. Sortero checks every track against what "
-               "Pioneer's own manuals say the players read, and makes a gig-safe copy of "
-               "any track that won't play everywhere, in a folder next to your collection. "
-               "Your originals are never changed.\n\n"
-               "Then plug in the stick and check it: the file system, the rekordbox export "
-               "if there is one, every format, and every track decoded from start to "
-               "finish. It ends with GIG READY or NOT READY, and what to fix.")
+               "Pioneer's and Denon's own manuals say the players read, and makes a "
+               "gig-safe copy of any track that won't play everywhere, in a folder next to "
+               "your collection. Your originals are never changed.\n\n"
+               "Then plug in the stick and check it: the file system, the rekordbox or "
+               "Engine DJ library if there is one, every format, and every track decoded "
+               "from start to finish. It ends with GIG READY or NOT READY, and what to fix.")
 
     def build(self):
         top = ttk.Frame(self)
@@ -44,7 +45,7 @@ class GigScreen(Screen):
         self.profile_labels = {_profile_label(p): p.key for p in profiles.PROFILES.values()}
         self.profile_var = tk.StringVar(
             value=_profile_label(profiles.get(settings.get("gig_profile"))))
-        box = ttk.Combobox(top, textvariable=self.profile_var, state="readonly", width=26,
+        box = ttk.Combobox(top, textvariable=self.profile_var, state="readonly", width=34,
                            values=list(self.profile_labels))
         box.pack(side="left", padx=(0, ui.SECTION))
         box.bind("<<ComboboxSelected>>", lambda e: self._options_changed())
@@ -116,7 +117,7 @@ class GigScreen(Screen):
                            ("Show the copies folder", self.show_library),
                            None,
                            ("Use cue points from a rekordbox XML…", self.choose_cue_xml),
-                           ("How to use the XML in rekordbox", self.show_how_to),
+                           ("How to get the XML onto the stick", self.show_how_to),
                            ("Cue timing on MP3 copies…", self.cue_timing),
                            None,
                            ("Quick stick check (skip the decode test)",
@@ -526,9 +527,9 @@ class GigScreen(Screen):
             self._show([f"Saved “{os.path.basename(out)}” in the gig library.",
                         f"Cue points and beat grids: {got}." if got else
                         "No cue points or beat grids found for these tracks.", "",
-                        "The steps for rekordbox are in their own window, to keep open "
-                        "beside it. More → How to use the XML in rekordbox brings it "
-                        "back."])
+                        f"The steps for {self._apps()} are in their own window, to keep "
+                        "open beside it. More → How to get the XML onto the stick brings "
+                        "it back."])
             self.refresh()
             self.show_how_to()
 
@@ -543,20 +544,35 @@ class GigScreen(Screen):
         if win is not None and win.winfo_exists():
             win.destroy()
         win = self.how_win = tk.Toplevel(self)
-        win.title("Importing into rekordbox")
+        win.title("Putting the gig on the stick")
         win.transient(self.app)
         frame = ttk.Frame(win, padding=ui.PAD)
         frame.pack(fill="both", expand=True)
-        ttk.Label(frame, text="Into rekordbox, then onto the stick",
+        ttk.Label(frame, text=f"Into {self._apps()}, then onto the stick",
                   style="Heading.TLabel").pack(anchor="w", pady=(0, ui.GAP))
-        txt = tk.Text(frame, width=72, height=16, font=ui.BODY, wrap="word", relief="flat",
+        row = ttk.Frame(frame)
+        row.pack(side="bottom", fill="x", pady=(ui.GAP, 0))
+        box = ttk.Frame(frame)
+        box.pack(fill="both", expand=True)
+        txt = tk.Text(box, width=74, height=22, font=ui.BODY, wrap="word", relief="flat",
                       highlightthickness=0)
         ui.paint(txt, bg="window", fg="text")
-        txt.insert("1.0", "\n".join(rbxml.how_to(path)))
+        sb = ttk.Scrollbar(box, orient="vertical", command=txt.yview)
+        txt.configure(yscrollcommand=sb.set)
+        sb.pack(side="right", fill="y")
+        txt.tag_configure("head", font=ui.HEADING)
+        profile = self.profile
+        sections = []
+        if profiles.reads_rekordbox(profile):
+            sections.append(("For Pioneer players: rekordbox", rbxml.how_to(path)))
+        if profiles.reads_engine(profile):
+            sections.append(("For Denon players: Engine DJ", rbxml.engine_how_to(path)))
+        for i, (head, lines) in enumerate(sections):
+            if len(sections) > 1:
+                txt.insert("end", ("\n" if i else "") + head + "\n", "head")
+            txt.insert("end", "\n".join(lines) + "\n")
         txt.configure(state="disabled")
-        txt.pack(fill="both", expand=True)
-        row = ttk.Frame(frame)
-        row.pack(fill="x", pady=(ui.GAP, 0))
+        txt.pack(side="left", fill="both", expand=True)
 
         def copy():
             win.clipboard_clear()
@@ -567,6 +583,13 @@ class GigScreen(Screen):
                                                                            padx=ui.GAP)
         copied = ttk.Label(row, style="Muted.TLabel")
         copied.pack(side="left")
+
+    def _apps(self):
+        """The apps the chosen players' libraries come from: "rekordbox and Engine DJ"."""
+        apps = [name for reads, name in ((profiles.reads_rekordbox, "rekordbox"),
+                                         (profiles.reads_engine, "Engine DJ"))
+                if reads(self.profile)]
+        return " and ".join(apps) or "rekordbox"
 
     def choose_cue_xml(self):
         current = settings.get("gig_rekordbox_xml") or ""

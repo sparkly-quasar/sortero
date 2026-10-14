@@ -115,7 +115,7 @@ open.
 | **Add music** | Choose a folder or files. Analysed tracks go to the folder that already means their genre — yours if you have one. Anything missing a key lands in `To Be Processed`. Tracks with no genre to go on are **held back for you to place** instead of being dropped in `Unsorted`. Tracks already in the library are pointed out, not added twice. |
 | **Library** | Every track in one list. **Show** filters to what needs work (no genre, not analysed, no energy, no artist, artist and title swapped, no BPM, low bitrate); **Search** narrows it; click a column heading to sort. Select tracks and set a genre, swap artist and title, re-read both from the filename, send them to analysis, place them one by one, copy genres from folder names, or look them up on Discogs. Your own set recordings are hidden unless you ask. |
 | **Playlists** | Rebuild a Spotify or TIDAL playlist against your local files from a link, a pasted tracklist or a CSV — all three offered together above the list. **More** rebuilds the folder playlists or repairs broken links. |
-| **Gig prep** | Get a USB stick that plays on any Pioneer player, and check it before you leave. Tick the playlists you're playing, in set order; Sortero makes gig-safe copies of any track that won't play everywhere, then checks the stick and ends with **GIG READY** or **NOT READY**. See [Gig prep](#gig-prep). |
+| **Gig prep** | Get a USB stick that plays on any Pioneer or Denon player, and check it before you leave. Tick the playlists you're playing, in set order; Sortero makes gig-safe copies of any track that won't play everywhere, then checks the stick and ends with **GIG READY** or **NOT READY**. See [Gig prep](#gig-prep). |
 | **Tidy up** | Tools for an existing collection: **Clean tags** (including which way round filenames read), **Fix wrong BPMs**, **Find duplicates**, **Place a folder's tracks by hand**, **Flatten release folders**, **Fix playlist links**, and **Reorganise the whole collection**. Every tool previews before it changes anything. |
 | **History** | Every operation, with undo, and the **safety net**. **Show log** reveals the detailed log. |
 | **Settings** | Collection folder, update checks, Discogs token, Spotify and TIDAL accounts, and the setup guide. |
@@ -443,10 +443,15 @@ with the next step always on the blue button.
    Sortero only reads these, and reads them again each time, so a change made
    in the app they came from is picked up. Right-click one to take it off the
    list; the playlist itself isn't touched.
-2. **Check the tracks.** Each one is checked against what Pioneer's own manuals
-   say the players read. **Players** picks which: *Any Pioneer player* (the
-   default) allows only what every player from the CDJ-900 and CDJ-2000 to the
-   CDJ-3000X and OPUS-QUAD plays.
+2. **Check the tracks.** Each one is checked against what Pioneer's and
+   Denon's own manuals say the players read. **Players** picks which: *Any
+   Pioneer or Denon player* (the default) allows only what every Pioneer
+   player from the CDJ-900 and CDJ-2000 to the CDJ-3000X and OPUS-QUAD plays,
+   and every Denon player from the SC5000 and SC6000 to the PRIME and SC LIVE
+   units. *Any Pioneer player*, *Any Denon player* and each player on its own
+   are there too. Denon's guides leave some limits out (MP3 and AAC sample
+   rates, folder depth, partitions), and Sortero doesn't guess at them; the
+   sources are in [docs/research](docs/research/denon-engine-dj.md).
 3. **Make gig-safe copies** of the tracks that won't play everywhere: MP3 320
    kbps or 16-bit AIFF, in a *Gig Library* folder next to your collection.
    Tracks that already play are used as they are, and your originals are never
@@ -463,13 +468,16 @@ with the next step always on the blue button.
    lists the steps for rekordbox: import the playlists, then drag them to the
    stick with rekordbox 7.2.11 or later, which writes both the Device Library
    older players read and the OneLibrary the newest (CDJ-3000X, OPUS-QUAD)
-   read. An MP3 copy can start 25 ms late in a player that ignores the MP3's
+   read. For Denon players, Engine DJ imports the same XML, cue points, loops
+   and beat grids included, and its Sync Manager exports the playlists to the
+   stick; the window lists those steps too. An MP3 copy can start 25 ms late in a player that ignores the MP3's
    gapless information; **More → Cue timing on MP3 copies…** has a one-time
    check in rekordbox, and moves the cues if it's needed.
 5. **Write a backup stick.** Writes each playlist as a numbered folder, its
    tracks numbered in set order (`01 Warmup/01 Artist - Title.mp3`), so a
-   player browsing folders, or a laptop running Traktor, can find the next track
-   fast if rekordbox fails. Running it again brings the stick up to date: what's
+   player browsing folders (Denon players' Library → Folder works the same), or
+   a laptop running Serato, Traktor or any other DJ software, can find the next
+   track fast if the library on the main stick fails. Running it again brings the stick up to date: what's
    already there is left alone, tracks no longer in the set are removed, and
    files Sortero didn't put on the stick are never touched. macOS `._` files are
    cleared, and the stick is checked straight afterwards, every file compared
@@ -477,7 +485,9 @@ with the next step always on the blue button.
 6. **Check the stick.** Plug it in and choose it. Sortero checks the file system
    and partitions (FAT32 on one MBR partition is what every player reads), the
    rekordbox export if there is one (both libraries present, and every track
-   the Device Library lists on the stick),
+   the Device Library lists on the stick), whether there's an Engine DJ library
+   for Denon players (without one they browse the stick as folders, which still
+   passes),
    every file's format, every file decoded from start to finish, FAT32 name and
    size limits, macOS `._` files, and, on a stick Sortero wrote, every file
    against its original. It ends with **GIG READY** or **NOT READY**, with
@@ -494,7 +504,7 @@ reads the disk again, and stops if it isn't the stick you chose.
 The same check runs from a terminal:
 
 ```bash
-python -m sortero.gig.verify /Volumes/GIG [--player cdj-2000] [--quick]
+python -m sortero.gig.verify /Volumes/GIG [--player cdj-2000|sc6000|denon] [--quick]
 ```
 
 Gig prep uses ffmpeg, and the ready-to-run app carries its own: a small build

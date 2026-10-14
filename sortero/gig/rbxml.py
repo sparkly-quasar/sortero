@@ -170,3 +170,28 @@ def how_to(xml_path):
         "     and the OneLibrary the newest ones (CDJ-3000X, OPUS-QUAD) read.",
         "  6. Come back here and check the stick.",
     ]
+
+
+def engine_how_to(xml_path):
+    """Steps for Engine DJ, for Denon players, from the Engine DJ User Guide
+    v5.0.0 pp. 4, 18 and 30-33 (see docs/research/denon-engine-dj.md). Engine
+    DJ reads the same rekordbox XML, cue points, loops and beat grids included."""
+    return [
+        "In Engine DJ (once):",
+        "  1. In the Library preferences, set Rekordbox Library Integration to On.",
+        "",
+        "Each gig:",
+        "  2. Click Import in the toolbar, then Rekordbox.",
+        f"  3. Click Select XML and choose {xml_path}",
+        "  4. Click Manually Select, then right-click each of this gig's playlists",
+        "     and choose Import as Playlist. If Engine DJ asks, choose whether",
+        "     memory cues come in as memory cues or hot cues.",
+        "  5. Plug in the stick. Click Export in the toolbar to open Sync Manager,",
+        "     choose the stick, tick this gig's playlists and click Export to Drive.",
+        "     Leave about 500 MB free for Engine's library.",
+        "  6. Come back here and check the stick.",
+        "",
+        "Engine DJ 5 writes a library that players on Engine OS 4.3.4 or older may",
+        "show without artwork. The 25 ms cue timing setting was worked out for",
+        "rekordbox; Denon doesn't document whether Engine DJ needs it.",
+    ]

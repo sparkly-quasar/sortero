@@ -85,6 +85,32 @@ class Stick(TempDir):
         self.assertIn("2 tracks, all on the stick", self.check(r, "rekordbox").summary)
         self.assertIn("both Device Library and OneLibrary", self.check(r, "rekordbox").summary)
 
+    def test_for_pioneer_and_denon_without_an_engine_library(self):
+        r = self.run_check(P.EVERY)
+        self.assertTrue(r.ready, "\n".join(r.lines()))
+        c = self.check(r, "Engine DJ")
+        self.assertEqual(c.level, V.PASS)
+        self.assertIn("Denon players will browse it as folders", c.summary)
+        self.assertEqual(r.lines()[0], f"Checking {self.stick} for every Pioneer or Denon player")
+
+    def test_an_engine_library_is_noticed(self):
+        os.makedirs(os.path.join(self.stick, V.ENGINE_DIR))
+        c = self.check(self.run_check(P.EVERY), "Engine DJ")
+        self.assertEqual(c.level, V.PASS)
+        self.assertIn("an Engine library is there", c.summary)
+
+    def test_denon_only_doesnt_need_rekordbox_libraries(self):
+        os.remove(self.one_library)
+        r = self.run_check(P.ANY_DENON)
+        self.assertEqual(self.level(r, "rekordbox"), V.PASS)    # export there, still checked
+        self.assertNotIn("Pioneer", self.check(r, "Engine DJ").summary)
+        shutil.rmtree(os.path.join(self.stick, "PIONEER"))
+        titles = [c.title for c in self.run_check(P.ANY_DENON).checks]
+        self.assertNotIn("rekordbox", titles)
+        self.assertIn("Engine DJ", titles)
+        # and a Pioneer-only check doesn't ask about Engine
+        self.assertNotIn("Engine DJ", [c.title for c in self.run_check().checks])
+
     def test_device_library_only_is_not_enough_for_every_player(self):
         os.remove(self.one_library)
         c = self.check(self.run_check(), "rekordbox")
@@ -171,6 +197,10 @@ class Stick(TempDir):
         c = self.check(self.run_check(), "Names and sizes")
         self.assertEqual(c.level, V.FAIL)
         self.assertIn("more than 8 folders deep", c.details[0])
+        # Denon states no depth limit, so nothing is claimed either way
+        c = self.check(self.run_check(P.ANY_DENON), "Names and sizes")
+        self.assertEqual(c.level, V.PASS)
+        self.assertNotIn("deeper", c.summary)
 
     def test_checksums_against_originals(self):
         originals = self.path("originals")

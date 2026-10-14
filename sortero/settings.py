@@ -16,7 +16,7 @@ DEFAULTS = {
     "genre_ignored": [],
     # Gig prep: which players to prepare for, what files that won't play there
     # become, and where those copies go ("" = next to the collection)
-    "gig_profile": "universal",
+    "gig_profile": "pioneer-denon",
     "gig_target": "mp3",
     "gig_library": "",
     # playlists Gig prep reads from outside the collection's _Playlists folder:

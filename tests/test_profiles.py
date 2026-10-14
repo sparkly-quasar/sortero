@@ -15,9 +15,9 @@ def levels(problems):
 class Universal(unittest.TestCase):
     u = P.UNIVERSAL
 
-    def test_is_the_default(self):
-        self.assertIs(P.get(P.DEFAULT), self.u)
-        self.assertIs(P.get("no-such-player"), self.u)
+    def test_is_still_offered(self):
+        self.assertIs(P.get("universal"), self.u)
+        self.assertEqual(self.u.name, "Any Pioneer player")
 
     def test_only_fat_reads_everywhere(self):
         # XDJ-RX has no HFS+; only the newest players read exFAT.
@@ -42,6 +42,91 @@ class Universal(unittest.TestCase):
                      "CDJ-3000X"):
             self.assertIn(name, note)
         self.assertNotIn("CDJ-2000NXS2", note)
+
+
+class Denon(unittest.TestCase):
+    """Denon's Engine DJ 5.0 guides: exFAT and FAT32, a wide format table, few limits."""
+    every, denon = P.EVERY, P.ANY_DENON
+
+    def test_any_pioneer_or_denon_player_is_the_default(self):
+        self.assertIs(P.get(P.DEFAULT), self.every)
+        self.assertIs(P.get("no-such-player"), self.every)
+        self.assertEqual(list(P.PROFILES)[:3], ["pioneer-denon", "universal", "denon"])
+        self.assertEqual(P.where(self.every), "every Pioneer or Denon player")
+
+    def test_fat32_is_the_one_file_system_they_all_read(self):
+        self.assertEqual(self.every.file_systems, {P.FAT32})
+        self.assertEqual(self.denon.file_systems, {P.EXFAT, P.FAT32})
+        self.assertIn(P.HFS, P.get("sc6000").file_systems)
+        self.assertNotIn(P.HFS, P.get("sc5000").file_systems)
+        self.assertEqual(P.check_volume(self.denon, P.EXFAT), [])
+        [problem] = P.check_volume(self.every, P.EXFAT)
+        self.assertEqual(problem.level, FAIL)
+        self.assertIn("Not every Pioneer or Denon player can read exFAT", problem.text)
+
+    def test_pioneer_limits_win_where_denon_states_none(self):
+        f = self.every.formats
+        self.assertEqual(set(f), {"mp3", "aac", "wav", "aiff"})
+        self.assertEqual(f["mp3"].rates, {44100, 48000})
+        self.assertEqual(f["mp3"].kbps, (32, 320))
+        self.assertEqual(f["aac"].kbps, (16, 320))
+        self.assertTrue(f["aac"].lc_only)
+        self.assertEqual(f["aac"].exts, {".m4a", ".mp4"})      # Denon lists no .aac
+        self.assertEqual(f["wav"].depths, {16, 24})
+        self.assertEqual(f["wav"].rates, {44100, 48000})
+
+    def test_a_stick_for_both_needs_every_library(self):
+        self.assertEqual(self.every.libraries,
+                         {P.DEVICE_LIBRARY, P.ONE_LIBRARY, P.ENGINE_LIBRARY})
+        self.assertEqual(self.denon.libraries, {P.ENGINE_LIBRARY})
+        self.assertTrue(P.reads_engine(self.every) and P.reads_rekordbox(self.every))
+        self.assertFalse(P.reads_rekordbox(self.denon))
+        self.assertFalse(P.reads_engine(P.UNIVERSAL))
+
+    def test_what_denon_plays(self):
+        for info in (AudioInfo("flac", ".flac", 96000, depth=24),
+                     AudioInfo("alac", ".m4a", 48000, depth=24),
+                     AudioInfo("vorbis", ".ogg", 44100, kbps=192),
+                     AudioInfo("wav", ".wav", 192000, depth=32),
+                     AudioInfo("aiff", ".aif", 88200, depth=16),
+                     AudioInfo("aac", ".mp4", 44100, kbps=256, aac_profile="HE-AAC"),
+                     AudioInfo("mp3", ".mp3", 32000, kbps=128)):    # rates not stated
+            with self.subTest(info=info):
+                self.assertEqual(P.check_audio(self.denon, info), [])
+
+    def test_what_denon_doesnt(self):
+        for info in (AudioInfo("wav", ".wav", 22050, depth=16),
+                     AudioInfo("aiff", ".aiff", 44100, depth=8),
+                     AudioInfo("opus", ".opus", 48000, kbps=160),
+                     AudioInfo("aac", ".aac", 44100, kbps=256)):
+            with self.subTest(info=info):
+                self.assertEqual(levels(P.check_audio(self.denon, info)), [FAIL])
+
+    def test_says_who_it_means(self):
+        flac = AudioInfo("flac", ".flac", 44100, depth=16)
+        [problem] = P.check_audio(self.every, flac)
+        self.assertEqual(problem.text, "Not every Pioneer or Denon player plays FLAC files.")
+        [problem] = P.check_audio(self.denon, AudioInfo("aac", ".aac", 44100, kbps=256))
+        self.assertTrue(problem.text.startswith("Denon players only read AAC files"))
+        he = AudioInfo("aac", ".m4a", 44100, kbps=64, aac_profile="HE-AAC")
+        [problem] = P.check_audio(self.every, he)
+        self.assertIn("Pioneer or Denon player plays HE-AAC", problem.text)
+        [problem] = P.check_audio(P.get("sc6000"), AudioInfo("opus", ".opus", 48000))
+        self.assertTrue(problem.text.startswith("The SC6000 / SC6000M PRIME"))
+
+    def test_states_no_folder_partition_or_artwork_limits(self):
+        self.assertIsNone(self.denon.folder_depth)
+        self.assertIsNone(self.denon.artwork_px)
+        self.assertEqual(self.denon.partitions, P.UNKNOWN)
+        self.assertIn("aren't checked", " ".join(self.denon.notes))
+        # combined with Pioneer, Pioneer's limits stand
+        self.assertEqual((self.every.folder_depth, self.every.partitions), (8, P.MAY_FAIL))
+
+    def test_every_denon_player_cites_its_guide(self):
+        for p in P.DENON_PLAYERS:
+            with self.subTest(player=p.name):
+                self.assertEqual(p.brand, "Denon")
+                self.assertRegex(p.sources[0], r"inmusicbrands\.com/.+v5\.\d\.0.*\.pdf p\.\d+$")
 
 
 class Libraries(unittest.TestCase):
@@ -113,7 +198,7 @@ class CheckAudio(unittest.TestCase):
         ogg = AudioInfo("vorbis", ".ogg", 44100, kbps=192)
         problems = P.check_audio(P.UNIVERSAL, ogg)
         self.assertEqual(levels(problems), [FAIL])
-        self.assertIn("VORBIS", problems[0].text)
+        self.assertIn("Ogg Vorbis", problems[0].text)
 
     def test_player_without_a_format_table_only_warns(self):
         self.assertEqual(levels(P.check_audio(P.get("xdj-rx"), MP3_320)), [WARN])

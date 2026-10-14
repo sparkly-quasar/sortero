@@ -121,17 +121,18 @@ def steps(st):
         out.append(Step("xml", "Make the rekordbox XML", "", WAITING))
     elif st.xml_path:
         cued = sum(st.xml_cues.values())
-        text = (f"Ready to import into rekordbox, with cue points for "
+        text = (f"Ready to import into rekordbox or Engine DJ, with cue points for "
                 f"{_plural(cued, 'track')}." if cued else
-                "Ready to import into rekordbox. No cue points were found for these "
-                "tracks.")
+                "Ready to import into rekordbox or Engine DJ. No cue points were found "
+                "for these tracks.")
         out.append(Step("xml", "Make the rekordbox XML", text + " The steps are in the "
                         "report below.", DONE, "Make again"))
     else:
         out.append(Step("xml", "Make the rekordbox XML",
                         "The playlists for rekordbox, pointing at the gig-safe files, with "
                         "cue points and beat grids from rekordbox, Mixxx or Mixed In Key. "
-                        "rekordbox then exports them to the stick.", NEXT,
+                        "rekordbox, or Engine DJ for Denon players, then exports them to "
+                        "the stick.", NEXT,
                         "Make rekordbox XML"))
 
     if not copies_done:
@@ -147,7 +148,8 @@ def steps(st):
     else:
         out.append(Step("stick", "Write a backup stick",
                         "The playlists as numbered folders on a second stick: a backup a "
-                        "player or a laptop can browse if rekordbox fails.", NEXT,
+                        "player or a laptop can browse if the library on the main stick "
+                        "fails.", NEXT,
                         "Write to a stick…"))
 
     if st.report is not None:

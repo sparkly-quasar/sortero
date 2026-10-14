@@ -3,9 +3,9 @@ import os
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-from .. import ui, paths, playlists, settings
+from .. import mixxx, ui, paths, playlists, settings
 from ..common import human_size
-from ..gig import backup, checklist, convert, ffmpeg, profiles, verify
+from ..gig import backup, checklist, convert, cues, ffmpeg, profiles, rbxml, verify
 from ..gig.checklist import DONE, NEXT, WAITING
 from .base import Screen, APP
 
@@ -85,6 +85,10 @@ class GigScreen(Screen):
         self.bar.set_more([("Choose where copies go…", self.choose_library),
                            ("Show the copies folder", self.show_library),
                            None,
+                           ("Use cue points from a rekordbox XML…", self.choose_cue_xml),
+                           ("How to use the XML in rekordbox", self.show_how_to),
+                           ("Cue timing on MP3 copies…", self.cue_timing),
+                           None,
                            ("Quick stick check (skip the decode test)",
                             lambda: self.check_stick(decode=False))])
         self.chosen = [p for p in settings.get("gig_playlists") or []]
@@ -161,7 +165,7 @@ class GigScreen(Screen):
     def _reset(self):
         """Anything chosen differently means the tracks need checking again."""
         self.state.items, self.state.copied = None, False
-        self.state.backup = None
+        self.state.backup, self.state.xml_path, self.state.xml_cues = None, "", {}
         self.refresh()
 
     # ------------------------------------------------------------ drawing
@@ -170,15 +174,18 @@ class GigScreen(Screen):
         st.playlists = list(self.chosen)
         st.track_count = sum(self.counts.get(n, 0) for n in self.chosen)
         all_steps = checklist.steps(st)
+        nxt = checklist.next_step(all_steps)
         for w in self.steps_frame.winfo_children():
             w.destroy()
         actions = {"check": self.check_tracks, "copies": self.make_copies,
-                   "stick": self.write_stick, "verify": self.check_stick}
+                   "xml": self.make_xml, "stick": self.write_stick,
+                   "verify": self.check_stick}
         for i, s in enumerate(all_steps, 1):
-            ui.Card(self.steps_frame, f"{checklist.MARKS[s.status]}  {i}. {s.title}", s.text,
-                    s.button, actions.get(s.key), tone=TONES[s.status]
-                    ).pack(fill="x", pady=(0, 4))
-        nxt = checklist.next_step(all_steps)
+            # Only the step the blue button does explains itself; the rest are one
+            # line each, so the list stays short and the report below has room.
+            ui.Card(self.steps_frame, f"{checklist.MARKS[s.status]}  {i}. {s.title}",
+                    s.text if s is nxt else "", s.button, actions.get(s.key),
+                    tone=TONES[s.status]).pack(fill="x", pady=(0, 4))
         if nxt:
             self.bar.set_primary(nxt.button, actions[nxt.key])
         elif not self.chosen:
@@ -258,6 +265,114 @@ class GigScreen(Screen):
             self.refresh()
 
         self.app.task.run(work, done, "Making gig-safe copies")
+
+    # ----------------------------------------------------------- rekordbox
+    def _xml_path(self, root):
+        lib = convert.library_dir(root, settings.get("gig_library"))
+        return lib, os.path.join(lib, rbxml.FILE_NAME)
+
+    def make_xml(self):
+        root = self.app.require_root()
+        items = self.state.items
+        if not root or not items:
+            return
+        lib, path = self._xml_path(root)
+        names = list(self.chosen)
+        source_xml = settings.get("gig_rekordbox_xml") or None
+        if source_xml and not os.path.isfile(source_xml):
+            source_xml = None
+        db = mixxx.find_db()
+        shift = bool(settings.get("gig_mp3_cue_shift"))
+
+        def work(progress, log):
+            finder = cues.Finder(source_xml, db, log=log)
+            sets = [(n, playlists.entries(root, n)) for n in names]
+            tree, counts = rbxml.build(items, sets, rbxml.gig_name(), finder, shift)
+            os.makedirs(lib, exist_ok=True)
+            return rbxml.write(path, tree), counts
+
+        def done(res):
+            out, counts = res
+            self.state.xml_path, self.state.xml_cues = out, counts
+            got = ", ".join(f"{n} from {src}" for src, n in counts.items())
+            self._show([f"Saved “{os.path.basename(out)}” in the gig library.",
+                        f"Cue points and beat grids: {got}." if got else
+                        "No cue points or beat grids found for these tracks.", "",
+                        "The steps for rekordbox are in their own window, to keep open "
+                        "beside it. More → How to use the XML in rekordbox brings it "
+                        "back."])
+            self.refresh()
+            self.show_how_to()
+
+        self.app.task.run(work, done, "Making the rekordbox XML")
+
+    def show_how_to(self):
+        root = self.app.require_root()
+        if not root:
+            return
+        path = self._xml_path(root)[1]
+        win = getattr(self, "how_win", None)
+        if win is not None and win.winfo_exists():
+            win.destroy()
+        win = self.how_win = tk.Toplevel(self)
+        win.title("Importing into rekordbox")
+        win.transient(self.app)
+        frame = ttk.Frame(win, padding=ui.PAD)
+        frame.pack(fill="both", expand=True)
+        ttk.Label(frame, text="Into rekordbox, then onto the stick",
+                  style="Heading.TLabel").pack(anchor="w", pady=(0, ui.GAP))
+        txt = tk.Text(frame, width=72, height=16, font=ui.BODY, wrap="word", relief="flat",
+                      highlightthickness=0)
+        ui.paint(txt, bg="window", fg="text")
+        txt.insert("1.0", "\n".join(rbxml.how_to(path)))
+        txt.configure(state="disabled")
+        txt.pack(fill="both", expand=True)
+        row = ttk.Frame(frame)
+        row.pack(fill="x", pady=(ui.GAP, 0))
+
+        def copy():
+            win.clipboard_clear()
+            win.clipboard_append(path)
+            copied.configure(text="Copied.")
+        ttk.Button(row, text="Close", command=win.destroy).pack(side="right")
+        ttk.Button(row, text="Copy the XML's location", command=copy).pack(side="right",
+                                                                           padx=ui.GAP)
+        copied = ttk.Label(row, style="Muted.TLabel")
+        copied.pack(side="left")
+
+    def choose_cue_xml(self):
+        current = settings.get("gig_rekordbox_xml") or ""
+        path = filedialog.askopenfilename(
+            title="Choose your rekordbox collection XML",
+            initialdir=os.path.dirname(current) or os.path.expanduser("~"),
+            filetypes=[("rekordbox XML", "*.xml"), ("All files", "*")])
+        if not path:
+            return
+        settings.set("gig_rekordbox_xml", path)
+        messagebox.showinfo(APP, "Cue points and beat grids in that XML come first, then "
+                                 "Mixxx's, then Mixed In Key's in the files.\n\nIn "
+                                 "rekordbox, File > Export Collection in xml format "
+                                 "writes a fresh one. Mixed In Key's rekordbox.xml works "
+                                 "too.")
+        self.state.xml_path = ""
+        self.refresh()
+
+    def cue_timing(self):
+        on = bool(settings.get("gig_mp3_cue_shift"))
+        msg = ("An MP3 copy can start 25 ms late in a player that ignores the MP3's "
+               "gapless information, which would put every cue just before its beat.\n\n"
+               "To check once: import one converted track with cue points into rekordbox "
+               "and look at its first cue at full zoom. Is it about 25 ms (a sliver) "
+               "BEFORE the kick it should sit on?\n\n"
+               f"Cues on MP3 copies are now {'moved 25 ms later' if on else 'left as they are'}.")
+        answer = messagebox.askyesnocancel(APP, msg + "\n\nYes: the cue sat early, move "
+                                                      "them.  No: it sat on the kick.")
+        if answer is None:
+            return
+        settings.set("gig_mp3_cue_shift", bool(answer))
+        if self.state.xml_path:
+            self.state.xml_path = ""
+            self.refresh()
 
     def _choose_stick(self):
         start = "/Volumes" if paths.IS_MAC and os.path.isdir("/Volumes") else None

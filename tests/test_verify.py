@@ -60,6 +60,11 @@ class Stick(TempDir):
         self.stick = self.path("GIG")
         os.makedirs(os.path.join(self.stick, "PIONEER", "rekordbox"))
         shutil.copy(FIXTURE, os.path.join(self.stick, pdb.RELATIVE))
+        # rekordbox 7.2.11+ writes OneLibrary beside it. It's encrypted, so its
+        # contents are never read: being there is what's checked.
+        self.one_library = os.path.join(self.stick, "PIONEER", "rekordbox", "exportLibrary.db")
+        with open(self.one_library, "wb") as fh:
+            fh.write(b"\0" * 64)
         for t in pdb.read(FIXTURE).tracks:
             mp3(pdb.on_stick(self.stick, t.path), t.size)
 
@@ -78,6 +83,26 @@ class Stick(TempDir):
         self.assertEqual(r.verdict, "GIG READY")
         self.assertEqual([c.level for c in r.checks], [V.PASS] * 5)
         self.assertIn("2 tracks, all on the stick", self.check(r, "rekordbox").summary)
+        self.assertIn("both Device Library and OneLibrary", self.check(r, "rekordbox").summary)
+
+    def test_device_library_only_is_not_enough_for_every_player(self):
+        os.remove(self.one_library)
+        c = self.check(self.run_check(), "rekordbox")
+        self.assertEqual(c.level, V.FAIL)
+        self.assertIn("No OneLibrary", c.details[0])
+        self.assertIn("7.2.11", c.details[0])
+        # ...but it's all a CDJ-2000 reads
+        self.assertEqual(self.level(self.run_check(P.get("cdj-2000")), "rekordbox"), V.PASS)
+
+    def test_onelibrary_only_is_not_enough_for_older_players(self):
+        os.remove(os.path.join(self.stick, pdb.RELATIVE))
+        c = self.check(self.run_check(), "rekordbox")
+        self.assertEqual(c.level, V.FAIL)
+        self.assertTrue(any("No Device Library" in d for d in c.details))
+        # a CDJ-3000X reads only OneLibrary, whose contents can't be checked
+        c = self.check(self.run_check(P.get("cdj-3000x")), "rekordbox")
+        self.assertEqual(c.level, V.WARN)
+        self.assertIn("encrypted", c.summary)
 
     def test_a_track_missing_from_the_export(self):
         os.remove(os.path.join(self.stick, "Contents", "Loopmasters", "UnknownAlbum",

@@ -23,6 +23,8 @@ class State:
     report: object = None       # the last verify.Report, if a stick was checked
     backup: object = None       # the last backup.Result, if a stick was written
     stick_name: str = ""        # the stick it was written to
+    xml_path: str = ""          # the rekordbox XML, once made
+    xml_cues: dict = field(default_factory=dict)    # source -> tracks it gave marks to
 
 
 @dataclass
@@ -115,7 +117,24 @@ def steps(st):
 
     copies_done = st.items is not None and not pending
     if not copies_done:
-        out.append(Step("stick", "Put them on a stick", "", WAITING))
+        out.append(Step("xml", "Make the rekordbox XML", "", WAITING))
+    elif st.xml_path:
+        cued = sum(st.xml_cues.values())
+        text = (f"Ready to import into rekordbox, with cue points for "
+                f"{_plural(cued, 'track')}." if cued else
+                "Ready to import into rekordbox. No cue points were found for these "
+                "tracks.")
+        out.append(Step("xml", "Make the rekordbox XML", text + " The steps are in the "
+                        "report below.", DONE, "Make again"))
+    else:
+        out.append(Step("xml", "Make the rekordbox XML",
+                        "The playlists for rekordbox, pointing at the gig-safe files, with "
+                        "cue points and beat grids from rekordbox, Mixxx or Mixed In Key. "
+                        "rekordbox then exports them to the stick.", NEXT,
+                        "Make rekordbox XML"))
+
+    if not copies_done:
+        out.append(Step("stick", "Write a backup stick", "", WAITING))
     elif st.backup is not None:
         b = st.backup
         n = len(b.written) + len(b.unchanged)
@@ -123,12 +142,12 @@ def steps(st):
                 f"on {st.stick_name}.")
         if b.skipped:
             text += f" {len(b.skipped):,} skipped; the report says why."
-        out.append(Step("stick", "Put them on a stick", text, DONE, "Write again…"))
+        out.append(Step("stick", "Write a backup stick", text, DONE, "Write again…"))
     else:
-        out.append(Step("stick", "Put them on a stick",
-                        "Write the playlists to a stick as numbered folders: a backup a "
-                        "player or a laptop can browse if rekordbox fails. (A rekordbox XML "
-                        "to export from is coming next.)", NEXT, "Write to a stick…"))
+        out.append(Step("stick", "Write a backup stick",
+                        "The playlists as numbered folders on a second stick: a backup a "
+                        "player or a laptop can browse if rekordbox fails.", NEXT,
+                        "Write to a stick…"))
 
     if st.report is not None:
         out.append(Step("verify", "Check the stick", st.report.verdict,

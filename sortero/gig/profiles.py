@@ -40,6 +40,15 @@ MAY_FAIL = "may-fail"       # "the device may not be recognized"
 UNKNOWN = "unknown"         # the manual doesn't say
 _PARTITION_RISK = {FIRST_ONLY: 0, UNKNOWN: 1, MAY_FAIL: 2}
 
+# The library a rekordbox USB export carries for players to browse. Older
+# players read the Device Library (export.pdb); the newest read only OneLibrary
+# (exportLibrary.db, formerly "Device Library Plus"). rekordbox 7.2.11 and
+# later writes both. Source: AlphaTheta, "Important Notice for Customers Using
+# USB Devices with Our DJ Equipment" (18 March 2026), LIBRARY_NOTICE.
+DEVICE_LIBRARY, ONE_LIBRARY = "Device Library", "OneLibrary"
+LIBRARY_NOTICE = ("https://alphatheta.com/en/information/"
+                  "important-notice-for-customers-using-usb-devices-with-our-dj-equipment/")
+
 R_44_48 = frozenset({44100, 48000})
 R_32_48 = frozenset({32000, 44100, 48000})
 R_AAC_ALL = frozenset({16000, 22050, 24000, 32000, 44100, 48000})
@@ -91,6 +100,7 @@ class DeckProfile:
     artwork_px: int = None          # larger embedded artwork isn't displayed
     sources: tuple = ()
     notes: tuple = ()
+    libraries: frozenset = frozenset({DEVICE_LIBRARY})  # which rekordbox export it reads
 
     @property
     def formats_known(self):
@@ -138,7 +148,9 @@ PLAYERS = (
                "a later firmware may have added it, but it isn't documented.",)),
     DeckProfile(
         "cdj-3000x", "CDJ-3000X", frozenset({FAT16, FAT32, EXFAT, HFS}),
-        sources=("https://alphatheta.com/en/product/player/cdj-3000x/black/ (Specs)",),
+        sources=("https://alphatheta.com/en/product/player/cdj-3000x/black/ (Specs)",
+                 LIBRARY_NOTICE),
+        libraries=frozenset({ONE_LIBRARY}),
         notes=("AlphaTheta's page lists MP3, AAC, WAV, AIFF, FLAC and ALAC but no "
                "sample rates or bit depths, so files aren't checked against it.",)),
     DeckProfile(
@@ -179,7 +191,9 @@ PLAYERS = (
         "opus-quad", "OPUS-QUAD", frozenset({FAT16, FAT32, EXFAT, HFS}),
         {"mp3": mp3(), "aac": aac(), **lossless(R_UP_TO_96)},
         partitions=FIRST_ONLY, folder_depth=8, artwork_px=800,
-        sources=(f"{_DL}/all-in-one-dj-systems/OPUS-QUAD/OPUS-QUAD_DRI1795D_manual.pdf pp.9-10",)),
+        sources=(f"{_DL}/all-in-one-dj-systems/OPUS-QUAD/OPUS-QUAD_DRI1795D_manual.pdf pp.9-10",
+                 LIBRARY_NOTICE),
+        libraries=frozenset({ONE_LIBRARY})),
 )
 
 
@@ -232,8 +246,11 @@ def intersect(players, key="universal", name="Any Pioneer player"):
     if unknown:
         notes = (f"Format limits come from the manuals that list them. No format "
                  f"table could be found for {', '.join(unknown)}.",)
+    # A stick for all of them has to carry every library any of them reads.
+    libraries = frozenset().union(*(p.libraries for p in players))
+    sources = tuple(dict.fromkeys(s for p in players for s in p.sources))
     return DeckProfile(key, name, fs, formats, partitions, depth, art,
-                       sources=tuple(s for p in players for s in p.sources), notes=notes)
+                       sources=sources, notes=notes, libraries=libraries)
 
 
 UNIVERSAL = intersect(PLAYERS)

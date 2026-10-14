@@ -433,17 +433,30 @@ with the next step always on the blue button.
    grid; artwork too big for older players is shrunk. A file that is already
    lossy is decoded to AIFF rather than encoded lossy a second time. Copies are
    remembered, so the next gig only converts what's new.
-4. **Put them on a stick.** Writes each playlist as a numbered folder, its
+4. **Make the rekordbox XML.** The playlists, numbered in set order, pointing
+   at the gig-safe files, with BPM, key, cue points and beat grids. Cues come
+   from your rekordbox library if you point Sortero at an XML export of it
+   (**More → Use cue points from a rekordbox XML…**; Mixed In Key's
+   `rekordbox.xml` works too), then from Mixxx, then from Mixed In Key's
+   analysis in the files themselves, whichever has them first. A small window
+   lists the steps for rekordbox: import the playlists, then drag them to the
+   stick with rekordbox 7.2.11 or later, which writes both the Device Library
+   older players read and the OneLibrary the newest (CDJ-3000X, OPUS-QUAD)
+   read. An MP3 copy can start 25 ms late in a player that ignores the MP3's
+   gapless information; **More → Cue timing on MP3 copies…** has a one-time
+   check in rekordbox, and moves the cues if it's needed.
+5. **Write a backup stick.** Writes each playlist as a numbered folder, its
    tracks numbered in set order (`01 Warmup/01 Artist - Title.mp3`), so a
    player browsing folders, or a laptop running Traktor, can find the next track
    fast if rekordbox fails. Running it again brings the stick up to date: what's
    already there is left alone, tracks no longer in the set are removed, and
    files Sortero didn't put on the stick are never touched. macOS `._` files are
    cleared, and the stick is checked straight afterwards, every file compared
-   with its original. (A rekordbox XML to export from is coming next.)
-5. **Check the stick.** Plug it in and choose it. Sortero checks the file system
+   with its original.
+6. **Check the stick.** Plug it in and choose it. Sortero checks the file system
    and partitions (FAT32 on one MBR partition is what every player reads), the
-   rekordbox export if there is one (every track it lists is on the stick),
+   rekordbox export if there is one (both libraries present, and every track
+   the Device Library lists on the stick),
    every file's format, every file decoded from start to finish, FAT32 name and
    size limits, macOS `._` files, and, on a stick Sortero wrote, every file
    against its original. It ends with **GIG READY** or **NOT READY**, with

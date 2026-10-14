@@ -19,6 +19,11 @@ DEFAULTS = {
     "gig_profile": "universal",
     "gig_target": "mp3",
     "gig_library": "",
+    # a rekordbox collection XML to take cue points from ("" = none)
+    "gig_rekordbox_xml": "",
+    # move cues on MP3 copies 25 ms later, for a rekordbox that ignores the
+    # LAME gapless header (see gig/rbxml.py)
+    "gig_mp3_cue_shift": False,
 }
 
 

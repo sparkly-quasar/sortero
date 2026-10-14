@@ -44,6 +44,19 @@ class Universal(unittest.TestCase):
         self.assertNotIn("CDJ-2000NXS2", note)
 
 
+class Libraries(unittest.TestCase):
+    """Which rekordbox library a stick needs (AlphaTheta's USB notice, March 2026)."""
+
+    def test_every_player_needs_both(self):
+        self.assertEqual(P.UNIVERSAL.libraries, {P.DEVICE_LIBRARY, P.ONE_LIBRARY})
+
+    def test_newest_read_onelibrary_only(self):
+        for key in ("cdj-3000x", "opus-quad"):
+            self.assertEqual(P.get(key).libraries, {P.ONE_LIBRARY}, key)
+        for key in ("cdj-3000", "cdj-2000nxs2", "xdj-xz", "xdj-rx3", "cdj-900"):
+            self.assertEqual(P.get(key).libraries, {P.DEVICE_LIBRARY}, key)
+
+
 class ConversionTargets(unittest.TestCase):
     """What gig prep converts to must play on every player with a format table."""
 

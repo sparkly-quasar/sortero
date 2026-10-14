@@ -24,7 +24,8 @@ class Steps(unittest.TestCase):
     def test_nothing_chosen_yet(self):
         st = K.State()
         self.assertEqual(statuses(st), {"playlists": K.NEXT, "check": K.WAITING,
-                                        "copies": K.WAITING, "stick": K.WAITING,
+                                        "copies": K.WAITING, "xml": K.WAITING,
+                                        "stick": K.WAITING,
                                         "verify": K.WAITING})
         self.assertIsNone(K.next_step(K.steps(st)))
 
@@ -44,7 +45,8 @@ class Steps(unittest.TestCase):
         st = K.State(["Warmup"], 2, items=[item(C.READY), item(C.READY)])
         self.assertEqual(statuses(st)["copies"], K.DONE)
         nxt = K.next_step(K.steps(st))
-        self.assertEqual((nxt.key, nxt.button), ("stick", "Write to a stick…"))
+        self.assertEqual((nxt.key, nxt.button), ("xml", "Make rekordbox XML"))
+        self.assertEqual(statuses(st)["stick"], K.NEXT)
         # a rekordbox stick can be checked without writing a backup first
         self.assertEqual(statuses(st)["verify"], K.NEXT)
 
@@ -52,12 +54,20 @@ class Steps(unittest.TestCase):
         class Written:
             written, unchanged, skipped = ["a", "b"], ["c"], [("d", "why")]
         st = K.State(["Warmup", "Peak"], 4, items=[item(C.READY)], backup=Written(),
-                     stick_name="GIG")
+                     stick_name="GIG", xml_path="/lib/Sortero gig.xml")
         stick = next(s for s in K.steps(st) if s.key == "stick")
         self.assertEqual(stick.status, K.DONE)
         self.assertIn("3 tracks in 2 numbered folders on GIG", stick.text)
         self.assertIn("1 skipped", stick.text)
         self.assertEqual(K.next_step(K.steps(st)).key, "verify")
+
+    def test_after_making_the_xml(self):
+        st = K.State(["Warmup"], 2, items=[item(C.READY)], xml_path="/lib/x.xml",
+                     xml_cues={"Mixed In Key": 2, "rekordbox": 1})
+        xml = next(s for s in K.steps(st) if s.key == "xml")
+        self.assertEqual(xml.status, K.DONE)
+        self.assertIn("cue points for 3 tracks", xml.text)
+        self.assertEqual(K.next_step(K.steps(st)).key, "stick")
 
     def test_copied_tracks_still_count_as_needing_a_copy(self):
         st = K.State(["Warmup"], 2, items=[item(C.READY), item(C.CONVERTED)], copied=True)

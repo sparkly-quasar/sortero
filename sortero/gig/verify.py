@@ -165,46 +165,83 @@ def check_stick(profile, vol):
     return Check("Stick", level, desc, details)
 
 
-def check_export(stick, entries):
-    """(Check, set of rel paths the export lists)."""
-    path = os.path.join(stick, pdb.RELATIVE)
-    has_pioneer = os.path.isdir(os.path.join(stick, "PIONEER"))
-    if not os.path.isfile(path):
-        if has_pioneer:
-            return Check("rekordbox", FAIL, "there's a PIONEER folder but no "
-                         "rekordbox/export.pdb in it. Export the stick again from "
-                         "rekordbox."), set()
+def _worst(levels):
+    return FAIL if FAIL in levels else WARN if WARN in levels else PASS
+
+
+LIBRARY_FILES = {profiles.DEVICE_LIBRARY: os.path.basename(pdb.RELATIVE),
+                 profiles.ONE_LIBRARY: "exportLibrary.db"}
+WHO_READS = {profiles.DEVICE_LIBRARY: "every player except the newest (CDJ-3000X, "
+                                      "OPUS-QUAD, OMNIS-DUO, XDJ-AZ)",
+             profiles.ONE_LIBRARY: "the newest players (CDJ-3000X, OPUS-QUAD, OMNIS-DUO, "
+                                   "XDJ-AZ)"}
+
+
+def check_export(stick, entries, profile=None):
+    """(Check, set of rel paths the export lists).
+
+    A rekordbox export holds one or both libraries (see profiles.DEVICE_LIBRARY):
+    the stick needs whichever the chosen players read. Only the Device Library
+    can be read here; OneLibrary is encrypted, so its track list isn't checked.
+    """
+    profile = profile or profiles.UNIVERSAL
+    folder = os.path.join(stick, "PIONEER", "rekordbox")
+    present = {lib for lib, fn in LIBRARY_FILES.items()
+               if os.path.isfile(os.path.join(folder, fn))}
+    if not present:
+        if os.path.isdir(os.path.join(stick, "PIONEER")):
+            return Check("rekordbox", FAIL, "there's a PIONEER folder but no rekordbox "
+                         "library in it. Export the stick again from rekordbox."), set()
         return Check("rekordbox", PASS, "no rekordbox export, so players will browse "
                                         "it as folders."), set()
-    try:
-        export = pdb.read(path)
-    except pdb.ExportError as e:
-        return Check("rekordbox", FAIL, f"export.pdb can't be read: {e}. Export the stick "
-                                        "again from rekordbox."), set()
-    sizes = {e.rel.lower(): e.size for e in entries}
-    missing, changed, listed = [], [], set()
-    for t in export.tracks:
-        rel = t.path.lstrip("/")
-        listed.add(rel.lower())
-        if rel.lower() not in sizes:
-            missing.append(f"missing: {rel}" + (f" ({t.title})" if t.title else ""))
-        elif t.size and sizes[rel.lower()] != t.size:
-            changed.append(f"changed since export: {rel}")
-    n = len(export.tracks)
-    extra = [x for x in pdb.EXTRA if os.path.isfile(os.path.join(stick, "PIONEER", "rekordbox", x))]
-    tail = f" (plus {', '.join(extra)} for newer players)" if extra else ""
-    if missing:
-        return Check("rekordbox", FAIL, f"{len(missing)} of {_plural(n, 'track')} in the "
-                     f"export aren't on the stick{tail}. Export again from rekordbox, "
-                     "don't copy files by hand.", missing + changed), listed
-    if changed:
-        return Check("rekordbox", WARN, f"{_plural(n, 'track')}, all on the stick, but "
-                     f"{len(changed)} changed after rekordbox exported them{tail}. "
-                     "Their waveforms and cues may be off.", changed), listed
-    lists = len(export.playlists)
-    return Check("rekordbox", PASS, f"{_plural(n, 'track')}"
-                 + (f" in {_plural(lists, 'playlist')}" if lists else "")
-                 + f", all on the stick{tail}."), listed
+
+    levels, parts, details, listed = [], [], [], set()
+    for lib in sorted(profile.libraries - present):
+        levels.append(FAIL)
+        details.append(f"No {lib} ({LIBRARY_FILES[lib]}), which {WHO_READS[lib]} need to "
+                       "list these playlists. Export again with rekordbox 7.2.11 or later, "
+                       "which writes both.")
+    if profiles.DEVICE_LIBRARY in present:
+        try:
+            export = pdb.read(os.path.join(stick, pdb.RELATIVE))
+        except pdb.ExportError as e:
+            return Check("rekordbox", FAIL, f"export.pdb can't be read: {e}. Export the "
+                                            "stick again from rekordbox.", details), set()
+        sizes = {e.rel.lower(): e.size for e in entries}
+        missing, changed = [], []
+        for t in export.tracks:
+            rel = t.path.lstrip("/")
+            listed.add(rel.lower())
+            if rel.lower() not in sizes:
+                missing.append(f"missing: {rel}" + (f" ({t.title})" if t.title else ""))
+            elif t.size and sizes[rel.lower()] != t.size:
+                changed.append(f"changed since export: {rel}")
+        n, lists = len(export.tracks), len(export.playlists)
+        if missing:
+            levels.append(FAIL)
+            parts.append(f"{len(missing)} of {_plural(n, 'track')} in the export aren't on "
+                         "the stick. Export again from rekordbox, don't copy files by hand")
+        elif changed:
+            levels.append(WARN)
+            parts.append(f"{_plural(n, 'track')}, all on the stick, but {len(changed)} "
+                         "changed after rekordbox exported them, so their waveforms and "
+                         "cues may be off")
+        else:
+            parts.append(f"{_plural(n, 'track')}"
+                         + (f" in {_plural(lists, 'playlist')}" if lists else "")
+                         + ", all on the stick")
+        details = missing + changed + details
+    elif profiles.ONE_LIBRARY in present:
+        levels.append(WARN)
+        parts.append("only a OneLibrary export, which is encrypted, so Sortero can't "
+                     "check its tracks are all there")
+    if present == {profiles.DEVICE_LIBRARY, profiles.ONE_LIBRARY}:
+        parts.append("both Device Library and OneLibrary are there")
+    elif not parts:
+        parts.append(f"{' and '.join(sorted(present))} only")
+    summary = "; ".join(parts) + "."
+    return Check("rekordbox", _worst(levels), summary[:1].upper() + summary[1:],
+                 details), listed
 
 
 def _decode(path):
@@ -352,7 +389,7 @@ def verify(stick, profile=None, decode=True, sources=None, vol=None, progress=No
     report = Report(stick, profile)
     report.checks.append(check_stick(profile, vol or disks.volume(stick)))
     entries = walk(stick)
-    exp, _ = check_export(stick, entries)
+    exp, _ = check_export(stick, entries, profile)
     report.checks.append(exp)
     report.checks += check_audio(stick, entries, profile, decode, progress)
     report.checks.append(check_names(entries, profile))

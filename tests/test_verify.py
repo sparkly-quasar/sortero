@@ -1,5 +1,6 @@
 """Checking a stick before a gig, using a real rekordbox export."""
 import contextlib, io, os, shutil, subprocess, unittest
+from unittest import mock
 
 from mutagen.id3 import ID3, TIT2
 
@@ -110,6 +111,66 @@ class Stick(TempDir):
         self.assertIn("Engine DJ", titles)
         # and a Pioneer-only check doesn't ask about Engine
         self.assertNotIn("Engine DJ", [c.title for c in self.run_check().checks])
+
+    def main(self, profile=P.UNIVERSAL, playlists=None):
+        r = self.run_check(profile, role=V.MAIN, playlists=playlists, decode=False)
+        return r, self.check(r, "Main stick")
+
+    def test_main_stick_with_a_rekordbox_library(self):
+        r, c = self.main()
+        self.assertEqual(c.level, V.PASS)
+        self.assertIn("rekordbox library is there", c.summary)
+        self.assertEqual(r.libraries, ["rekordbox"])
+        self.assertEqual(r.audio, 2)
+
+    def test_main_stick_for_both_makers_wants_either_library(self):
+        r, c = self.main(P.EVERY)
+        self.assertEqual(c.level, V.WARN)
+        self.assertIn("no Engine DJ library, so Denon players will only browse", c.summary)
+        self.assertNotIn("Engine DJ", [x.title for x in r.checks])   # said once, here
+        os.makedirs(os.path.join(self.stick, V.ENGINE_DIR))
+        r, c = self.main(P.EVERY)
+        self.assertEqual(c.level, V.PASS)
+        self.assertIn("rekordbox and Engine DJ libraries are there", c.summary)
+        self.assertEqual(r.libraries, ["rekordbox", "Engine DJ"])
+
+    def test_main_stick_without_a_library_isnt_ready(self):
+        shutil.rmtree(os.path.join(self.stick, "PIONEER"))
+        r, c = self.main(P.EVERY)
+        self.assertEqual(c.level, V.FAIL)
+        self.assertIn("no rekordbox or Engine DJ library on it yet", c.summary)
+        self.assertNotIn("rekordbox", [x.title for x in r.checks])
+        self.assertEqual(r.calm_verdict, "Not ready yet: 1 thing to fix.")
+        self.assertTrue(r.first_problem.startswith("Main stick: there's no"))
+        # an Engine library is no use to Pioneer-only players
+        os.makedirs(os.path.join(self.stick, V.ENGINE_DIR))
+        self.assertEqual(self.main(P.UNIVERSAL)[1].level, V.FAIL)
+        self.assertEqual(self.main(P.ANY_DENON)[1].level, V.PASS)
+
+    def test_main_stick_has_tonights_playlists(self):
+        real = V.pdb.read
+
+        def with_playlists(path):
+            export = real(path)
+            export.playlists = {"01 Warmup": [], "Peak": []}
+            return export
+        with mock.patch.object(V.pdb, "read", with_playlists):
+            c = self.main(playlists=["01 Warmup", "02 Peak"])[1]
+            self.assertEqual(c.level, V.PASS)
+            self.assertIn("tonight's 2 playlists are in its rekordbox library", c.summary)
+            c = self.main(playlists=["01 Warmup", "02 Closing"])[1]
+            self.assertEqual(c.level, V.WARN)
+            self.assertEqual(c.details, ["not in the library: 02 Closing"])
+            c = self.main(playlists=["01 Closing"])[1]
+            self.assertEqual(c.level, V.FAIL)
+            self.assertIn("Is it an older export?", c.summary)
+
+    def test_a_backup_check_doesnt_ask_for_a_library(self):
+        shutil.rmtree(os.path.join(self.stick, "PIONEER"))
+        r = self.run_check(P.EVERY, role=V.BACKUP)
+        self.assertNotIn("Main stick", [c.title for c in r.checks])
+        self.assertTrue(r.ready, "\n".join(r.lines()))
+        self.assertEqual(r.calm_verdict, "GIG READY")
 
     def test_device_library_only_is_not_enough_for_every_player(self):
         os.remove(self.one_library)

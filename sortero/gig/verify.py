@@ -11,6 +11,12 @@ Six checks, each pass, warn or fail:
   Checksums        files match the originals they came from: always on a
                    stick Sortero wrote, otherwise when originals are given
 
+Checking the *main* stick (role=MAIN) adds one more:
+
+  Main stick       a library the chosen players read is on it (rekordbox's for
+                   Pioneer, Engine DJ's for Denon; either will do), and
+                   tonight's playlists are in the rekordbox one
+
 Any fail means NOT READY. Warnings are listed but don't stop the gig.
 
 Also runs from a terminal:
@@ -39,6 +45,7 @@ FAT_ILLEGAL = re.compile(r'[\x00-\x1f"*:<>?\\|]')
 RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)),
             *(f"LPT{i}" for i in range(1, 10))}
 SHOWN = 4                               # detail lines per check, so it fits on one screen
+MAIN, BACKUP = "main", "backup"         # which stick is being checked, when Gig prep knows
 
 
 @dataclass
@@ -54,6 +61,24 @@ class Report:
     stick: str
     profile: profiles.DeckProfile
     checks: list = field(default_factory=list)
+    libraries: list = field(default_factory=list)   # libraries found: "rekordbox", "Engine DJ"
+    audio: int = 0                                  # audio files on the stick
+
+    @property
+    def calm_verdict(self):
+        """The verdict as Gig prep shows it: no shouting, and says what's next."""
+        if not self.ready:
+            n = self.problems
+            return f"Not ready yet: {n} {'thing' if n == 1 else 'things'} to fix."
+        if self.warnings:
+            n = self.warnings
+            return f"GIG READY, with {n} {'thing' if n == 1 else 'things'} worth a look."
+        return "GIG READY"
+
+    @property
+    def first_problem(self):
+        c = next((c for c in self.checks if c.level == FAIL), None)
+        return f"{c.title}: {c.summary}" if c else ""
 
     @property
     def problems(self):
@@ -248,6 +273,62 @@ def check_export(stick, entries, profile=None):
                  details), listed
 
 
+def _bare(name):
+    """A playlist name without the set number Gig prep puts in front ("01 Warmup")."""
+    return re.sub(r"^\d+\s+", "", name).strip().casefold()
+
+
+def check_main(stick, profile, playlists=None):
+    """The main stick needs a library the chosen players read, and tonight's set in it.
+
+    Either library will do when both makers' players are chosen; the one that's
+    missing is a warning (those players browse folders instead). `playlists`
+    are the names in Gig prep's XML; they're looked for in the Device Library,
+    the one library Sortero can open.
+    """
+    pioneer = os.path.join(stick, "PIONEER", "rekordbox")
+    has_rb = any(os.path.isfile(os.path.join(pioneer, fn)) for fn in LIBRARY_FILES.values())
+    has_engine = os.path.isdir(os.path.join(stick, ENGINE_DIR))
+    wanted = [(profiles.reads_rekordbox(profile), has_rb, "rekordbox", "Pioneer"),
+              (profiles.reads_engine(profile), has_engine, "Engine DJ", "Denon")]
+    wanted = [w for w in wanted if w[0]]
+    apps = " or ".join(w[2] for w in wanted)
+    if not any(w[1] for w in wanted):
+        return Check("Main stick", FAIL, f"there's no {apps} library on it yet. Put the "
+                     f"set on it with {apps}, then check it again.")
+    levels, parts, details = [], [], []
+    for _, has, app, brand in wanted:
+        if not has:
+            levels.append(WARN)
+            parts.append(f"no {app} library, so {brand} players will only browse it as "
+                         "folders")
+    if has_rb and playlists and os.path.isfile(os.path.join(stick, pdb.RELATIVE)):
+        try:
+            on_stick = {_bare(n) for n in pdb.read(os.path.join(stick, pdb.RELATIVE)).playlists}
+        except pdb.ExportError:
+            on_stick = None             # the rekordbox check says why
+        if on_stick is not None:
+            missing = [n for n in playlists if _bare(n) not in on_stick]
+            if len(missing) == len(playlists):
+                levels.append(FAIL)
+                parts.append("none of tonight's playlists are in its rekordbox library. "
+                             "Is it an older export? Put the set on it again")
+            elif missing:
+                levels.append(WARN)
+                parts.append(f"{_plural(len(missing), 'playlist')} of tonight's set "
+                             "isn't in its rekordbox library")
+                details += [f"not in the library: {n}" for n in missing]
+            else:
+                parts.append(f"tonight's {_plural(len(playlists), 'playlist')} are in "
+                             "its rekordbox library")
+    if not parts:
+        found = [w[2] for w in wanted if w[1]]
+        parts.append(f"its {' and '.join(found)} "
+                     f"{'library is' if len(found) == 1 else 'libraries are'} there")
+    summary = "; ".join(parts) + "."
+    return Check("Main stick", _worst(levels), summary, details)
+
+
 def check_engine(stick, profile=None):
     """Is there an Engine database for Denon players? Either way the stick plays:
     without one they browse it as folders (Library > Folder)."""
@@ -400,18 +481,33 @@ def check_checksums(entries, sources, progress=None):
 
 
 # --------------------------------------------------------------------- run
-def verify(stick, profile=None, decode=True, sources=None, vol=None, progress=None):
-    """Run every check on the stick mounted at `stick`. Returns a Report."""
+def verify(stick, profile=None, decode=True, sources=None, vol=None, progress=None,
+           role=None, playlists=None):
+    """Run every check on the stick mounted at `stick`. Returns a Report.
+
+    role=MAIN also checks there's a library for the players, with `playlists`
+    (the names Gig prep gave them) in it."""
     profile = profile or profiles.EVERY
     report = Report(stick, profile)
     report.checks.append(check_stick(profile, vol or disks.volume(stick)))
+    if role == MAIN:
+        report.checks.append(check_main(stick, profile, playlists))
     entries = walk(stick)
-    if profiles.reads_rekordbox(profile) or os.path.isdir(os.path.join(stick, "PIONEER")):
+    has_pioneer = os.path.isdir(os.path.join(stick, "PIONEER"))
+    has_engine = os.path.isdir(os.path.join(stick, ENGINE_DIR))
+    # On the main stick a missing library is the Main stick check's to report
+    if has_pioneer or (profiles.reads_rekordbox(profile) and role != MAIN):
         exp, _ = check_export(stick, entries, profile)
         report.checks.append(exp)
-    if profiles.reads_engine(profile):
+    if profiles.reads_engine(profile) and (has_engine or role != MAIN):
         report.checks.append(check_engine(stick, profile))
     report.checks += check_audio(stick, entries, profile, decode, progress)
+    report.audio = sum(1 for e in entries if is_audio(e))
+    if any(os.path.isfile(os.path.join(stick, "PIONEER", "rekordbox", fn))
+           for fn in LIBRARY_FILES.values()):
+        report.libraries.append("rekordbox")
+    if os.path.isdir(os.path.join(stick, ENGINE_DIR)):
+        report.libraries.append("Engine DJ")
     report.checks.append(check_names(entries, profile))
     from . import backup
     # A stick Sortero wrote knows exactly where each file came from, which beats

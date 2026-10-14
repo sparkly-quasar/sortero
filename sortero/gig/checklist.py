@@ -2,30 +2,63 @@
 
 Kept apart from the screen so it can be tested without a window. The screen
 hands over what it knows (State) and draws whatever steps() returns.
+
+Five steps, in the order a gig is prepared:
+
+  set     Your set: the playlists, in play order
+  tracks  Make the tracks gig-safe: check every track, copy the ones that won't play
+  main    Main stick: the playlists into rekordbox or Engine DJ, onto the stick, checked
+  backup  Backup stick: numbered folders on a second stick, checked (recommended)
+  ready   Ready to leave: GIG READY once the main stick passes
+
+A step is DONE, NEXT (the one to do now) or WAITING (not yet). The backup can
+be done any time after the tracks; it becomes NEXT once the main stick passes.
 """
+import time
 from dataclasses import dataclass, field
 
 from . import convert
 
 DONE, NEXT, WAITING = "done", "next", "waiting"
 MARKS = {DONE: "✓", NEXT: "→", WAITING: "○"}
+KEYS = ("set", "tracks", "main", "backup", "ready")
 
 # Bytes per second of audio, for the space a copy will take.
 RATE_BYTES = {convert.MP3: 320_000 // 8, convert.AIFF: 44_100 * 2 * 2}
 
 
 @dataclass
+class StickCheck:
+    """What a stick check found, kept short enough to remember across restarts."""
+    name: str                   # the stick's volume name
+    when: float                 # time.time() of the check
+    ready: bool
+    verdict: str                # e.g. "Not ready yet: 1 thing to fix."
+    summary: str = ""           # e.g. "rekordbox library, 10 tracks"
+    first_problem: str = ""
+
+    def to_dict(self):
+        return dict(self.__dict__)
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls(**{k: d[k] for k in cls.__dataclass_fields__ if k in d})
+
+
+@dataclass
 class State:
     playlists: list = field(default_factory=list)   # chosen, in set order
     track_count: int = 0
+    apps: str = "rekordbox"     # where the main stick's library comes from, for wording
     items: list = None          # convert.plan's result, once the tracks are checked
     copied: bool = False        # convert.run has finished on these items
-    report: object = None       # the last verify.Report, if a stick was checked
-    backup: object = None       # the last backup.Result, if a stick was written
-    stick_name: str = ""        # the stick it was written to
+    sets: list = None           # [(playlist, [paths])] as read when the tracks were checked
     xml_path: str = ""          # the rekordbox XML, once made
     xml_cues: dict = field(default_factory=dict)    # source -> tracks it gave marks to
-    sets: list = None           # [(playlist, [paths])] as read when the tracks were checked
+    main: StickCheck = None     # the main stick's last check
+    backup: object = None       # the last backup.Result, if a backup stick was written
+    backup_check: StickCheck = None
+    earlier: float = None       # sticks checked in an earlier session, for this same set
 
 
 @dataclass
@@ -55,6 +88,20 @@ def _plural(n, one, many=None):
     return f"{n:,} {one if n == 1 else (many or one + 's')}"
 
 
+def when(t, now=None):
+    """"21:14" today, "yesterday 21:14", or "14 Oct 21:14"."""
+    now = time.localtime(now if now is not None else time.time())
+    then = time.localtime(t)
+    clock = time.strftime("%H:%M", then)
+    days = (time.mktime(now[:3] + (0, 0, 0, 0, 0, -1))
+            - time.mktime(then[:3] + (0, 0, 0, 0, 0, -1))) / 86400
+    if round(days) == 0:
+        return clock
+    if round(days) == 1:
+        return f"yesterday {clock}"
+    return f"{then.tm_mday} {time.strftime('%b', then)} {clock}"
+
+
 def check_text(items):
     c = convert.counts(items)
     ready = c[convert.READY]
@@ -67,7 +114,7 @@ def check_text(items):
     else:
         parts.append("None need a copy.")
     if c[convert.FAILED]:
-        parts.append(f"{c[convert.FAILED]:,} can't be used; the report says why.")
+        parts.append(f"{c[convert.FAILED]:,} can't be used; the list below says why.")
     return " ".join(parts)
 
 
@@ -76,97 +123,120 @@ def copies_text(items):
     made = c[convert.CONVERTED] + c[convert.REUSED]
     text = f"{_plural(made, 'copy', 'copies')} ready in the gig library."
     if c[convert.FAILED]:
-        text += f" {c[convert.FAILED]:,} couldn't be used; the report says why."
+        text += f" {c[convert.FAILED]:,} couldn't be used."
     return text
+
+
+def set_text(st):
+    return " → ".join(st.playlists) + f" · {_plural(st.track_count, 'track')}"
+
+
+def _stick_line(label, chk):
+    return f"{label} “{chk.name}” checked {when(chk.when)}" + (
+        f": {chk.summary}" if chk.summary else "")
 
 
 def steps(st):
     out = []
     chosen = bool(st.playlists)
+
+    # 1. Your set
     if chosen:
-        out.append(Step("playlists", "Choose the playlists",
-                        f"{_plural(len(st.playlists), 'playlist')}, "
-                        f"{_plural(st.track_count, 'track')}, in this order: "
-                        + ", ".join(st.playlists) + ".", DONE))
+        out.append(Step("set", "Your set", set_text(st), DONE))
     else:
-        out.append(Step("playlists", "Choose the playlists",
-                        "Tick the playlists you're playing, in the order you'll play "
-                        "them.", NEXT))
+        out.append(Step("set", "Your set",
+                        "Tick the playlists you're playing, then put them in play order.",
+                        NEXT))
 
+    # 2. Make the tracks gig-safe
+    pending = convert.counts(st.items)[convert.CONVERT] if st.items is not None else 0
+    tracks_done = st.items is not None and not pending
+    title = "Make the tracks gig-safe"
     if not chosen:
-        out.append(Step("check", "Check the tracks", "", WAITING))
+        out.append(Step("tracks", title, "", WAITING))
+    elif st.items is None and st.earlier:
+        out.append(Step("tracks", title, f"Done earlier ({when(st.earlier)}).", DONE))
+        tracks_done = True
     elif st.items is None:
-        out.append(Step("check", "Check the tracks",
-                        "See which tracks play on the players as they are, and which "
-                        "need a gig-safe copy.", NEXT, "Check tracks"))
-    else:
-        out.append(Step("check", "Check the tracks", check_text(st.items), DONE,
-                        "Check again"))
-
-    pending = (convert.counts(st.items)[convert.CONVERT] if st.items is not None else 0)
-    if st.items is None:
-        out.append(Step("copies", "Make gig-safe copies", "", WAITING))
+        out.append(Step("tracks", title, "Sortero checks every track against what the "
+                        "players read.", NEXT, "Check the tracks"))
     elif pending:
-        out.append(Step("copies", "Make gig-safe copies",
-                        f"{_plural(pending, 'track')} to copy, about "
-                        f"{_size(estimate_bytes(st.items))}. Your originals are never "
-                        "changed.", NEXT, f"Make {_plural(pending, 'copy', 'copies')}"))
+        out.append(Step("tracks", title, check_text(st.items) + " Your originals are "
+                        "never changed.", NEXT,
+                        f"Make {_plural(pending, 'copy', 'copies')}"))
     else:
-        out.append(Step("copies", "Make gig-safe copies",
-                        copies_text(st.items) if st.copied else "Nothing needs a copy.",
-                        DONE))
+        text = check_text(st.items)
+        if st.copied:
+            text += " " + copies_text(st.items)
+        out.append(Step("tracks", title, text, DONE))
 
-    copies_done = st.items is not None and not pending
-    if not copies_done:
-        out.append(Step("xml", "Make the rekordbox XML", "", WAITING))
-    elif st.xml_path:
-        cued = sum(st.xml_cues.values())
-        text = (f"Ready to import into rekordbox or Engine DJ, with cue points for "
-                f"{_plural(cued, 'track')}." if cued else
-                "Ready to import into rekordbox or Engine DJ. No cue points were found "
-                "for these tracks.")
-        out.append(Step("xml", "Make the rekordbox XML", text + " The steps are in the "
-                        "report below.", DONE, "Make again"))
+    # 3. Main stick
+    title = f"Main stick ({st.apps})"
+    main_ok = bool(st.main and st.main.ready)
+    if not tracks_done:
+        out.append(Step("main", title, "", WAITING))
+    elif main_ok:
+        out.append(Step("main", title, _stick_line("Main stick", st.main) + ".", DONE))
+    elif st.main:
+        text = st.main.verdict + (f" {st.main.first_problem}" if st.main.first_problem
+                                  else "")
+        out.append(Step("main", title, text, NEXT, "Check the main stick again…"))
+    elif not st.xml_path and not st.earlier:
+        out.append(Step("main", title, f"Make the playlists file, then put the set on the "
+                        f"stick with {st.apps}. The steps show here.", NEXT,
+                        "Make the playlists file"))
     else:
-        out.append(Step("xml", "Make the rekordbox XML",
-                        "The playlists for rekordbox, pointing at the gig-safe files, with "
-                        "cue points and beat grids from rekordbox, Mixxx or Mixed In Key. "
-                        "rekordbox, or Engine DJ for Denon players, then exports them to "
-                        "the stick.", NEXT,
-                        "Make rekordbox XML"))
+        out.append(Step("main", title, f"Put the set on the stick with {st.apps}, "
+                        "following the steps below, then check it.", NEXT,
+                        "Check the main stick…"))
 
-    if not copies_done:
-        out.append(Step("stick", "Write a backup stick", "", WAITING))
-    elif st.backup is not None:
-        b = st.backup
-        n = len(b.written) + len(b.unchanged)
-        text = (f"{_plural(n, 'track')} in {_plural(len(st.playlists), 'numbered folder')} "
-                f"on {st.stick_name}.")
-        if b.skipped:
-            text += f" {len(b.skipped):,} skipped; the report says why."
-        out.append(Step("stick", "Write a backup stick", text, DONE, "Write again…"))
+    # 4. Backup stick
+    title = "Backup stick"
+    b = st.backup_check
+    if not tracks_done:
+        out.append(Step("backup", title, "", WAITING))
+    elif b and b.ready:
+        out.append(Step("backup", title, _stick_line("Backup", b) + ".", DONE))
+    elif b:
+        out.append(Step("backup", title, b.verdict + (f" {b.first_problem}"
+                                                     if b.first_problem else ""),
+                        NEXT, "Write the backup again…"))
     else:
-        out.append(Step("stick", "Write a backup stick",
-                        "The playlists as numbered folders on a second stick: a backup a "
-                        "player or a laptop can browse if the library on the main stick "
-                        "fails.", NEXT,
-                        "Write to a stick…"))
+        out.append(Step("backup", title, "Recommended: the set as numbered folders on a "
+                        "second stick, to browse if the main stick fails.",
+                        NEXT if main_ok else WAITING, "Write the backup stick…"))
 
-    if st.report is not None:
-        out.append(Step("verify", "Check the stick", st.report.verdict,
-                        DONE if st.report.ready else NEXT, "Check a stick…"))
+    # 5. Ready to leave
+    if not main_ok:
+        out.append(Step("ready", "Ready to leave", "", WAITING))
     else:
-        out.append(Step("verify", "Check the stick",
-                        "Plug it in and check it plays everywhere: file system, "
-                        "formats, and every track decoded from start to finish."
-                        if copies_done else "", NEXT if copies_done else WAITING,
-                        "Check a stick…"))
+        lines = ["GIG READY.", _stick_line("Main stick", st.main) + "."]
+        if b and b.ready:
+            lines.append(_stick_line("Backup", b) + ".")
+        else:
+            lines.append("No backup stick yet. One is recommended, not required.")
+        lines.append("Eject both sticks before you unplug them.")
+        out.append(Step("ready", "Ready to leave", "\n".join(lines), DONE))
     return out
 
 
 def next_step(all_steps):
-    """The step the main button should do: the first one marked next that has a button."""
+    """The step to do now: the first one marked next that has a button."""
     for s in all_steps:
         if s.status == NEXT and s.button:
             return s
     return None
+
+
+def ready(st):
+    return bool(st.main and st.main.ready)
+
+
+def current(all_steps):
+    """The step that should be open: the next one to do, or, with everything
+    done, the last done one (Ready to leave)."""
+    nxt = next((s for s in all_steps if s.status == NEXT), None)
+    if nxt:
+        return nxt.key
+    done = [s for s in all_steps if s.status == DONE]
+    return done[-1].key if done else all_steps[0].key

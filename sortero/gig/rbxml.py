@@ -124,16 +124,21 @@ def build(items, sets, gig_name, finder=None, shift_mp3_copies=False):
     playlists = ET.SubElement(root, "PLAYLISTS")
     top = ET.SubElement(playlists, "NODE", Type="0", Name="ROOT", Count="1")
     folder = ET.SubElement(top, "NODE", Type="0", Name=gig_name, Count=str(len(sets)))
-    width = max(2, len(str(len(sets))))
-    for i, (name, originals) in enumerate(sets, 1):
+    for name, (_, originals) in zip(playlist_names(sets), sets):
         keys = [track_id(by_src[cues.key(src)]) for src in originals
                 if cues.key(src) in by_src]
-        node = ET.SubElement(folder, "NODE", Type="1", Name=f"{i:0{width}d} {name}",
+        node = ET.SubElement(folder, "NODE", Type="1", Name=name,
                              KeyType="0", Entries=str(len(keys)))
         for tid in keys:
             ET.SubElement(node, "TRACK", Key=str(tid))
     collection.set("Entries", str(len(ids)))
     return ET.ElementTree(root), counts
+
+
+def playlist_names(sets):
+    """The playlists' names in the XML, numbered in set order: "01 Warmup"."""
+    width = max(2, len(str(len(sets))))
+    return [f"{i:0{width}d} {name}" for i, (name, _) in enumerate(sets, 1)]
 
 
 def write(path, tree):

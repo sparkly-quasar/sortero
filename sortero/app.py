@@ -15,6 +15,7 @@ from .screens.gig import GigScreen
 from .screens.tidy import (TidyUpScreen, CleanTagsScreen, FixBpmScreen, DuplicatesScreen,
                            ReorganiseScreen)
 from .screens.history import HistoryScreen
+from .screens.shrink import ShrinkScreen
 from .screens.settings_screen import SettingsScreen
 from .screens.pro_screen import ProScreen
 from .version import __version__
@@ -25,7 +26,8 @@ NAV = [("todo", "To do"), ("add", "Add music"), ("library", "Library"),
 SCREENS = {"todo": TodoScreen, "add": AddMusicScreen, "library": LibraryScreen,
            "playlists": PlaylistsScreen, "gig": GigScreen, "tidy": TidyUpScreen,
            "tags": CleanTagsScreen, "bpm": FixBpmScreen, "dupes": DuplicatesScreen, "reorganise": ReorganiseScreen,
-           "history": HistoryScreen, "settings": SettingsScreen, "pro": ProScreen}
+           "history": HistoryScreen, "settings": SettingsScreen, "pro": ProScreen,
+           "shrink": ShrinkScreen}
 MOD = "Command" if paths.IS_MAC else "Control"
 ACCEL = "Cmd-" if paths.IS_MAC else "Ctrl+"
 

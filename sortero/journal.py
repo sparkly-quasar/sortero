@@ -17,6 +17,7 @@ class Journal:
         self.root = root
         self.entries = []
         self.started = time.time()
+        self.extra = {}         # anything else the batch needs remembered (shrink: the archive)
 
     # -- record -------------------------------------------------------------
     def moved(self, src, dst):
@@ -37,6 +38,10 @@ class Journal:
         """A text file rewritten in place; keep what it said before."""
         self.entries.append({"op": "write", "path": path, "old": old_content})
 
+    def mixxx_relinked(self, db, change):
+        """A track in Mixxx's library pointed at a new file (see mixxx.relink)."""
+        self.entries.append({"op": "mixxx-relink", "db": db, **change})
+
     # -- persist ------------------------------------------------------------
     @property
     def path(self):
@@ -47,7 +52,7 @@ class Journal:
             return None
         _ensure()
         with open(self.path, "w") as fh:
-            json.dump({"id": self.id, "kind": self.kind, "root": self.root,
+            json.dump({**self.extra, "id": self.id, "kind": self.kind, "root": self.root,
                        "started": self.started, "finished": time.time(),
                        "entries": self.entries}, fh, indent=1)
         # If testing mode is running, this operation joins its restore point.
@@ -74,7 +79,8 @@ def list_journals():
         if not fn.endswith(".json"):
             continue
         try:
-            rec = json.load(open(os.path.join(d, fn)))
+            with open(os.path.join(d, fn)) as fh:
+                rec = json.load(fh)
             rec["_file"] = os.path.join(d, fn)
             out.append(rec)
         except Exception:
@@ -82,10 +88,25 @@ def list_journals():
     return out
 
 
+def lock(journal_file, reason):
+    """Mark a batch as one that can't be undone any more, and say why."""
+    with open(journal_file) as fh:
+        d = json.load(fh)
+    d["locked"] = reason
+    tmp = journal_file + ".tmp"
+    with open(tmp, "w") as fh:
+        json.dump(d, fh, indent=1)
+    os.replace(tmp, journal_file)
+
+
 def revert(journal_file, log=print):
-    """Undo a journal, newest entry first."""
+    """Undo a journal, newest entry first. A locked one is left alone."""
     from .tagio import Track
-    d = json.load(open(journal_file))
+    with open(journal_file) as fh:
+        d = json.load(fh)
+    if d.get("locked"):
+        log(f"  can't be undone: {d['locked']}")
+        return 0, 0
     entries = d["entries"]
     ok = fail = 0
     for e in reversed(entries):
@@ -117,6 +138,10 @@ def revert(journal_file, log=print):
                     os.remove(p); ok += 1
                 elif os.path.isdir(p) and not os.listdir(p):
                     os.rmdir(p); ok += 1
+            elif e["op"] == "mixxx-relink":
+                from . import mixxx
+                mixxx.unrelink(e["db"], e)
+                ok += 1
             elif e["op"] == "write":
                 with open(e["path"], "w", encoding="utf-8") as fh:
                     fh.write(e["old"])

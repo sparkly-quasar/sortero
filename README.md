@@ -63,6 +63,11 @@ folders as playlists.
 
 ![Reorganise](docs/screenshots/reorganise.png)
 
+**Gig prep** takes a set from playlists to a checked USB stick, one step at a
+time, and ends with a GIG READY or NOT READY verdict.
+
+![Gig prep](docs/screenshots/gig-prep.png)
+
 ## Layout it produces
 
 ```
@@ -420,6 +425,8 @@ original is set aside in `_Quarantine/damaged headers`, and History undoes it.
 A gig stick has to play on whatever players the venue has, and the time to find
 out it doesn't is before you leave. **Gig prep** walks through it as a checklist,
 with the next step always on the blue button.
+
+![Gig prep, with every step done and the stick checked: GIG READY](docs/screenshots/gig-prep.png)
 
 1. **Choose the playlists.** Tick them in the order you'll play them.
 2. **Check the tracks.** Each one is checked against what Pioneer's own manuals

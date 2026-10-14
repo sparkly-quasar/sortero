@@ -317,6 +317,74 @@ class Card(tk.Frame):
             lk.bind("<Button-1>", lambda e: link_command())
 
 
+class StepCard(tk.Frame):
+    """One step of a checklist, built once and updated in place.
+
+    A header row (the title, then small tools on the right), a line of text,
+    and, while the step is open, a body that can hold anything plus the step's
+    one button. Updating in place keeps whatever lives in the body (a list's
+    ticks and scroll position) across refreshes. Laid out with grid, so a long
+    explanation can never squeeze the button (see Card).
+    """
+
+    def __init__(self, parent, on_open=None):
+        super().__init__(parent, highlightthickness=1, bd=0, padx=14, pady=10)
+        paint(self, bg="card", highlightbackground="border", highlightcolor="border")
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(2, weight=1)
+        head = tk.Frame(self)
+        paint(head, bg="card")
+        head.grid(row=0, column=0, columnspan=2, sticky="ew")
+        self.tools = tk.Frame(head)         # small actions at the right of the title
+        paint(self.tools, bg="card")
+        self.tools.pack(side="right")
+        self.title = tk.Label(head, font=HEADING, anchor="w", justify="left")
+        paint(self.title, bg="card", fg="text")
+        self.title.pack(side="left", fill="x", expand=True)
+        if on_open:
+            self.title.configure(cursor="pointinghand" if IS_MAC else "hand2")
+            self.title.bind("<Button-1>", lambda e: on_open())
+        self.text = tk.Label(self, font=BODY, anchor="w", justify="left")
+        paint(self.text, bg="card", fg="muted")
+        self.text.bind("<Configure>",
+                       lambda e: self.text.configure(wraplength=max(e.width - 4, 200)))
+        self.body = tk.Frame(self)
+        paint(self.body, bg="card")
+        self.button = ttk.Button(self, default="active")
+        self._open = None
+
+    def update(self, title, text="", tone="text", text_tone="muted", button=None,
+               command=None, open=False, enabled=True):
+        self.title.configure(text=title)
+        paint(self.title, fg=tone)
+        self.text.configure(text=text)
+        paint(self.text, fg=text_tone)
+        if text:
+            self.text.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(2, 0))
+        else:
+            self.text.grid_remove()
+        if open != self._open:
+            self._open = open
+            if open:
+                self.body.grid(row=2, column=0, columnspan=2, sticky="nsew", pady=(GAP, 0))
+            else:
+                self.body.grid_remove()
+        if open and button:
+            self.button.configure(text=button, command=command or (lambda: None),
+                                  state="normal" if enabled else "disabled")
+            self.button.grid(row=3, column=1, sticky="e", pady=(GAP, 0))
+        else:
+            self.button.grid_remove()
+
+    def tool(self, text, command):
+        """A quiet link in the header row, e.g. Change."""
+        lk = tk.Label(self.tools, text=text, font=BODY,
+                      cursor="pointinghand" if IS_MAC else "hand2")
+        paint(lk, bg="card", fg="link")
+        lk.bind("<Button-1>", lambda e: command())
+        return lk
+
+
 def tree(parent, columns, height=14, selectmode="extended"):
     """columns: [(id, heading, width)] - a scrolling table. Returns (frame, tv)."""
     frame = ttk.Frame(parent)

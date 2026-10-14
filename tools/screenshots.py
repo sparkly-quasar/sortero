@@ -8,10 +8,10 @@ Needs ffmpeg (a full one, for making the sample audio) and ImageMagick's
 collection, Sortero's settings and the "stick" all live in a temporary
 folder. Artists and titles are made up.
 
-The stick Gig prep checks is a plain folder, so there's no real file system
-to read; the script reports it as FAT32 on one MBR partition, which is what
-a stick Sortero formatted would be, so the screenshot shows a stick that
-passes.
+The sticks Gig prep checks are plain folders, so there's no real file system
+to read; the script reports them as FAT32 on one MBR partition, which is what
+a stick Sortero formatted would be. The main stick gets an Engine Library
+folder holding the set, as Engine DJ's export would leave it, so it passes.
 """
 import base64, json, os, shutil, subprocess, sys, tempfile, zlib
 
@@ -25,7 +25,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from mutagen.id3 import COMM, GEOB, ID3, TBPM, TCON, TIT2, TKEY, TPE1, TXXX  # noqa: E402
 
 ROOT = os.path.join(HOME, "Music", "DJ Collection")
-STICK = os.path.join(HOME, "GIG")
+STICK = os.path.join(HOME, "MAIN")
+BACKUP = os.path.join(HOME, "BACKUP")
 # A playlist exported from another DJ app, outside the collection, for Gig prep
 # to bring in with Add playlists…
 EXPORT = os.path.join(HOME, "Music", "rekordbox exports", "Sunday closing.m3u8")
@@ -162,6 +163,7 @@ def build_collection():
         for k in [("Teo Marchetti", "Glass Floor"), ("Rue Okafor", "Tidewater Dub")]:
             fh.write(f"#EXTINF:3,{k[0]} - {k[1]}\n{where[k]}\n")
     os.makedirs(STICK)
+    os.makedirs(BACKUP)
 
 
 def main():
@@ -180,7 +182,7 @@ def main():
     from tkinter import messagebox, filedialog
     messagebox.askyesno = lambda *a, **k: True
     messagebox.showinfo = lambda *a, **k: None
-    filedialog.askdirectory = lambda **k: STICK
+    filedialog.askdirectory = lambda **k: BACKUP if "backup" in k.get("title", "") else STICK
     from sortero.gig import disks, profiles
     disks.volume = lambda mount: disks.Volume(mount, profiles.FAT32, disks.MBR, 1)
 
@@ -249,18 +251,28 @@ def main():
 
     @step
     def gig():
-        app.show("gig")
+        app.show("gig")         # opens on step 2, which checks the tracks by itself
         g = app.screens["gig"]
-        chain = [g.check_tracks, g.make_copies, g.make_xml,
-                 lambda: (getattr(g, "how_win", None) and g.how_win.destroy(), g.write_stick())]
+
+        def pack_main_stick():
+            # what Engine DJ's Export to Drive leaves: its library, holding the set
+            music = os.path.join(STICK, "Engine Library", "Music")
+            os.makedirs(music, exist_ok=True)
+            for it in g.state.items:
+                shutil.copy(it.playable, music)
+        chain = [lambda: g.open("set"),
+                 lambda: shot("gig-prep-set"),
+                 g.cards["set"].button.invoke,          # Done: back to the tracks
+                 g.make_copies, g.make_xml, pack_main_stick, g.check_main,
+                 g.write_backup]                        # writes, then checks it
 
         def next_action():
             if chain:
                 chain.pop(0)()
-                idle(next_action, lambda: not app.task.running)
+                app.after(700, lambda: idle(next_action))
             else:
-                idle(lambda: (shot("gig-prep"), go()), lambda: g.state.report is not None)
-        app.after(800, next_action)
+                idle(lambda: (shot("gig-prep"), go()), lambda: g.state.backup_check)
+        app.after(800, lambda: idle(next_action, lambda: g.state.items is not None))
 
     idle(go, lambda: app.health is not None)
     app.mainloop()

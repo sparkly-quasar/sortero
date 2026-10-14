@@ -31,7 +31,10 @@ AUDIO_EXTS = {".mp3", ".m4a", ".aac", ".mp4", ".wav", ".aif", ".aiff", ".flac", 
 SYSTEM_DIRS = {".Spotlight-V100", ".Trashes", ".fseventsd", ".TemporaryItems",
                "System Volume Information", "$RECYCLE.BIN", ".DocumentRevisions-V100"}
 FAT32_MAX = 4 * 1024 ** 3 - 1           # largest file FAT32 can hold
-FOLDER_DISPLAY_MAX = 10000              # players show no more files than this per folder
+FOLDER_DISPLAY_MAX = 10000              # Pioneer players show no more files than this per folder
+# Where Engine DJ keeps the Engine database on a stick ("the Engine Library folder
+# of an external storage drive with an Engine database": PRIME guide v5.0.0 p. 43)
+ENGINE_DIR = "Engine Library"
 FAT_ILLEGAL = re.compile(r'[\x00-\x1f"*:<>?\\|]')
 RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)),
             *(f"LPT{i}" for i in range(1, 10))}
@@ -184,7 +187,7 @@ def check_export(stick, entries, profile=None):
     the stick needs whichever the chosen players read. Only the Device Library
     can be read here; OneLibrary is encrypted, so its track list isn't checked.
     """
-    profile = profile or profiles.UNIVERSAL
+    profile = profile or profiles.EVERY
     folder = os.path.join(stick, "PIONEER", "rekordbox")
     present = {lib for lib, fn in LIBRARY_FILES.items()
                if os.path.isfile(os.path.join(folder, fn))}
@@ -192,11 +195,12 @@ def check_export(stick, entries, profile=None):
         if os.path.isdir(os.path.join(stick, "PIONEER")):
             return Check("rekordbox", FAIL, "there's a PIONEER folder but no rekordbox "
                          "library in it. Export the stick again from rekordbox."), set()
-        return Check("rekordbox", PASS, "no rekordbox export, so players will browse "
+        who = "players" if profile.brand == "Pioneer" else "Pioneer players"
+        return Check("rekordbox", PASS, f"no rekordbox export, so {who} will browse "
                                         "it as folders."), set()
 
     levels, parts, details, listed = [], [], [], set()
-    for lib in sorted(profile.libraries - present):
+    for lib in sorted((profile.libraries & profiles.REKORDBOX_LIBRARIES) - present):
         levels.append(FAIL)
         details.append(f"No {lib} ({LIBRARY_FILES[lib]}), which {WHO_READS[lib]} need to "
                        "list these playlists. Export again with rekordbox 7.2.11 or later, "
@@ -242,6 +246,18 @@ def check_export(stick, entries, profile=None):
     summary = "; ".join(parts) + "."
     return Check("rekordbox", _worst(levels), summary[:1].upper() + summary[1:],
                  details), listed
+
+
+def check_engine(stick, profile=None):
+    """Is there an Engine database for Denon players? Either way the stick plays:
+    without one they browse it as folders (Library > Folder)."""
+    who = "players" if profile and profile.brand == "Denon" else "Denon players"
+    if os.path.isdir(os.path.join(stick, ENGINE_DIR)):
+        return Check("Engine DJ", PASS, f"an Engine library is there, so {who} list its "
+                     "playlists. Sortero can't open it, so it checks the files on the "
+                     "stick, not the playlists in it.")
+    return Check("Engine DJ", PASS, f"no Engine library, so {who} will browse it as "
+                                    "folders (Library > Folder).")
 
 
 def _decode(path):
@@ -290,7 +306,7 @@ def check_audio(stick, entries, profile, decode=True, progress=None, workers=Non
     if unknown:
         fmt = Check("Formats", WARN, f"the {profile.name}'s manual has no format table, so "
                     f"{_plural(n, 'file')} couldn't be checked against it. Check against "
-                    "“Any Pioneer player” instead to be sure.")
+                    f"“{profiles.EVERY.name}” instead to be sure.")
     elif formats:
         fmt = Check("Formats", FAIL, f"{len({f.split(': ')[0] for f in formats})} of "
                     f"{_plural(n, 'file')} won't play on {profiles.where(profile)}.", formats)
@@ -311,7 +327,7 @@ def check_audio(stick, entries, profile, decode=True, progress=None, workers=Non
 
 def check_names(entries, profile):
     fails, warns = [], []
-    depth = profile.folder_depth or profiles.UNIVERSAL.folder_depth
+    depth = profile.folder_depth    # None: the maker states no limit
     per_folder = {}
     for e in entries:
         if is_appledouble(e.rel):
@@ -320,11 +336,11 @@ def check_names(entries, profile):
         per_folder[folder] = per_folder.get(folder, 0) + 1
         if e.size > FAT32_MAX:
             fails.append(f"{e.rel}: over 4 GB, which FAT32 can't hold")
-        if is_audio(e) and e.rel.count("/") > depth:
+        if depth and is_audio(e) and e.rel.count("/") > depth:
             fails.append(f"{e.rel}: more than {depth} folders deep, so players won't play it")
         fails += name_problems(e.rel)
     for folder, n in per_folder.items():
-        if n > FOLDER_DISPLAY_MAX:
+        if n > FOLDER_DISPLAY_MAX and profiles.reads_rekordbox(profile):
             warns.append(f"{folder or 'top level'}: {n:,} files; players show the first "
                          f"{FOLDER_DISPLAY_MAX:,}")
     dots = [e.rel for e in entries if is_appledouble(e.rel)]
@@ -338,8 +354,9 @@ def check_names(entries, profile):
     if warns:
         return Check("Names and sizes", WARN, f"{_plural(len(warns), 'thing')} worth a look.",
                      warns)
-    return Check("Names and sizes", PASS, "nothing over 4 GB, nothing deeper than "
-                                          f"{depth} folders, every name FAT32-safe.")
+    deep = f"nothing deeper than {depth} folders, " if depth else ""
+    return Check("Names and sizes", PASS, f"nothing over 4 GB, {deep}every name "
+                                          "FAT32-safe.")
 
 
 def _sha(path):
@@ -385,12 +402,15 @@ def check_checksums(entries, sources, progress=None):
 # --------------------------------------------------------------------- run
 def verify(stick, profile=None, decode=True, sources=None, vol=None, progress=None):
     """Run every check on the stick mounted at `stick`. Returns a Report."""
-    profile = profile or profiles.UNIVERSAL
+    profile = profile or profiles.EVERY
     report = Report(stick, profile)
     report.checks.append(check_stick(profile, vol or disks.volume(stick)))
     entries = walk(stick)
-    exp, _ = check_export(stick, entries, profile)
-    report.checks.append(exp)
+    if profiles.reads_rekordbox(profile) or os.path.isdir(os.path.join(stick, "PIONEER")):
+        exp, _ = check_export(stick, entries, profile)
+        report.checks.append(exp)
+    if profiles.reads_engine(profile):
+        report.checks.append(check_engine(stick, profile))
     report.checks += check_audio(stick, entries, profile, decode, progress)
     report.checks.append(check_names(entries, profile))
     from . import backup
@@ -407,7 +427,8 @@ def main(argv=None):
                                  description="Check a USB stick before a gig.")
     ap.add_argument("stick", help="where the stick is mounted, e.g. /Volumes/GIG")
     ap.add_argument("--player", default=profiles.DEFAULT,
-                    help="check for one player, e.g. cdj-2000 (default: any Pioneer player)")
+                    help="check for one player, e.g. cdj-2000 or sc6000 "
+                         "(default: any Pioneer or Denon player)")
     ap.add_argument("--quick", action="store_true", help="skip the decode test")
     ap.add_argument("--originals", nargs="*", help="folders of originals to checksum against")
     args = ap.parse_args(argv)

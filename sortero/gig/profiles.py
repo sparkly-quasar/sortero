@@ -1,4 +1,4 @@
-"""What each Pioneer DJ / AlphaTheta player can read off a USB stick.
+"""What each Pioneer DJ / AlphaTheta and Denon DJ player can read off a USB stick.
 
 Every limit here is copied from the maker's own documentation and cited where
 it is used. Nothing is filled in from memory: a manual that couldn't be found
@@ -26,6 +26,15 @@ What the manuals settle, and what they don't:
 * MP3: MPEG-2 Layer 3 (16-24 kHz) is listed by the older players and not by
   the newer ones. Profiles list MPEG-1 rates only, so such a file is converted
   rather than gambled on.
+
+Denon DJ's players run Engine OS. Their current guides (Engine DJ 5.0, from
+https://cdn.inmusicbrands.com/Software/ENDJ5/, retrieved October 2026; see
+docs/research/denon-engine-dj.md) all carry the same table: exFAT and FAT32
+(the SC6000 and SC6000M also HFS+), and MP3, AAC/M4A, MP4, ALAC, FLAC, Ogg
+Vorbis, WAV and AIFF, with limits for only some of them. A limit the table
+doesn't give is None here ("not stated"), so it's neither checked nor assumed;
+only Pioneer's own limits apply when the two are combined. FAT32 is the one
+file system both makers' players all read.
 """
 from dataclasses import dataclass, field
 
@@ -46,6 +55,10 @@ _PARTITION_RISK = {FIRST_ONLY: 0, UNKNOWN: 1, MAY_FAIL: 2}
 # later writes both. Source: AlphaTheta, "Important Notice for Customers Using
 # USB Devices with Our DJ Equipment" (18 March 2026), LIBRARY_NOTICE.
 DEVICE_LIBRARY, ONE_LIBRARY = "Device Library", "OneLibrary"
+REKORDBOX_LIBRARIES = frozenset({DEVICE_LIBRARY, ONE_LIBRARY})
+# Denon's players read an Engine database, written to the stick by Engine DJ
+# (Engine DJ User Guide v5.0.0 p. 5); without one they browse it as folders.
+ENGINE_LIBRARY = "Engine Library"
 LIBRARY_NOTICE = ("https://alphatheta.com/en/information/"
                   "important-notice-for-customers-using-usb-devices-with-our-dj-equipment/")
 
@@ -53,19 +66,25 @@ R_44_48 = frozenset({44100, 48000})
 R_32_48 = frozenset({32000, 44100, 48000})
 R_AAC_ALL = frozenset({16000, 22050, 24000, 32000, 44100, 48000})
 R_UP_TO_96 = frozenset({44100, 48000, 88200, 96000})
+R_UP_TO_192 = frozenset({44100, 48000, 88200, 96000, 176400, 192000})
 D_16_24 = frozenset({16, 24})
+D_16_32 = frozenset({16, 24, 32})
 
 FORMAT_NAMES = {"mp3": "MP3", "aac": "AAC", "wav": "WAV", "aiff": "AIFF",
-                "flac": "FLAC", "alac": "Apple Lossless"}
+                "flac": "FLAC", "alac": "Apple Lossless", "vorbis": "Ogg Vorbis"}
 
 
 @dataclass(frozen=True)
 class Format:
-    """One kind of file a player plays, and the limits it plays it within."""
+    """One kind of file a player plays, and the limits it plays it within.
+
+    None for rates, depths or kbps means the maker doesn't state a limit: it
+    isn't checked. An empty depths means bit depth doesn't apply (lossy)."""
     exts: frozenset
-    rates: frozenset                    # Hz
-    depths: frozenset = frozenset()     # bits; empty for lossy formats
+    rates: frozenset = None             # Hz
+    depths: frozenset = frozenset()     # bits
     kbps: tuple = None                  # (lowest, highest), lossy formats only
+    lc_only: bool = False               # AAC: only the LC profile is listed
 
 
 def mp3(rates=R_44_48):
@@ -75,7 +94,7 @@ def mp3(rates=R_44_48):
 
 def aac(rates=R_44_48):
     # MPEG-4 and MPEG-2 AAC LC, 16-320 kbps.
-    return Format(frozenset({".m4a", ".aac", ".mp4"}), rates, kbps=(16, 320))
+    return Format(frozenset({".m4a", ".aac", ".mp4"}), rates, kbps=(16, 320), lc_only=True)
 
 
 def pcm(ext, rates=R_44_48):
@@ -100,7 +119,9 @@ class DeckProfile:
     artwork_px: int = None          # larger embedded artwork isn't displayed
     sources: tuple = ()
     notes: tuple = ()
-    libraries: frozenset = frozenset({DEVICE_LIBRARY})  # which rekordbox export it reads
+    libraries: frozenset = frozenset({DEVICE_LIBRARY})  # the stick libraries it reads
+    brand: str = "Pioneer"
+    group: str = None               # for a group profile, what one of them is called
 
     @property
     def formats_known(self):
@@ -196,6 +217,48 @@ PLAYERS = (
         libraries=frozenset({ONE_LIBRARY})),
 )
 
+# Denon DJ. Every current guide carries the same table (see the module notes);
+# none states a folder depth, file name, partition or artwork limit.
+_ENDJ5 = "https://cdn.inmusicbrands.com/Software/ENDJ5"
+_SC_GUIDE = (f"{_ENDJ5}/SC6000%20PRIME%2C%20SC6000M%20PRIME%2C%20SC5000%20PRIME%2C%20"
+             "SC5000M%20PRIME%20-%20User%20Guide%20-%20v5.0.0.pdf")
+_PRIME_GUIDE = (f"{_ENDJ5}/PRIME%204%2C%20PRIME%204%2B%2C%20PRIME%202%2C%20PRIME%20GO%2C%20"
+                "PRIME%20GO%2B%2C%20SC%20LIVE%204%2C%20SC%20LIVE%202%20-%20User%20Guide"
+                "%20-%20v5.0.0.pdf")
+_G2_GUIDE = ("https://cdn.inmusicbrands.com/denondj/Prime4G2/PRIME%204%20G2%20-%20"
+             "User%20Guide%20-%20v5.1.0%201.pdf")
+ENGINE_FORMATS = {
+    "mp3": Format(frozenset({".mp3"}), kbps=(32, 320)),
+    "aac": Format(frozenset({".m4a", ".mp4"})),        # "AAC/M4A" and "MP4"
+    "alac": Format(frozenset({".m4a"}), depths=None),
+    "flac": Format(frozenset({".flac"}), depths=None),
+    "vorbis": Format(frozenset({".ogg"})),
+    "wav": Format(frozenset({".wav"}), R_UP_TO_192, D_16_32),
+    "aiff": Format(frozenset({".aif", ".aiff"}), R_UP_TO_192, D_16_32),
+}
+_ENGINE_NOTE = ("Denon's guide gives no sample rates for MP3, AAC, ALAC, FLAC or Ogg "
+                "Vorbis, and no folder depth, file name, partition or artwork limits, "
+                "so those aren't checked.")
+
+
+def _denon(key, name, guide, page, hfs=False):
+    return DeckProfile(
+        key, name, frozenset({EXFAT, FAT32} | ({HFS} if hfs else set())), ENGINE_FORMATS,
+        sources=(f"{guide} p.{page}",), notes=(_ENGINE_NOTE,),
+        libraries=frozenset({ENGINE_LIBRARY}), brand="Denon")
+
+
+DENON_PLAYERS = (
+    _denon("sc6000", "SC6000 / SC6000M PRIME", _SC_GUIDE, 9, hfs=True),
+    _denon("sc5000", "SC5000 / SC5000M PRIME", _SC_GUIDE, 9),
+    _denon("prime-4", "PRIME 4 / PRIME 4+", _PRIME_GUIDE, 5),
+    _denon("prime-4-g2", "PRIME 4 G2", _G2_GUIDE, 5),
+    _denon("prime-2", "PRIME 2", _PRIME_GUIDE, 5),
+    _denon("prime-go", "PRIME GO / PRIME GO+", _PRIME_GUIDE, 5),
+    _denon("sc-live-4", "SC LIVE 4", _PRIME_GUIDE, 5),
+    _denon("sc-live-2", "SC LIVE 2", _PRIME_GUIDE, 5),
+)
+
 
 # ---------------------------------------------------------------- universal
 def _both(a, b):
@@ -206,20 +269,30 @@ def _both(a, b):
     return min(a, b)
 
 
+def _shared(a, b):
+    """Two stated limits meet; a limit nobody states (None) gives way to one that is."""
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return a & b
+
+
 def _meet(a, b):
     """The limits two players share for one format, or None if they share nothing."""
-    exts, rates, depths = a.exts & b.exts, a.rates & b.rates, a.depths & b.depths
-    kbps = None
+    exts, rates = a.exts & b.exts, _shared(a.rates, b.rates)
+    depths = _shared(a.depths, b.depths)
+    kbps = a.kbps or b.kbps
     if a.kbps and b.kbps:
         kbps = (max(a.kbps[0], b.kbps[0]), min(a.kbps[1], b.kbps[1]))
         if kbps[0] > kbps[1]:
             return None
-    if not exts or not rates or (a.depths and not depths):
+    if not exts or rates == frozenset() or (depths == frozenset() and (a.depths or b.depths)):
         return None
-    return Format(exts, rates, depths, kbps)
+    return Format(exts, rates, depths, kbps, a.lc_only or b.lc_only)
 
 
-def intersect(players, key="universal", name="Any Pioneer player"):
+def intersect(players, key="universal", name="Any Pioneer player", group="Pioneer player"):
     """A profile that only allows what every one of these players allows.
 
     Players whose format table couldn't be found leave the formats alone and
@@ -249,22 +322,36 @@ def intersect(players, key="universal", name="Any Pioneer player"):
     # A stick for all of them has to carry every library any of them reads.
     libraries = frozenset().union(*(p.libraries for p in players))
     sources = tuple(dict.fromkeys(s for p in players for s in p.sources))
+    notes += tuple(dict.fromkeys(n for p in players if p.brand == "Denon" for n in p.notes))
+    brands = {p.brand for p in players}
     return DeckProfile(key, name, fs, formats, partitions, depth, art,
-                       sources=sources, notes=notes, libraries=libraries)
+                       sources=sources, notes=notes, libraries=libraries,
+                       brand=brands.pop() if len(brands) == 1 else "", group=group)
 
 
 UNIVERSAL = intersect(PLAYERS)
-PROFILES = {p.key: p for p in (UNIVERSAL,) + PLAYERS}
-DEFAULT = UNIVERSAL.key
+ANY_DENON = intersect(DENON_PLAYERS, "denon", "Any Denon player", "Denon player")
+EVERY = intersect(PLAYERS + DENON_PLAYERS, "pioneer-denon", "Any Pioneer or Denon player",
+                  "Pioneer or Denon player")
+PROFILES = {p.key: p for p in (EVERY, UNIVERSAL, ANY_DENON) + PLAYERS + DENON_PLAYERS}
+DEFAULT = EVERY.key
 
 
 def get(key):
-    return PROFILES.get(key) or UNIVERSAL
+    return PROFILES.get(key) or EVERY
+
+
+def reads_engine(profile):
+    return ENGINE_LIBRARY in profile.libraries
+
+
+def reads_rekordbox(profile):
+    return bool(profile.libraries & REKORDBOX_LIBRARIES)
 
 
 def where(profile):
     """How a sentence names the players: "every Pioneer player" or "the CDJ-2000"."""
-    return "every Pioneer player" if profile.key == UNIVERSAL.key else f"the {profile.name}"
+    return f"every {profile.group}" if profile.group else f"the {profile.name}"
 
 
 # ------------------------------------------------------------------ checking
@@ -296,9 +383,12 @@ def _list(items):
 
 
 def _say(profile, one, every):
-    """A sentence about one player ("The CDJ-2000 doesn't ..."), or about all of them."""
-    return every if profile is UNIVERSAL or profile.key == "universal" else (
-        one.format(who=f"The {profile.name}"))
+    """A sentence about one player ("The CDJ-2000 doesn't ..."), or about all of
+    them ("Not every {a} ...", "{All} only ..."), named for the group."""
+    if profile.group:
+        a = profile.group
+        return every.format(a=a, All=a.replace(" or ", " and ") + "s")
+    return one.format(who=f"The {profile.name}")
 
 
 def check_audio(profile, info):
@@ -310,32 +400,33 @@ def check_audio(profile, info):
     label = FORMAT_NAMES.get(info.format, info.format.upper())
     if fmt is None:
         return [Problem(FAIL, _say(profile, f"{{who}} doesn't play {label} files.",
-                                   f"Not every Pioneer player plays {label} files."))]
+                                   f"Not every {{a}} plays {label} files."))]
     out = []
     if info.ext.lower() not in fmt.exts:
         named = f"{label} files named {_list(sorted(fmt.exts))}, not {info.ext}"
         out.append(Problem(FAIL, _say(profile, f"{{who}} only reads {named}.",
-                                      f"Pioneer players only read {named}.")))
-    if info.rate not in fmt.rates:
+                                      f"{{All}} only read {named}.")))
+    if fmt.rates is not None and info.rate not in fmt.rates:
         ok = _list(_khz(r) for r in sorted(fmt.rates))
         out.append(Problem(FAIL, _say(
             profile, f"{{who}} doesn't play {label} at {_khz(info.rate)} (only {ok}).",
-            f"Not every Pioneer player plays {label} at {_khz(info.rate)} "
+            f"Not every {{a}} plays {label} at {_khz(info.rate)} "
             f"(they all play {ok}).")))
     if fmt.depths and info.depth not in fmt.depths:
         depth = f"{info.depth}-bit" if info.depth else "this bit depth of"
         ok = _list(f"{d}-bit" for d in sorted(fmt.depths))
         out.append(Problem(FAIL, _say(
             profile, f"{{who}} doesn't play {depth} {label} (only {ok}).",
-            f"Not every Pioneer player plays {depth} {label} (they all play {ok}).")))
+            f"Not every {{a}} plays {depth} {label} (they all play {ok}).")))
     if fmt.kbps and info.kbps and not fmt.kbps[0] <= info.kbps <= fmt.kbps[1]:
         span = f"{label} at {fmt.kbps[0]}-{fmt.kbps[1]} kbps, not {info.kbps} kbps"
         out.append(Problem(FAIL, _say(profile, f"{{who}} plays {span}.",
-                                      f"Pioneer players play {span}.")))
-    if info.format == "aac" and info.aac_profile and info.aac_profile.upper() != "LC":
+                                      f"{{All}} play {span}.")))
+    if (info.format == "aac" and fmt.lc_only and info.aac_profile
+            and info.aac_profile.upper() != "LC"):
         out.append(Problem(FAIL, _say(
             profile, f"{{who}} only plays AAC-LC, not {info.aac_profile}.",
-            f"Pioneer players only play AAC-LC, not {info.aac_profile}.")))
+            f"Not every {{a}} plays {info.aac_profile} (only AAC-LC).")))
     return out
 
 
@@ -349,8 +440,7 @@ def check_volume(profile, file_system, partitions=1, scheme=None):
     if file_system not in profile.file_systems:
         out.append(Problem(FAIL, _say(
             profile, f"{{who}} can't read {file_system}. Format the stick as {FAT32}.",
-            f"Not every Pioneer player can read {file_system}. Format the stick as "
-            f"{FAT32}.")))
+            f"Not every {{a}} can read {file_system}. Format the stick as {FAT32}.")))
     if partitions > 1:
         if profile.partitions == MAY_FAIL:
             out.append(Problem(FAIL, _say(
@@ -364,7 +454,7 @@ def check_volume(profile, file_system, partitions=1, scheme=None):
             out.append(Problem(WARN, "The stick has more than one partition, and not "
                                      "every player says what it does with that."))
     if scheme == "GPT":
-        out.append(Problem(WARN, "The stick uses a GUID partition map. Pioneer's manuals "
+        out.append(Problem(WARN, "The stick uses a GUID partition map. The players' manuals "
                                  "don't mention partition maps; MBR is the safe, usual "
                                  "choice."))
     return out

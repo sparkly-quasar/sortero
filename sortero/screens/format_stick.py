@@ -28,8 +28,8 @@ class FormatDialog(tk.Toplevel):
 
         ttk.Label(body, text="Format a stick as FAT32", style="Title.TLabel").pack(anchor="w")
         ui.WrapLabel(body, style="Muted.TLabel",
-                     text="One FAT32 partition on an MBR map: the layout every Pioneer "
-                          "player reads. Everything on the stick you choose is erased, "
+                     text="One FAT32 partition on an MBR map: FAT32 is the one file system "
+                          "every Pioneer and Denon player reads. Everything on the stick you choose is erased, "
                           "and that can't be undone.").pack(fill="x", pady=(2, ui.SECTION))
 
         f, self.tv = ui.tree(body, [("name", "Name", 140), ("disk", "Disk", 90),

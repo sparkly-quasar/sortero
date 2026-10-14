@@ -102,12 +102,17 @@ build_arch() {   # arch prefix -> builds lame, soxr and ffmpeg into prefix
       --enable-static --disable-frontend --disable-decoder --disable-dependency-tracking
     make -j"$JOBS" && make install )
 
-  # soxr, static, without OpenMP (one fewer runtime to ship).
-  tar -xJf "$WORK/src/soxr-$SOXR_VERSION-Source.tar.xz" -C "$b"
+  # soxr, static, without OpenMP (one fewer runtime to ship). Its one symlink
+  # is a test script that Windows' tar can't create, so it's left out. On
+  # arm64, 0.1.3 picks 32-bit ARM NEON flags and doesn't compile; its SIMD
+  # engines only serve precision up to 20 bits, and Gig prep asks for 28,
+  # which runs on the plain 64-bit engine, so nothing is lost without them.
+  tar -xJf "$WORK/src/soxr-$SOXR_VERSION-Source.tar.xz" -C "$b" --exclude='*/inst-check-soxr-lsr'
   local generator=(); [ "$PLATFORM" = windows ] && generator=(-G "MSYS Makefiles")
+  local simd=(); case "$arch" in arm64|aarch64) simd=(-DWITH_CR32S=OFF -DWITH_CR64S=OFF) ;; esac
   cmake -S "$b/soxr-$SOXR_VERSION-Source" -B "$b/soxr-build" ${generator[@]+"${generator[@]}"} \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$prefix" ${cmake_arch[@]+"${cmake_arch[@]}"} \
-    -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DBUILD_SHARED_LIBS=OFF -DWITH_OPENMP=OFF \
+    ${simd[@]+"${simd[@]}"} -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DBUILD_SHARED_LIBS=OFF -DWITH_OPENMP=OFF \
     -DBUILD_TESTS=OFF -DBUILD_EXAMPLES=OFF -DWITH_LSR_BINDINGS=OFF
   cmake --build "$b/soxr-build" -j "$JOBS" && cmake --install "$b/soxr-build"
 

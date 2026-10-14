@@ -3,14 +3,23 @@ import os
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-from .. import mixxx, ui, paths, playlists, settings
+from .. import mixxx, ui, paths, settings
 from ..common import human_size
-from ..gig import backup, checklist, convert, cues, ffmpeg, profiles, rbxml, verify
+from ..gig import backup, checklist, convert, cues, ffmpeg, profiles, rbxml, sources, verify
 from ..gig.checklist import DONE, NEXT, WAITING
 from .base import Screen, APP
 
 TARGETS = [(convert.MP3, "MP3 320 kbps (smaller)"), (convert.AIFF, "AIFF 16-bit (lossless)")]
 TONES = {DONE: "good", NEXT: None, WAITING: "faint"}
+# Headings in the playlist list, once there's more than Sortero's own to show
+GROUPS = [(sources.SORTERO, "In your collection"), (sources.M3U, "Playlist files"),
+          (sources.FOLDER, "Folders of tracks"), (sources.REKORDBOX, "From rekordbox"),
+          (sources.MIXXX, "From Mixxx")]
+
+
+def _short(path):
+    home = os.path.expanduser("~")
+    return "~" + path[len(home):] if home and path.startswith(home + os.sep) else path
 
 
 def _profile_label(p):
@@ -58,12 +67,33 @@ class GigScreen(Screen):
         self.pick_note = ui.WrapLabel(left, style="Muted.TLabel",
                                       text="Click to tick. The numbers are your set order.")
         self.pick_note.pack(fill="x", pady=(2, 6))
+        # Below the list, packed first so the list can't squeeze it out
+        under = ttk.Frame(left)
+        under.pack(side="bottom", fill="x", pady=(6, 0))
+        self.add_btn = ttk.Menubutton(under, text="Add playlists…")
+        menu = tk.Menu(self.add_btn, tearoff=0)
+        menu.add_command(label="Playlist files (.m3u, .m3u8)…", command=self.add_m3u_files)
+        menu.add_command(label="Every playlist file in a folder…", command=self.add_m3u_folder)
+        menu.add_command(label="A folder of tracks…", command=self.add_track_folder)
+        menu.add_separator()
+        menu.add_command(label="From a rekordbox XML…", command=self.add_rekordbox)
+        menu.add_command(label="From Mixxx…", command=self.add_mixxx)
+        self.add_btn.configure(menu=menu)
+        self.add_btn.pack(anchor="w")
+        self.where_note = ui.WrapLabel(under, style="Muted.TLabel", text="")
+        self.where_note.pack(fill="x", pady=(4, 0))
         f, self.tv = ui.tree(left, [("n", "#", 36), ("name", "Playlist", 210),
                                     ("count", "Tracks", 60)], height=10, selectmode="none")
         f.pack(fill="both", expand=True)
         self.tv.tag_configure("chosen", font=ui.HEADING)
         self.tv.bind("<Button-1>", self._click)
         self.tv.bind("<space>", lambda e: self._toggle(self.tv.focus()))
+        # right-click; on a Mac also the two-finger click (Button-2) and Control-click
+        for seq in ["<Button-3>"] + (["<Button-2>", "<Control-Button-1>"]
+                                     if paths.IS_MAC else []):
+            self.tv.bind(seq, self._context)
+        for seq in ("<Delete>", "<BackSpace>"):
+            self.tv.bind(seq, lambda e: self.remove(self.tv.focus()))
 
         right = ttk.Frame(body)
         right.pack(side="left", fill="both", expand=True)
@@ -93,17 +123,18 @@ class GigScreen(Screen):
                             lambda: self.check_stick(decode=False)),
                            None,
                            ("Format a stick as FAT32…", self.format_stick)])
-        self.chosen = [p for p in settings.get("gig_playlists") or []]
-        self.counts = {}
+        self.chosen = [p for p in settings.get("gig_playlists") or []]   # Source keys
+        self.sources = {}           # key -> Source, in the order they're listed
+        self.counts = {}            # key -> tracks, or None when it can't be read
         self.state = checklist.State()
         self.loaded_root = None
 
     # ---------------------------------------------------------- playlists
     def shown(self):
-        root = self.app.root_dir.get()
-        if root != self.loaded_root:
-            self.loaded_root = root
-            self._load_playlists()
+        # Read every time: a playlist file, rekordbox export or Mixxx crate may
+        # have changed in the app that made it since Gig prep last looked.
+        self.loaded_root = self.app.root_dir.get()
+        self._load_playlists()
         self.refresh()
 
     def invalidate(self):
@@ -111,44 +142,231 @@ class GigScreen(Screen):
 
     def _load_playlists(self):
         root = self.app.root_dir.get()
-        names = playlists.existing(root) if root and os.path.isdir(root) else []
+        self.sources = {s.key: s for s in sources.listed(root)}
         self.counts = {}
-        for n in names:
+        for key, src in self.sources.items():
             try:
-                self.counts[n] = len(playlists.entries(root, n))
-            except OSError:
-                self.counts[n] = 0
-        self.chosen = [n for n in self.chosen if n in self.counts]
-        if not names:
-            self.pick_note.configure(text="No playlists yet. Make them on the Playlists "
-                                          "screen, or Tidy up → Reorganise turns your "
-                                          "folders into playlists.")
+                self.counts[key] = len(sources.tracks(src, root))
+            except sources.SourceError:
+                self.counts[key] = None
+        self.chosen = [k for k in self.chosen if k in self.sources]
+        if not self.sources:
+            self.pick_note.configure(text="No playlists yet. Add the ones you already have "
+                                          "below, make them on the Playlists screen, or "
+                                          "let Tidy up → Reorganise turn your folders "
+                                          "into playlists.")
+        else:
+            self.pick_note.configure(text="Click to tick. The numbers are your set order.")
         self._fill_tree()
 
     def _fill_tree(self):
         self.tv.delete(*self.tv.get_children())
-        for n in self.counts:
-            pos = self.chosen.index(n) + 1 if n in self.chosen else ""
-            self.tv.insert("", "end", iid=n, values=(pos, n, self.counts[n]),
-                           tags=("chosen",) if pos else ())
+        self.tv.tag_configure("group", foreground=ui.c("faint"))
+        self.tv.tag_configure("unreadable", foreground=ui.c("faint"))
+        kinds = {s.kind for s in self.sources.values()}
+        grouped = kinds - {sources.SORTERO}       # headings only once there's a mix
+        for kind, heading in GROUPS:
+            rows = [k for k, s in self.sources.items() if s.kind == kind]
+            if not rows:
+                continue
+            if grouped:
+                self.tv.insert("", "end", iid="group:" + kind, values=("", heading, ""),
+                               tags=("group",))
+            for key in rows:
+                src, n = self.sources[key], self.counts.get(key)
+                pos = self.chosen.index(key) + 1 if key in self.chosen else ""
+                tags = ("chosen",) if pos else ("unreadable",) if n is None else ()
+                self.tv.insert("", "end", iid=key,
+                               values=(pos, src.name, "?" if n is None else n), tags=tags)
 
     def _click(self, e):
         row = self.tv.identify_row(e.y)
-        if row:
+        if row and row in self.sources:
             self.tv.focus(row)
             self._toggle(row)
         return "break"
 
-    def _toggle(self, name):
-        if not name:
+    def _toggle(self, key):
+        if key not in self.sources:
             return
-        if name in self.chosen:
-            self.chosen.remove(name)
+        src = self.sources[key]
+        self._say_where(src)
+        if key in self.chosen:
+            self.chosen.remove(key)
+        elif self.counts.get(key) is None:
+            try:
+                sources.tracks(src, self.app.root_dir.get())
+            except sources.SourceError as e:
+                messagebox.showwarning(APP, f"Sortero can't read “{src.name}”.\n\n{e}")
+                return
+            self._load_playlists()      # it's back: count it, then tick it
+            self.chosen.append(key)
         else:
-            self.chosen.append(name)
+            self.chosen.append(key)
         settings.set("gig_playlists", self.chosen)
         self._fill_tree()
         self._reset()
+
+    def _say_where(self, src):
+        if src.kind == sources.SORTERO:
+            text = "In your collection's playlists."
+        else:
+            text = f"From {_short(src.where)}. Right-click to remove it from this list."
+        self.where_note.configure(text=text)
+
+    # ------------------------------------------------- playlists from elsewhere
+    def _context(self, e):
+        row = self.tv.identify_row(e.y)
+        src = self.sources.get(row)
+        if not src or src.kind == sources.SORTERO:
+            return "break"
+        menu = tk.Menu(self, tearoff=0)
+        menu.add_command(label=f"Remove “{src.name}” from this list",
+                         command=lambda: self.remove(row))
+        menu.tk_popup(e.x_root, e.y_root)
+        return "break"
+
+    def remove(self, key):
+        """Take an added playlist off the list. The playlist itself is untouched."""
+        src = self.sources.get(key)
+        if not src or src.kind == sources.SORTERO:
+            return
+        sources.forget(key)
+        if key in self.chosen:
+            self.chosen.remove(key)
+            settings.set("gig_playlists", self.chosen)
+            self._reset()
+        self.where_note.configure(text=f"Removed “{src.name}” from the list. "
+                                       "The playlist itself wasn't touched.")
+        self._load_playlists()
+
+    def _add(self, new, tick=True, note=""):
+        fresh = sources.remember(new)
+        if tick:
+            for s in new:
+                if s.key not in self.chosen:
+                    self.chosen.append(s.key)
+            settings.set("gig_playlists", self.chosen)
+        self._load_playlists()
+        if tick and new:
+            self._reset()
+        again = len(new) - len(fresh)
+        lines = [f"Added {ui.plural(len(fresh), 'playlist')}"
+                 + (f" ({again:,} already on the list)" if again else "") + "."]
+        one = len(new) == 1
+        if tick:
+            lines.append(f"{'It is' if one else 'They are'} ticked, at the end of the set order.")
+        else:
+            lines.append(f"Tick {'it' if one else 'the ones you are playing'} to use "
+                         f"{'it' if one else 'them'}.")
+        lines.append(f"Sortero only reads {'it' if one else 'them'}, again each time, so "
+                     "changes you make in the app they came from are picked up.")
+        if note:
+            lines += ["", note]
+        self._show(lines)
+
+    def _start_dir(self, *candidates):
+        for c in candidates:
+            if c and os.path.isdir(c):
+                return c
+        return self.app.root_dir.get() or os.path.expanduser("~")
+
+    def add_m3u_files(self):
+        picked = filedialog.askopenfilenames(
+            title="Choose playlist files", initialdir=self._start_dir(),
+            filetypes=[("Playlists", "*.m3u *.m3u8 *.M3U *.M3U8"), ("All files", "*")])
+        if picked:
+            self._add(sources.m3u_sources(picked))
+
+    def add_m3u_folder(self):
+        folder = filedialog.askdirectory(title="Choose a folder of playlist files",
+                                         initialdir=self._start_dir(), mustexist=True)
+        if not folder:
+            return
+        found = sources.find_m3u(folder)
+        if not found:
+            messagebox.showinfo(APP, f"There are no .m3u or .m3u8 files in "
+                                     f"{os.path.basename(folder) or folder}, or the "
+                                     "folders inside it.")
+            return
+        self._add(sources.m3u_sources(found), tick=False)
+
+    def add_track_folder(self):
+        folder = filedialog.askdirectory(title="Choose a folder of tracks",
+                                         initialdir=self._start_dir(), mustexist=True)
+        if not folder:
+            return
+        try:
+            n = len(sources.folder_tracks(folder))
+        except OSError as e:
+            messagebox.showwarning(APP, f"Sortero couldn't read that folder ({e}).")
+            return
+        if not n:
+            messagebox.showinfo(APP, f"There are no audio files in "
+                                     f"{os.path.basename(folder) or folder}.")
+            return
+        self._add([sources.folder_source(folder)],
+                  note="A folder plays in filename order, so number the files "
+                       "(01, 02, …) to set the order.")
+
+    def add_rekordbox(self):
+        current = settings.get("gig_rekordbox_xml") or ""
+        path = filedialog.askopenfilename(
+            title="Choose a rekordbox collection XML",
+            initialdir=self._start_dir(os.path.dirname(current)),
+            filetypes=[("rekordbox XML", "*.xml"), ("All files", "*")])
+        if not path:
+            return
+
+        def work(progress, log):
+            try:
+                found = sources.rekordbox_sources(path)
+                return found, {s.key: len(sources.tracks(s)) for s in found}
+            except sources.SourceError as e:
+                return e
+
+        def done(res):
+            if isinstance(res, sources.SourceError):
+                self._cant_read(res)
+                return
+            found, counts = res
+            if not found:
+                messagebox.showinfo(APP, "That XML has no playlists in it. In rekordbox, "
+                                         "File > Export Collection in xml format writes "
+                                         "one with all of them.")
+                return
+
+            def chosen(picked):
+                note = ""
+                if not settings.get("gig_rekordbox_xml"):
+                    settings.set("gig_rekordbox_xml", path)
+                    note = ("Its cue points and beat grids will go into the XML Gig prep "
+                            "makes, too.")
+                self._add(picked, note=note)
+            PickDialog(self, f"Playlists in {os.path.basename(path)}", found, counts,
+                       chosen)
+
+        self.app.task.run(work, done, "Reading the rekordbox XML")
+
+    def add_mixxx(self):
+        db = mixxx.find_db()
+        if not db:
+            messagebox.showinfo(APP, "Sortero couldn't find Mixxx's library on this "
+                                     "computer. Open Mixxx once, then try again.")
+            return
+        try:
+            found = sources.mixxx_sources(db)
+            counts = {s.key: len(sources.tracks(s)) for s in found}
+        except sources.SourceError as e:
+            self._cant_read(e)
+            return
+        if not found:
+            messagebox.showinfo(APP, "Mixxx has no playlists or crates yet.")
+            return
+        PickDialog(self, "Playlists and crates in Mixxx", found, counts, self._add)
+
+    def _cant_read(self, e):
+        messagebox.showwarning(APP, str(e))
 
     # ------------------------------------------------------------ options
     @property
@@ -168,13 +386,14 @@ class GigScreen(Screen):
         """Anything chosen differently means the tracks need checking again."""
         self.state.items, self.state.copied = None, False
         self.state.backup, self.state.xml_path, self.state.xml_cues = None, "", {}
+        self.state.sets = None
         self.refresh()
 
     # ------------------------------------------------------------ drawing
     def refresh(self):
         st = self.state
-        st.playlists = list(self.chosen)
-        st.track_count = sum(self.counts.get(n, 0) for n in self.chosen)
+        st.playlists = [self.sources[k].name for k in self.chosen if k in self.sources]
+        st.track_count = sum(self.counts.get(k) or 0 for k in self.chosen)
         all_steps = checklist.steps(st)
         nxt = checklist.next_step(all_steps)
         for w in self.steps_frame.winfo_children():
@@ -223,16 +442,24 @@ class GigScreen(Screen):
         except (convert.LibraryError, ffmpeg.Missing) as e:
             messagebox.showwarning(APP, str(e))
             return
-        names, profile, target = list(self.chosen), self.profile, self.target
+        chosen = [self.sources[k] for k in self.chosen if k in self.sources]
+        profile, target = self.profile, self.target
 
         def work(progress, log):
-            sources = convert.playlist_paths(root, names)
-            return convert.plan(root, sources, lib, profile, target, progress)
+            unreadable = []
+            # Read once here, and every later step uses the same snapshot, so the
+            # copies, the XML and the stick all match what was checked.
+            sets = sources.resolve(chosen, root, log=unreadable.append)
+            items = convert.plan(root, convert.playlist_paths(sets), lib, profile, target,
+                                 progress)
+            return sets, items, unreadable
 
-        def done(items):
+        def done(res):
+            sets, items, unreadable = res
             self.state.items, self.state.copied = items, False
+            self.state.sets = sets
             self.state.report = None
-            lines = [checklist.check_text(items), ""]
+            lines = [checklist.check_text(items), ""] + unreadable
             for it in items:
                 if it.status == convert.CONVERT:
                     lines.append(f"Needs a copy  {it.rel}: {it.why[0] if it.why else ''}")
@@ -279,7 +506,7 @@ class GigScreen(Screen):
         if not root or not items:
             return
         lib, path = self._xml_path(root)
-        names = list(self.chosen)
+        sets = list(self.state.sets or [])
         source_xml = settings.get("gig_rekordbox_xml") or None
         if source_xml and not os.path.isfile(source_xml):
             source_xml = None
@@ -288,7 +515,6 @@ class GigScreen(Screen):
 
         def work(progress, log):
             finder = cues.Finder(source_xml, db, log=log)
-            sets = [(n, playlists.entries(root, n)) for n in names]
             tree, counts = rbxml.build(items, sets, rbxml.gig_name(), finder, shift)
             os.makedirs(lib, exist_ok=True)
             return rbxml.write(path, tree), counts
@@ -386,7 +612,7 @@ class GigScreen(Screen):
         items = self.state.items
         if not root or not items:
             return
-        sets, missing = backup.sets_from(items, root, self.chosen)
+        sets, missing = backup.sets_from(items, self.state.sets or [])
         stick = self._choose_stick()
         if not stick:
             return
@@ -509,3 +735,70 @@ class GigScreen(Screen):
             paths.reveal(lib)
         else:
             messagebox.showinfo(APP, f"No copies yet. They'll go in:\n\n{lib}")
+
+
+class PickDialog(tk.Toplevel):
+    """Tick playlists from a rekordbox XML or Mixxx to add to Gig prep's list."""
+
+    def __init__(self, screen, title, found, counts, on_add):
+        super().__init__(screen)
+        self.title(title)
+        self.transient(screen.app)
+        self.on_add, self.found = on_add, {s.key: s for s in found}
+        have = set(screen.sources)
+        self.picked = []
+        frame = ttk.Frame(self, padding=ui.PAD)
+        frame.pack(fill="both", expand=True)
+        ttk.Label(frame, text=title, style="Heading.TLabel").pack(anchor="w")
+        ui.WrapLabel(frame, style="Muted.TLabel",
+                     text="Click the ones you're playing. They'll be ticked for this gig, "
+                          "in the order you click them.").pack(fill="x", pady=(2, 6))
+        row = ttk.Frame(frame)
+        row.pack(side="bottom", fill="x", pady=(ui.GAP, 0))
+        self.add_btn = ttk.Button(row, text="Add", default="active", command=self._done,
+                                  state="disabled")
+        self.add_btn.pack(side="right")
+        ttk.Button(row, text="Cancel", command=self.destroy).pack(side="right",
+                                                                  padx=(0, ui.GAP))
+        f, self.tv = ui.tree(frame, [("tick", "", 30), ("name", "Playlist", 260),
+                                     ("where", "In", 200), ("count", "Tracks", 60)],
+                             height=14, selectmode="none")
+        f.pack(fill="both", expand=True)
+        self.tv.tag_configure("picked", font=ui.HEADING)
+        self.tv.tag_configure("have", foreground=ui.c("faint"))
+        for key, src in self.found.items():
+            if src.kind == sources.REKORDBOX:
+                where = " › ".join(src.ref[:-1])
+            else:
+                where = "Crate" if src.ref[0] == "crate" else "Playlist"
+            already = key in have
+            self.tv.insert("", "end", iid=key, values=(
+                "✓" if already else "", src.name, where,
+                counts.get(key, "")), tags=("have",) if already else ())
+        self.have = have
+        self.tv.bind("<Button-1>", self._click)
+        self.geometry("640x480")
+        self.grab_set()
+
+    def _click(self, e):
+        key = self.tv.identify_row(e.y)
+        if not key or key in self.have:
+            return "break"
+        if key in self.picked:
+            self.picked.remove(key)
+        else:
+            self.picked.append(key)
+        for k in self.found:
+            if k not in self.have:
+                pos = self.picked.index(k) + 1 if k in self.picked else ""
+                self.tv.set(k, "tick", pos)
+                self.tv.item(k, tags=("picked",) if pos else ())
+        n = len(self.picked)
+        self.add_btn.configure(text=f"Add {ui.plural(n, 'playlist')}" if n else "Add",
+                               state="normal" if n else "disabled")
+        return "break"
+
+    def _done(self):
+        picked = [self.found[k] for k in self.picked]
+        self.destroy()
+        self.on_add(picked)

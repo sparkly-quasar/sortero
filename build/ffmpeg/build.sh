@@ -9,6 +9,9 @@
 #
 # Linux and Windows (an MSYS2 MINGW64 shell) build for the machine they run
 # on. macOS builds arm64 and x86_64 and joins them into universal binaries.
+# macOS still ships bash 3.2, where "${a[@]}" on an empty array is an error
+# under set -u, hence ${a[@]+"${a[@]}"} for lists that can be empty.
+#
 # Every download is checked against the SHA-256 below before it's used:
 #
 #   FFmpeg  https://ffmpeg.org/releases/  (signed with the FFmpeg release key,
@@ -102,8 +105,8 @@ build_arch() {   # arch prefix -> builds lame, soxr and ffmpeg into prefix
   # soxr, static, without OpenMP (one fewer runtime to ship).
   tar -xJf "$WORK/src/soxr-$SOXR_VERSION-Source.tar.xz" -C "$b"
   local generator=(); [ "$PLATFORM" = windows ] && generator=(-G "MSYS Makefiles")
-  cmake -S "$b/soxr-$SOXR_VERSION-Source" -B "$b/soxr-build" "${generator[@]}" \
-    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$prefix" "${cmake_arch[@]}" \
+  cmake -S "$b/soxr-$SOXR_VERSION-Source" -B "$b/soxr-build" ${generator[@]+"${generator[@]}"} \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$prefix" ${cmake_arch[@]+"${cmake_arch[@]}"} \
     -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DBUILD_SHARED_LIBS=OFF -DWITH_OPENMP=OFF \
     -DBUILD_TESTS=OFF -DBUILD_EXAMPLES=OFF -DWITH_LSR_BINDINGS=OFF
   cmake --build "$b/soxr-build" -j "$JOBS" && cmake --install "$b/soxr-build"
@@ -111,7 +114,7 @@ build_arch() {   # arch prefix -> builds lame, soxr and ffmpeg into prefix
   tar -xJf "$WORK/src/ffmpeg-$FFMPEG_VERSION.tar.xz" -C "$b"
   local ldextra="" ; [ "$PLATFORM" = windows ] && ldextra="-static"
   ( cd "$b/ffmpeg-$FFMPEG_VERSION"
-    ./configure --prefix="$prefix" "${cross[@]}" \
+    ./configure --prefix="$prefix" ${cross[@]+"${cross[@]}"} \
       --cc="${CC:-cc}" --extra-cflags="-I$prefix/include $cc_flags" \
       --extra-ldflags="-L$prefix/lib $cc_flags $ldextra" --extra-libs="-lm" \
       --enable-gpl --enable-static --disable-shared --disable-autodetect --enable-zlib \

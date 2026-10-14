@@ -90,7 +90,9 @@ class GigScreen(Screen):
                            ("Cue timing on MP3 copies…", self.cue_timing),
                            None,
                            ("Quick stick check (skip the decode test)",
-                            lambda: self.check_stick(decode=False))])
+                            lambda: self.check_stick(decode=False)),
+                           None,
+                           ("Format a stick as FAT32…", self.format_stick)])
         self.chosen = [p for p in settings.get("gig_playlists") or []]
         self.counts = {}
         self.state = checklist.State()
@@ -454,11 +456,34 @@ class GigScreen(Screen):
         def done(report):
             self.state.report = report
             # Problems first, so what needs fixing is on screen without scrolling.
-            self._show(report.lines(problems_first=True)[2:-2], report.verdict,
-                       report.ready)
+            lines = report.lines(problems_first=True)[2:-2]
+            stick = next((c for c in report.checks if c.title == "Stick"), None)
+            if stick and stick.level == verify.FAIL:
+                from ..gig import formatting
+                if formatting.available():
+                    lines += ["", "More → Format a stick as FAT32… can fix the stick "
+                                  "itself. It erases everything on it."]
+            self._show(lines, report.verdict, report.ready)
             self.refresh()
 
         self.app.task.run(work, done, "Checking the stick")
+
+    def format_stick(self):
+        from . import format_stick
+        root = self.app.require_root()
+        if not root:
+            return
+        keep = [root, paths.data_dir()]
+        try:
+            keep.append(convert.library_dir(root, settings.get("gig_library")))
+        except convert.LibraryError:
+            pass
+
+        def done(label, output):
+            self._show([f"Formatted as FAT32 on one MBR partition, named {label}.", "",
+                        "Next: put the gig on it (steps 4 and 5), then check it."])
+
+        format_stick.open_for(self.app, keep, done)
 
     def choose_library(self):
         root = self.app.require_root()

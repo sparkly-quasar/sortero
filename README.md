@@ -462,6 +462,14 @@ with the next step always on the blue button.
    against its original. It ends with **GIG READY** or **NOT READY**, with
    what to fix first.
 
+**More → Format a stick as FAT32…** erases a stick as one FAT32 partition on
+an MBR map, on a Mac (Windows and Linux get the settings to use in their own
+disk tools). Only removable external disks are offered, never an internal disk,
+the startup disk, or the disk your collection or gig library is on, even an
+ejected one that's still plugged in. It shows the disk, its size and the exact
+command, and erases only once you type the stick's name. Just before erasing it
+reads the disk again, and stops if it isn't the stick you chose.
+
 The same check runs from a terminal:
 
 ```bash

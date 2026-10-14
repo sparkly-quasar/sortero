@@ -26,6 +26,9 @@ from mutagen.id3 import COMM, GEOB, ID3, TBPM, TCON, TIT2, TKEY, TPE1, TXXX  # n
 
 ROOT = os.path.join(HOME, "Music", "DJ Collection")
 STICK = os.path.join(HOME, "GIG")
+# A playlist exported from another DJ app, outside the collection, for Gig prep
+# to bring in with Add playlists…
+EXPORT = os.path.join(HOME, "Music", "rekordbox exports", "Sunday closing.m3u8")
 
 # (artist, title, genre or None, camelot key or None, bpm, energy or None, folders)
 TRACKS = [
@@ -153,6 +156,11 @@ def build_collection():
             fh.write("#EXTM3U\n")
             for k in tracks:
                 fh.write(os.path.relpath(where[k], pl) + "\n")
+    os.makedirs(os.path.dirname(EXPORT))
+    with open(EXPORT, "w", encoding="utf-8") as fh:
+        fh.write("#EXTM3U\n")
+        for k in [("Teo Marchetti", "Glass Floor"), ("Rue Okafor", "Tidewater Dub")]:
+            fh.write(f"#EXTINF:3,{k[0]} - {k[1]}\n{where[k]}\n")
     os.makedirs(STICK)
 
 
@@ -164,7 +172,10 @@ def main():
     settings.set("root", ROOT)
     settings.set("setup_complete", True)
     settings.set("check_updates_on_launch", False)
-    settings.set("gig_playlists", ["Warmup", "Peak"])
+    from sortero.gig import sources
+    export = sources.m3u_sources([EXPORT])
+    sources.remember(export)
+    settings.set("gig_playlists", ["Warmup", "Peak", export[0].key])
 
     from tkinter import messagebox, filedialog
     messagebox.askyesno = lambda *a, **k: True

@@ -207,3 +207,94 @@ def write(db, changes):
                             "WHERE id = ?", (bpm, beats, int(bool(locked)), tid))
     finally:
         con.close()
+
+
+def _scale(x, ratio):
+    return x if x is None or x < 0 else x * ratio
+
+
+def relink(db, moves, bitrate=320):
+    """Point Mixxx's tracks at files that replaced their originals, keeping cues,
+    loops, beat grid and playlists. All or nothing.
+
+    moves: [(old_path, new_path, new_samplerate)]. Cue positions and the grid's
+    first beat are counted in samples, so a new sample rate rescales them. A
+    track with a beat map (not a plain grid) can't be rescaled, and is left
+    pointing at its original. Returns (changes for the journal, notes).
+    """
+    if running():
+        raise MixxxOpen("Quit Mixxx first. It keeps its library in memory and would "
+                        "overwrite these changes when it closes.")
+    changes, notes = [], []
+    con = sqlite3.connect(db)
+    try:
+        with con:
+            for old, new, rate in moves:
+                row = con.execute(
+                    "SELECT tl.id, tl.filesize, l.id, l.samplerate, l.bitrate, l.bpm, "
+                    "l.beats_version, l.beats FROM track_locations tl "
+                    "JOIN library l ON l.location = tl.id WHERE tl.location = ?",
+                    (old,)).fetchone()
+                if not row:
+                    continue
+                loc_id, size, tid, sr, br, bpm, ver, beats = row
+                if con.execute("SELECT 1 FROM track_locations WHERE location = ?",
+                               (new,)).fetchone():
+                    notes.append(f"{os.path.basename(new)}: Mixxx already has the MP3 as "
+                                 "a separate track, so the original's cues stay with it.")
+                    continue
+                ratio = rate / sr if sr and rate else 1.0
+                new_beats = beats
+                if beats and ratio != 1.0:
+                    if ver != GRID or not bpm:
+                        notes.append(f"{os.path.basename(new)}: Mixxx has a beat map for "
+                                     "it, which Sortero can't move to a new sample rate. "
+                                     "It still points at the original.")
+                        continue
+                    new_beats = grid_blob(bytes(beats), bpm,
+                                          round(grid_first_beat(bytes(beats)) * ratio))
+                cues = con.execute("SELECT id, position, length FROM cues WHERE track_id = ?",
+                                   (tid,)).fetchall()
+                new_size = os.path.getsize(new) if os.path.exists(new) else size
+                con.execute("UPDATE track_locations SET location = ?, filename = ?, "
+                            "directory = ?, filesize = ? WHERE id = ?",
+                            (new, os.path.basename(new), os.path.dirname(new), new_size,
+                             loc_id))
+                con.execute("UPDATE library SET samplerate = ?, bitrate = ?, beats = ? "
+                            "WHERE id = ?", (rate or sr, bitrate, new_beats, tid))
+                for cid, pos, length in cues:
+                    con.execute("UPDATE cues SET position = ?, length = ? WHERE id = ?",
+                                (_scale(pos, ratio), _scale(length, ratio), cid))
+                changes.append({
+                    "loc": loc_id, "track": tid,
+                    "old": {"location": old, "filesize": size, "samplerate": sr,
+                            "bitrate": br, "beats": bytes(beats).hex() if beats else None,
+                            "cues": [list(c) for c in cues]}})
+    finally:
+        con.close()
+    return changes, notes
+
+
+def unrelink(db, change):
+    """Undo one relink: the track points at its original again, cues as they were."""
+    if running():
+        raise MixxxOpen("Quit Mixxx first. It keeps its library in memory and would "
+                        "overwrite these changes when it closes.")
+    old = change["old"]
+    con = sqlite3.connect(db)
+    try:
+        with con:
+            con.execute("UPDATE track_locations SET location = ?, filename = ?, "
+                        "directory = ?, filesize = ? WHERE id = ?",
+                        (old["location"], os.path.basename(old["location"]),
+                         os.path.dirname(old["location"]), old["filesize"], change["loc"]))
+            con.execute("UPDATE library SET samplerate = ?, bitrate = ?, beats = ? "
+                        "WHERE id = ?",
+                        (old["samplerate"], old["bitrate"],
+                         bytes.fromhex(old["beats"]) if old["beats"] else None,
+                         change["track"]))
+            for cid, pos, length in old["cues"]:
+                con.execute("UPDATE cues SET position = ?, length = ? WHERE id = ?",
+                            (pos, length, cid))
+    finally:
+        con.close()

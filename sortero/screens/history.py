@@ -8,6 +8,7 @@ from .base import Screen, APP, changes
 
 KINDS = {
     "organize": "Reorganised the collection",
+    "shrink": "Shrank lossless tracks to MP3",
     "import": "Added music",
     "fixtags": "Cleaned tags",
     "swap-names": "Swapped artist and title",
@@ -115,7 +116,9 @@ class HistoryScreen(Screen):
         self.tv.delete(*self.tv.get_children())
         for i, d in enumerate(self.journals):
             self.tv.insert("", "end", iid=str(i), values=(
-                when(d.get("started")), label(d.get("kind")), len(d.get("entries", []))))
+                when(d.get("started")),
+                label(d.get("kind")) + (" (can't be undone)" if d.get("locked") else ""),
+                len(d.get("entries", []))))
         self._sync()
 
     def _sync(self):
@@ -136,6 +139,10 @@ class HistoryScreen(Screen):
     def undo(self):
         d = self._selected()
         if not d:
+            return
+        if d.get("locked"):
+            messagebox.showinfo(APP, f"'{label(d.get('kind'))}' from {when(d.get('started'))} "
+                                     f"can't be undone: {d['locked']}.")
             return
         n = len(d.get("entries", []))
         if not messagebox.askyesno(

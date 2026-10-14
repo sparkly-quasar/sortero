@@ -257,10 +257,13 @@ def write(dst, frames, art=None):
 
 
 def copy(src, dst, max_art_px=800):
-    """Copy every tag from src onto dst. Returns notes worth telling the user."""
+    """Copy every tag from src onto dst. Returns notes worth telling the user.
+
+    max_art_px=None keeps the artwork exactly as it is (a library file, not a
+    copy for older players)."""
     frames, art = read(src)
     notes = []
-    if art:
+    if art and max_art_px is not None:
         mime, data, note = fit_artwork(art[0], art[1], max_art_px)
         art = (mime, data) if data else None
         if note:

@@ -113,7 +113,7 @@ open.
 |---|---|
 | **To do** | Home. Cards for the jobs worth doing, most useful first, each with one button: AIFF or WAV files whose header an older Sortero damaged (see [below](#aiff-and-wav-files-with-a-damaged-header)), analysed tracks waiting in `Processed`, tracks in `Unsorted`, tracks with no genre, tracks not analysed yet, tracks whose artist and title are the wrong way round, tags full of download-site spam. The number beside it in the sidebar is how many jobs there are. |
 | **Add music** | Choose a folder or files. Analysed tracks go to the folder that already means their genre — yours if you have one. Anything missing a key lands in `To Be Processed`. Tracks with no genre to go on are **held back for you to place** instead of being dropped in `Unsorted`. Tracks already in the library are pointed out, not added twice. |
-| **Library** | Every track in one list. **Show** filters to what needs work (no genre, not analysed, no energy, no artist, artist and title swapped, no BPM, low bitrate); **Search** narrows it; click a column heading to sort. Select tracks and set a genre, swap artist and title, re-read both from the filename, send them to analysis, place them one by one, copy genres from folder names, or look them up on Discogs. Your own set recordings are hidden unless you ask. |
+| **Library** | Every track in one list. **Show** filters to what needs work (no genre, not analysed, no energy, no artist, artist and title swapped, no BPM, low bitrate, lossless files); **Search** narrows it; click a column heading to sort. Select tracks and set a genre, swap artist and title, re-read both from the filename, send them to analysis, place them one by one, copy genres from folder names, look them up on Discogs, or [shrink lossless tracks to MP3](#shrinking-lossless-tracks-to-mp3). Your own set recordings are hidden unless you ask. |
 | **Playlists** | Rebuild a Spotify or TIDAL playlist against your local files from a link, a pasted tracklist or a CSV — all three offered together above the list. **More** rebuilds the folder playlists or repairs broken links. |
 | **Gig prep** | Get a USB stick that plays on any Pioneer or Denon player, and check it before you leave. Tick the playlists you're playing, in set order; Sortero makes gig-safe copies of any track that won't play everywhere, then checks the main and backup sticks and ends with **GIG READY**. See [Gig prep](#gig-prep). |
 | **Tidy up** | Tools for an existing collection: **Clean tags** (including which way round filenames read), **Fix wrong BPMs**, **Find duplicates**, **Place a folder's tracks by hand**, **Flatten release folders**, **Fix playlist links**, and **Reorganise the whole collection**. Every tool previews before it changes anything. |
@@ -519,6 +519,38 @@ Gig prep uses ffmpeg, and the ready-to-run app carries its own: a small build
 with only what Sortero needs (`build/ffmpeg/build.sh`). Running from source, it
 uses that build if you've made one, or the ffmpeg on your PATH
 (`brew install ffmpeg` on a Mac).
+
+## Shrinking lossless tracks to MP3
+
+**Library → More → Shrink lossless tracks to MP3 320…** makes the collection
+smaller: FLAC, WAV, AIFF and Apple Lossless tracks, at any sample rate or bit
+depth, become MP3 320 kbps at 44.1 kHz, beside where they were and under the same
+name. It works on the tracks you selected, or the whole collection if none are
+(**Show → Lossless files** lists them). MP3s and other lossy files (AAC, Ogg
+Vorbis, Opus) are left alone: encoding them again loses quality and often makes
+them bigger.
+
+- **A preview first.** Every track, its format, its size now and as an MP3,
+  and the total saved. Nothing changes until you start.
+- **Every tag comes across**: artist, title, key, BPM, energy, comments, Mixed In
+  Key's cue points and beat grid, and the artwork exactly as it was. Hi-res
+  audio is resampled with the SoX resampler and dithered, as Gig prep does.
+- **Each MP3 is checked before its original moves**: it has to decode from start
+  to finish, be as long as the original, and read back the same artist, title,
+  key and BPM. A file that fails stays as it was.
+- **The originals move to an archive** outside the collection
+  (`<collection> - Originals` unless you choose another folder), in the same
+  folders they had. Your Sortero playlists follow the MP3s, and so does Mixxx's
+  library, cue points, loops and beat grid included (rescaled when the sample
+  rate changes), as long as Mixxx is closed.
+- **rekordbox's library still points at the originals.** The tracks show as
+  missing in rekordbox until you relocate them to the MP3s there. Check one
+  track's cues afterwards: an MP3 can start a few milliseconds later than its
+  original in some players.
+- **It's one entry in History**, so all of it can be undone, until you delete
+  the archived originals. The Shrink screen lists each archive with **Delete
+  them…**, which asks you to type DELETE, keeps any original whose MP3 has gone,
+  and frees the space for good.
 
 ## Why energy ends up in Grouping
 

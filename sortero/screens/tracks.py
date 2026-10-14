@@ -24,6 +24,9 @@ FILTERS = [
     ("bpm", "No BPM", lambda r: not r.bpm),
     ("bitrate", "Low bitrate (under 192 kbps)",
      lambda r: 0 < (getattr(r, "bitrate", 0) or 0) < 192000),
+    ("lossless", "Lossless files (FLAC, WAV, AIFF)",
+     lambda r: os.path.splitext(r.path)[1].lower() in (".flac", ".fla", ".wav", ".aif",
+                                                       ".aiff")),
 ]
 LABELS = {k: label for k, label, _ in FILTERS}
 
@@ -126,6 +129,8 @@ class LibraryScreen(Screen):
             None,
             ("Show in Finder" if paths.IS_MAC else "Show in folder", self.reveal),
             ("Copy track names", self.copy),
+            None,
+            ("Shrink lossless tracks to MP3 320…", self.shrink),
         ])
 
         self.rows, self.suggested = [], {}
@@ -243,6 +248,10 @@ class LibraryScreen(Screen):
 
     def _selected(self):
         return [self.rows[int(i)] for i in self.tv.selection() if int(i) < len(self.rows)]
+
+    def shrink(self):
+        """Selected tracks if any, otherwise the whole collection."""
+        self.app.screens["shrink"].open_for(self._selected() or None)
 
     def reveal(self):
         recs = self._selected()

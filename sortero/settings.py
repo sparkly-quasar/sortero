@@ -22,6 +22,8 @@ DEFAULTS = {
     # playlists Gig prep reads from outside the collection's _Playlists folder:
     # [{"kind", "path", "name", "ref"}] (see gig/sources.py)
     "gig_sources": [],
+    # where Shrink to MP3 moves the originals ("" = "<collection> - Originals")
+    "shrink_archive": "",
     # a rekordbox collection XML to take cue points from ("" = none)
     "gig_rekordbox_xml": "",
     # move cues on MP3 copies 25 ms later, for a rekordbox that ignores the

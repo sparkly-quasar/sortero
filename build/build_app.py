@@ -7,6 +7,10 @@ macOS   -> build/dist/Sortero.app   (+ a .zip you can hand to someone else)
 Windows -> build/dist/Sortero/Sortero.exe
 Linux   -> build/dist/Sortero/Sortero
 
+ffmpeg and ffprobe, built by build/ffmpeg/build.sh into build/ffmpeg/out, go
+inside the app when they're there; --require-ffmpeg stops the build if they
+aren't, so a release can't ship without them.
+
 --universal2 (macOS) builds an Intel + Apple Silicon binary. It requires a
 universal2 Python - the python.org installer ships one; Homebrew's does not.
 The script checks first and tells you rather than failing deep inside
@@ -19,6 +23,22 @@ BUILD = os.path.join(ROOT, "build")
 DIST = os.path.join(BUILD, "dist")
 WORK = os.path.join(BUILD, "work")
 IS_MAC, IS_WIN = sys.platform == "darwin", os.name == "nt"
+FFMPEG_OUT = os.path.join(BUILD, "ffmpeg", "out")
+
+
+def ffmpeg_args():
+    """PyInstaller options that put our ffmpeg build in the app's "ffmpeg" folder,
+    which sortero/gig/ffmpeg.py looks in first. [] if there's no build."""
+    exe = ".exe" if IS_WIN else ""
+    tools = [os.path.join(FFMPEG_OUT, t + exe) for t in ("ffmpeg", "ffprobe")]
+    if not all(os.path.isfile(t) for t in tools):
+        return []
+    out = []
+    for t in tools:
+        out += ["--add-binary", f"{t}{os.pathsep}ffmpeg"]
+    out += ["--add-data", f"{os.path.join(FFMPEG_OUT, 'LICENSES')}{os.pathsep}ffmpeg/LICENSES",
+            "--add-data", f"{os.path.join(FFMPEG_OUT, 'SOURCES.txt')}{os.pathsep}ffmpeg"]
+    return out
 
 
 def venv_python():
@@ -42,7 +62,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--universal2", action="store_true",
                     help="macOS: build a universal (Intel + Apple Silicon) binary")
+    ap.add_argument("--require-ffmpeg", action="store_true",
+                    help="stop unless build/ffmpeg/out holds ffmpeg and ffprobe")
     args = ap.parse_args()
+    bundled = ffmpeg_args()
+    if args.require_ffmpeg and not bundled:
+        sys.exit("\nNo ffmpeg build in build/ffmpeg/out. Run build/ffmpeg/build.sh first.\n")
+    print(f"==> ffmpeg: {'bundled from ' + FFMPEG_OUT if bundled else 'not bundled'}")
 
     py = venv_python()
     print(f"==> python: {py}")
@@ -69,6 +95,7 @@ def main():
            # pygame-ce ships its own PyInstaller hook; drop what preview never uses
            "--exclude-module", "pygame.tests", "--exclude-module", "pygame.examples",
            "--exclude-module", "pygame.docs"]
+    cmd += bundled
     if icon and os.path.exists(icon):
         cmd += ["--icon", icon]
     if IS_MAC:
@@ -91,7 +118,8 @@ def main():
         app = os.path.join(DIST, "Sortero.app")
         if not os.path.isdir(app):
             sys.exit("build failed: no Sortero.app")
-        # Ad-hoc signature so Gatekeeper will run it locally.
+        # Ad-hoc signature so Gatekeeper will run it locally. --deep reaches the
+        # bundled ffmpeg and ffprobe too: Apple Silicon won't run unsigned code.
         subprocess.run(["codesign", "--force", "--deep", "--sign", "-", app],
                        capture_output=True)
         arches = mac_arches(os.path.join(app, "Contents", "MacOS", "Sortero"))

@@ -100,7 +100,36 @@ jobs:
 
       - name: Install Tk (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y python3-tk
+        run: sudo apt-get update && sudo apt-get install -y python3-tk nasm
+
+      # The small ffmpeg that ships inside the app (build/ffmpeg/build.sh).
+      # Cached on its build script, so it's only rebuilt when that changes.
+      - name: Cache ffmpeg
+        id: ffmpeg-cache
+        uses: actions/cache@v4
+        with:
+          path: build/ffmpeg/out
+          key: ffmpeg-${{ runner.os }}-${{ hashFiles('build/ffmpeg/build.sh') }}
+
+      - name: Tools for ffmpeg (Windows)
+        if: runner.os == 'Windows' && steps.ffmpeg-cache.outputs.cache-hit != 'true'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: >-
+            make diffutils tar xz curl
+            mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-nasm
+            mingw-w64-x86_64-pkgconf mingw-w64-x86_64-zlib
+
+      - name: Build ffmpeg (macOS, Linux)
+        if: runner.os != 'Windows' && steps.ffmpeg-cache.outputs.cache-hit != 'true'
+        run: bash build/ffmpeg/build.sh
+
+      - name: Build ffmpeg (Windows)
+        if: runner.os == 'Windows' && steps.ffmpeg-cache.outputs.cache-hit != 'true'
+        shell: msys2 {0}
+        run: bash build/ffmpeg/build.sh
 
       - name: Create venv and install deps
         shell: bash
@@ -114,7 +143,7 @@ jobs:
         shell: bash
         run: |
           if [ "$RUNNER_OS" = "Windows" ]; then PY=.venv/Scripts/python.exe; else PY=.venv/bin/python; fi
-          $PY build/build_app.py ${{ matrix.args }}
+          $PY build/build_app.py --require-ffmpeg ${{ matrix.args }}
 
       - name: Verify macOS binary is universal
         if: runner.os == 'macOS'

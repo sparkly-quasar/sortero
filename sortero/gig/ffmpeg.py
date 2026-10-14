@@ -16,6 +16,12 @@ class Missing(Exception):
 
 def _bundled(name):
     exe = name + (".exe" if os.name == "nt" else "")
+    # SORTERO_FFMPEG_DIR points at a folder holding the two programs: for
+    # testing a build of ours (build/ffmpeg/build.sh) from source.
+    override = os.environ.get("SORTERO_FFMPEG_DIR")
+    if override:
+        p = os.path.join(override, exe)
+        return p if os.path.isfile(p) else None
     for base in (getattr(sys, "_MEIPASS", None),
                  os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else None):
         if base:

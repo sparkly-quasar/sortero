@@ -476,7 +476,9 @@ The same check runs from a terminal:
 python -m sortero.gig.verify /Volumes/GIG [--player cdj-2000] [--quick]
 ```
 
-Gig prep needs ffmpeg. Builds from source use the one on your PATH
+Gig prep uses ffmpeg, and the ready-to-run app carries its own: a small build
+with only what Sortero needs (`build/ffmpeg/build.sh`). Running from source, it
+uses that build if you've made one, or the ffmpeg on your PATH
 (`brew install ffmpeg` on a Mac).
 
 ## Why energy ends up in Grouping
@@ -613,6 +615,16 @@ python3.12 -m venv .venv
 Requires Python 3.12 with Tk — `brew install python-tk@3.12` on macOS,
 `apt install python3-tk` on Debian/Ubuntu; the Windows installer includes it.
 
+To put ffmpeg inside the app as the release builds do, build it first (a few
+minutes; needs a C compiler, cmake and, on Intel and Linux, nasm):
+
+```bash
+bash build/ffmpeg/build.sh
+```
+
+`build_app.py` picks it up from `build/ffmpeg/out`. On Windows, run the script
+in an MSYS2 MINGW64 shell.
+
 A **universal2** macOS build needs a universal2 Python (the python.org
 installer ships one; Homebrew's is single-architecture):
 
@@ -695,6 +707,12 @@ Gig prep reads rekordbox's export.pdb with a parser generated from
 [crate-digger](https://github.com/Deep-Symmetry/crate-digger)'s format description, used
 under MPL-2.0 (see `sortero/vendor/rekordbox_pdb.py`), on the MIT-licensed
 [kaitaistruct](https://pypi.org/project/kaitaistruct/) runtime.
+
+The ready-to-run app includes ffmpeg and ffprobe built from
+[FFmpeg](https://ffmpeg.org) with [LAME](https://lame.sourceforge.io) and
+[soxr](https://sourceforge.net/projects/soxr/); together they're GPL. Their
+licences and the exact sources sit beside them in the app's `ffmpeg` folder,
+and `build/ffmpeg/build.sh` rebuilds them.
 
 Sortero links [mutagen](https://mutagen.readthedocs.io/), which is GPL-2.0-or-later,
 so distributed builds have to be GPL-compatible. keyring is MIT, and PyInstaller

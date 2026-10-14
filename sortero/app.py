@@ -11,6 +11,7 @@ from .screens.todo import TodoScreen
 from .screens.add_music import AddMusicScreen
 from .screens.tracks import LibraryScreen
 from .screens.playlist_builder import PlaylistsScreen
+from .screens.gig import GigScreen
 from .screens.tidy import (TidyUpScreen, CleanTagsScreen, FixBpmScreen, DuplicatesScreen,
                            ReorganiseScreen)
 from .screens.history import HistoryScreen
@@ -19,10 +20,11 @@ from .screens.pro_screen import ProScreen
 from .version import __version__
 
 NAV = [("todo", "To do"), ("add", "Add music"), ("library", "Library"),
-       ("playlists", "Playlists"), ("tidy", "Tidy up"), ("history", "History")]
+       ("playlists", "Playlists"), ("gig", "Gig prep"), ("tidy", "Tidy up"),
+       ("history", "History")]
 SCREENS = {"todo": TodoScreen, "add": AddMusicScreen, "library": LibraryScreen,
-           "playlists": PlaylistsScreen, "tidy": TidyUpScreen, "tags": CleanTagsScreen,
-           "bpm": FixBpmScreen, "dupes": DuplicatesScreen, "reorganise": ReorganiseScreen,
+           "playlists": PlaylistsScreen, "gig": GigScreen, "tidy": TidyUpScreen,
+           "tags": CleanTagsScreen, "bpm": FixBpmScreen, "dupes": DuplicatesScreen, "reorganise": ReorganiseScreen,
            "history": HistoryScreen, "settings": SettingsScreen, "pro": ProScreen}
 MOD = "Command" if paths.IS_MAC else "Control"
 ACCEL = "Cmd-" if paths.IS_MAC else "Ctrl+"

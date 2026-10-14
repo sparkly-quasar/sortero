@@ -1,9 +1,17 @@
 """Format-agnostic read/write for the tag fields DJ software actually reads."""
+import os
+
 import mutagen
 from mutagen.id3 import ID3, TKEY, TIT1, TCON, TPE1, TIT2, TBPM, TALB, COMM, ID3NoHeaderError
+from mutagen.aiff import AIFF
 from mutagen.flac import FLAC
+from mutagen.mp3 import MP3
+from mutagen.oggopus import OggOpus
 from mutagen.oggvorbis import OggVorbis
 from mutagen.mp4 import MP4
+from mutagen.wave import WAVE
+
+from . import headers
 
 # logical field -> per-format tag name
 ID3_FRAMES = {"key": TKEY, "grouping": TIT1, "genre": TCON,
@@ -27,17 +35,32 @@ class Track:
         self.path = path
         self.kind = None
         self.audio = None
+        self._iff = None        # an AIFF or WAV file, which holds its ID3 tag in a chunk
+        # bytes of ID3 tag an older Sortero glued in front of an AIFF/WAV header
+        self.stray_id3 = headers.stray_id3(path)
         try:
             a = mutagen.File(path)
         except Exception:
             a = None
         self._mf = a            # kept so length/bitrate don't reopen the file
-        if isinstance(a, (FLAC, OggVorbis)):
+        if isinstance(a, (FLAC, OggVorbis, OggOpus)):
             self.kind, self.audio = "vorbis", a
         elif isinstance(a, MP4):
             self.kind, self.audio = "mp4", a
-        else:
-            # mp3 / aiff / wav -> ID3 sidecar
+        elif isinstance(a, (AIFF, WAVE)):
+            # The tag lives in a chunk inside the file, where rekordbox and Mixed
+            # In Key write it. Saving a bare ID3 to the path instead glues it in
+            # front of the header (see headers.py), so go through the file.
+            if a.tags is None:
+                a.add_tags()
+            self.kind, self.audio, self._iff = "id3", a.tags, a
+        elif (isinstance(a, MP3) or self.stray_id3
+              or os.path.splitext(path)[1].lower() == ".mp3"):
+            # mp3, whose ID3 tag really does go in front. An AIFF/WAV already
+            # damaged this way is read and written through its stray tag until
+            # headers.repair moves that into the chunk: rewriting it in place
+            # makes nothing worse. Anything else gets no ID3 tag at all, since
+            # writing one would damage it in the same way.
             try:
                 self.audio = ID3(path)
             except ID3NoHeaderError:
@@ -154,8 +177,10 @@ class Track:
         if not self.ok:
             return False
         try:
-            if self.kind == "id3":
-                self.audio.save(self.path, v2_version=3)  # v2.3 = best DJ-app compat
+            if self.kind == "id3" and self._iff is not None:
+                self._iff.save(v2_version=3)              # v2.3 = best DJ-app compat
+            elif self.kind == "id3":
+                self.audio.save(self.path, v2_version=3)
             else:
                 self.audio.save()
             return True

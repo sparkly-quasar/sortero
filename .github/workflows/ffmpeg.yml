@@ -1,0 +1,61 @@
+name: Bundled ffmpeg
+
+# Builds the small ffmpeg that ships inside Sortero on all three platforms and
+# checks it converts the way Gig prep needs, whenever its build changes.
+# Publishes nothing: the release workflow builds its own copy the same way.
+on:
+  push:
+    paths:
+      - "build/ffmpeg/**"
+      - ".github/workflows/ffmpeg.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, windows-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tools (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y nasm
+
+      - name: Tools (Windows)
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: >-
+            make diffutils tar xz curl
+            mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-nasm
+            mingw-w64-x86_64-pkgconf mingw-w64-x86_64-zlib
+
+      - name: Build (macOS, Linux)
+        if: runner.os != 'Windows'
+        run: bash build/ffmpeg/build.sh
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: bash build/ffmpeg/build.sh
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check it converts the way Gig prep needs
+        shell: bash
+        run: |
+          ls -la build/ffmpeg/out
+          if [ "$RUNNER_OS" = macOS ]; then lipo -archs build/ffmpeg/out/ffmpeg; fi
+          python build/ffmpeg/smoke.py build/ffmpeg/out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-${{ runner.os }}
+          path: build/ffmpeg/out

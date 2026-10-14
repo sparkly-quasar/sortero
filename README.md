@@ -63,6 +63,11 @@ folders as playlists.
 
 ![Reorganise](docs/screenshots/reorganise.png)
 
+**Gig prep** takes a set from playlists to a checked USB stick, one step at a
+time, and ends with a GIG READY or NOT READY verdict.
+
+![Gig prep](docs/screenshots/gig-prep.png)
+
 ## Layout it produces
 
 ```
@@ -106,15 +111,16 @@ open.
 
 | Screen | What it's for |
 |---|---|
-| **To do** | Home. Cards for the jobs worth doing, most useful first, each with one button: analysed tracks waiting in `Processed`, tracks in `Unsorted`, tracks with no genre, tracks not analysed yet, tracks whose artist and title are the wrong way round, tags full of download-site spam. The number beside it in the sidebar is how many jobs there are. |
+| **To do** | Home. Cards for the jobs worth doing, most useful first, each with one button: AIFF or WAV files whose header an older Sortero damaged (see [below](#aiff-and-wav-files-with-a-damaged-header)), analysed tracks waiting in `Processed`, tracks in `Unsorted`, tracks with no genre, tracks not analysed yet, tracks whose artist and title are the wrong way round, tags full of download-site spam. The number beside it in the sidebar is how many jobs there are. |
 | **Add music** | Choose a folder or files. Analysed tracks go to the folder that already means their genre — yours if you have one. Anything missing a key lands in `To Be Processed`. Tracks with no genre to go on are **held back for you to place** instead of being dropped in `Unsorted`. Tracks already in the library are pointed out, not added twice. |
 | **Library** | Every track in one list. **Show** filters to what needs work (no genre, not analysed, no energy, no artist, artist and title swapped, no BPM, low bitrate); **Search** narrows it; click a column heading to sort. Select tracks and set a genre, swap artist and title, re-read both from the filename, send them to analysis, place them one by one, copy genres from folder names, or look them up on Discogs. Your own set recordings are hidden unless you ask. |
 | **Playlists** | Rebuild a Spotify or TIDAL playlist against your local files from a link, a pasted tracklist or a CSV — all three offered together above the list. **More** rebuilds the folder playlists or repairs broken links. |
+| **Gig prep** | Get a USB stick that plays on any Pioneer player, and check it before you leave. Tick the playlists you're playing, in set order; Sortero makes gig-safe copies of any track that won't play everywhere, then checks the stick and ends with **GIG READY** or **NOT READY**. See [Gig prep](#gig-prep). |
 | **Tidy up** | Tools for an existing collection: **Clean tags** (including which way round filenames read), **Fix wrong BPMs**, **Find duplicates**, **Place a folder's tracks by hand**, **Flatten release folders**, **Fix playlist links**, and **Reorganise the whole collection**. Every tool previews before it changes anything. |
 | **History** | Every operation, with undo, and the **safety net**. **Show log** reveals the detailed log. |
 | **Settings** | Collection folder, update checks, Discogs token, Spotify and TIDAL accounts, and the setup guide. |
 
-`Cmd-1`…`Cmd-6` (`Ctrl` on Windows and Linux) jump between screens, `Cmd-,`
+`Cmd-1`…`Cmd-7` (`Ctrl` on Windows and Linux) jump between screens, `Cmd-,`
 opens Settings and `Cmd-R` reads the collection again. Sortero follows your
 system's light or dark appearance.
 
@@ -400,6 +406,88 @@ Without connecting, Spotify links fall back to a public preview capped at 50
 tracks, and TIDAL links need a connection. Pasting a tracklist as
 `Artist - Title` lines, or loading a CSV export, always works.
 
+## AIFF and WAV files with a damaged header
+
+AIFF and WAV files keep their tags in a chunk inside the file, which is where
+rekordbox and Mixed In Key write them. Sortero up to 0.20.0 wrote tags to the
+front of these files instead, so they started with `ID3` where every player
+expects `FORM` or `RIFF`. Forgiving players skip over it; stricter ones may
+refuse the file. It also hid the tags in the chunk from Sortero, so a track
+Mixed In Key had analysed could show up as not analysed.
+
+Sortero now writes into the chunk, and **To do** lists any file already
+affected. **Repair…** moves the stray tag inside the file, keeping the newer
+value wherever the two disagree, and leaves the audio untouched. The damaged
+original is set aside in `_Quarantine/damaged headers`, and History undoes it.
+
+## Gig prep
+
+A gig stick has to play on whatever players the venue has, and the time to find
+out it doesn't is before you leave. **Gig prep** walks through it as a checklist,
+with the next step always on the blue button.
+
+![Gig prep, with every step done and the stick checked: GIG READY](docs/screenshots/gig-prep.png)
+
+1. **Choose the playlists.** Tick them in the order you'll play them.
+2. **Check the tracks.** Each one is checked against what Pioneer's own manuals
+   say the players read. **Players** picks which: *Any Pioneer player* (the
+   default) allows only what every player from the CDJ-900 and CDJ-2000 to the
+   CDJ-3000X and OPUS-QUAD plays.
+3. **Make gig-safe copies** of the tracks that won't play everywhere: MP3 320
+   kbps or 16-bit AIFF, in a *Gig Library* folder next to your collection.
+   Tracks that already play are used as they are, and your originals are never
+   changed. Every tag comes across, including Mixed In Key's cue points and beat
+   grid; artwork too big for older players is shrunk. A file that is already
+   lossy is decoded to AIFF rather than encoded lossy a second time. Copies are
+   remembered, so the next gig only converts what's new.
+4. **Make the rekordbox XML.** The playlists, numbered in set order, pointing
+   at the gig-safe files, with BPM, key, cue points and beat grids. Cues come
+   from your rekordbox library if you point Sortero at an XML export of it
+   (**More → Use cue points from a rekordbox XML…**; Mixed In Key's
+   `rekordbox.xml` works too), then from Mixxx, then from Mixed In Key's
+   analysis in the files themselves, whichever has them first. A small window
+   lists the steps for rekordbox: import the playlists, then drag them to the
+   stick with rekordbox 7.2.11 or later, which writes both the Device Library
+   older players read and the OneLibrary the newest (CDJ-3000X, OPUS-QUAD)
+   read. An MP3 copy can start 25 ms late in a player that ignores the MP3's
+   gapless information; **More → Cue timing on MP3 copies…** has a one-time
+   check in rekordbox, and moves the cues if it's needed.
+5. **Write a backup stick.** Writes each playlist as a numbered folder, its
+   tracks numbered in set order (`01 Warmup/01 Artist - Title.mp3`), so a
+   player browsing folders, or a laptop running Traktor, can find the next track
+   fast if rekordbox fails. Running it again brings the stick up to date: what's
+   already there is left alone, tracks no longer in the set are removed, and
+   files Sortero didn't put on the stick are never touched. macOS `._` files are
+   cleared, and the stick is checked straight afterwards, every file compared
+   with its original.
+6. **Check the stick.** Plug it in and choose it. Sortero checks the file system
+   and partitions (FAT32 on one MBR partition is what every player reads), the
+   rekordbox export if there is one (both libraries present, and every track
+   the Device Library lists on the stick),
+   every file's format, every file decoded from start to finish, FAT32 name and
+   size limits, macOS `._` files, and, on a stick Sortero wrote, every file
+   against its original. It ends with **GIG READY** or **NOT READY**, with
+   what to fix first.
+
+**More → Format a stick as FAT32…** erases a stick as one FAT32 partition on
+an MBR map, on a Mac (Windows and Linux get the settings to use in their own
+disk tools). Only removable external disks are offered, never an internal disk,
+the startup disk, or the disk your collection or gig library is on, even an
+ejected one that's still plugged in. It shows the disk, its size and the exact
+command, and erases only once you type the stick's name. Just before erasing it
+reads the disk again, and stops if it isn't the stick you chose.
+
+The same check runs from a terminal:
+
+```bash
+python -m sortero.gig.verify /Volumes/GIG [--player cdj-2000] [--quick]
+```
+
+Gig prep uses ffmpeg, and the ready-to-run app carries its own: a small build
+with only what Sortero needs (`build/ffmpeg/build.sh`). Running from source, it
+uses that build if you've made one, or the ffmpeg on your PATH
+(`brew install ffmpeg` on a Mac).
+
 ## Why energy ends up in Grouping
 
 Mixed In Key writes `Cm - Energy 6` into the **comment** field. The key half
@@ -527,12 +615,22 @@ never touches them.
 
 ```bash
 python3.12 -m venv .venv
-./.venv/bin/pip install -U pip mutagen keyring certifi pygame-ce pyinstaller
+./.venv/bin/pip install -U pip mutagen kaitaistruct keyring certifi pygame-ce pyinstaller
 ./.venv/bin/python build/build_app.py
 ```
 
 Requires Python 3.12 with Tk — `brew install python-tk@3.12` on macOS,
 `apt install python3-tk` on Debian/Ubuntu; the Windows installer includes it.
+
+To put ffmpeg inside the app as the release builds do, build it first (a few
+minutes; needs a C compiler, cmake and, on Intel and Linux, nasm):
+
+```bash
+bash build/ffmpeg/build.sh
+```
+
+`build_app.py` picks it up from `build/ffmpeg/out`. On Windows, run the script
+in an MSYS2 MINGW64 shell.
 
 A **universal2** macOS build needs a universal2 Python (the python.org
 installer ships one; Homebrew's is single-architecture):
@@ -550,6 +648,15 @@ interpreter — see `.github/workflows/release.yml`.
 ```bash
 ./.venv/bin/python run.py
 ```
+
+### Running the tests
+
+```bash
+./.venv/bin/python -m unittest discover tests
+```
+
+The tests make their own small audio files and never touch your collection or
+app data. One test needs ffmpeg and is skipped without it.
 
 ## Safety net
 
@@ -602,6 +709,17 @@ yourself or anyone you like come from `tools/licence_admin.py gift`.
 ## License
 
 GPL-3.0-or-later — see [LICENSE](LICENSE).
+
+Gig prep reads rekordbox's export.pdb with a parser generated from
+[crate-digger](https://github.com/Deep-Symmetry/crate-digger)'s format description, used
+under MPL-2.0 (see `sortero/vendor/rekordbox_pdb.py`), on the MIT-licensed
+[kaitaistruct](https://pypi.org/project/kaitaistruct/) runtime.
+
+The ready-to-run app includes ffmpeg and ffprobe built from
+[FFmpeg](https://ffmpeg.org) with [LAME](https://lame.sourceforge.io) and
+[soxr](https://sourceforge.net/projects/soxr/); together they're GPL. Their
+licences and the exact sources sit beside them in the app's `ffmpeg` folder,
+and `build/ffmpeg/build.sh` rebuilds them.
 
 Sortero links [mutagen](https://mutagen.readthedocs.io/), which is GPL-2.0-or-later,
 so distributed builds have to be GPL-compatible. keyring is MIT, and PyInstaller

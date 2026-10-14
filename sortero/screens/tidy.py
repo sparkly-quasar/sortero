@@ -170,11 +170,12 @@ class CleanTagsScreen(ToolScreen):
         # whole collection is the problem. With a handful of suspects the
         # precise instrument is the right one to offer first.
         if n and share < 0.5:
-            text = (f"{ui.plural(n, 'track')} here have the title sitting in the artist "
-                    "tag. Check those and swap just them, or swap the whole collection "
-                    "if it all went in backwards.")
+            text = (f"{ui.plural(n, 'track')} here {'has' if n == 1 else 'have'} the title "
+                    f"sitting in the artist tag. Check {'it' if n == 1 else 'those'} and "
+                    f"swap just {'that one' if n == 1 else 'them'}, or swap the whole "
+                    "collection if it all went in backwards.")
             card = ui.Card(self.card_wrap, title, text,
-                           f"Show the {n:,} tracks",
+                           "Show it" if n == 1 else f"Show the {n:,} tracks",
                            lambda: self.app.show_library("swapped"),
                            link_text="Swap every track's artist and title…",
                            link_command=self.preview_swap)

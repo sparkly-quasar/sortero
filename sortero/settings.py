@@ -14,6 +14,16 @@ DEFAULTS = {
     "name_order": "artist-title",
     # filenames (lowercased) of tracks never flagged as needing a genre
     "genre_ignored": [],
+    # Gig prep: which players to prepare for, what files that won't play there
+    # become, and where those copies go ("" = next to the collection)
+    "gig_profile": "universal",
+    "gig_target": "mp3",
+    "gig_library": "",
+    # a rekordbox collection XML to take cue points from ("" = none)
+    "gig_rekordbox_xml": "",
+    # move cues on MP3 copies 25 ms later, for a rekordbox that ignores the
+    # LAME gapless header (see gig/rbxml.py)
+    "gig_mp3_cue_shift": False,
 }
 
 

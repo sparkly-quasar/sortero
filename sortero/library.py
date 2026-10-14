@@ -37,6 +37,9 @@ class Rec:
     # filename. Only tagged names are evidence of how filenames are ordered.
     artist_from_name: bool = False
     title_from_name: bool = False
+    # Bytes of ID3 tag an older Sortero glued in front of an AIFF/WAV header.
+    # Nonzero means the file needs headers.repair before stricter players take it.
+    stray_id3: int = 0
 
     @property
     def top(self):
@@ -121,6 +124,7 @@ def scan(root, progress=None, order=None):
         except OSError:
             pass
         t = Track(p)
+        r.stray_id3 = t.stray_id3
         if t.ok:
             r.artist = _clean(t.get("artist"))
             r.title = _clean(t.get("title"))
@@ -342,6 +346,7 @@ def health(recs):
         "no_energy": [r for r in live if r.energy is None],
         "low_bitrate": [r for r in live if 0 < r.bitrate < 192000],
         "swapped": looks_swapped(live),
+        "stray_id3": [r for r in live if r.stray_id3],
         "name_order": name_order_votes(live),
         "genres": collections.Counter(r.genre for r in live if r.genre and not is_spam(r.genre)),
         "keys": collections.Counter(r.camelot for r in live if r.camelot),

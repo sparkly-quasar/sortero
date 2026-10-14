@@ -245,6 +245,11 @@ def get(key):
     return PROFILES.get(key) or UNIVERSAL
 
 
+def where(profile):
+    """How a sentence names the players: "every Pioneer player" or "the CDJ-2000"."""
+    return "every Pioneer player" if profile.key == UNIVERSAL.key else f"the {profile.name}"
+
+
 # ------------------------------------------------------------------ checking
 @dataclass(frozen=True)
 class Problem:

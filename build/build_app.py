@@ -63,6 +63,7 @@ def main():
            "--name", "Sortero",
            "--distpath", DIST, "--workpath", WORK, "--specpath", BUILD,
            "--hidden-import", "mutagen", "--collect-submodules", "mutagen",
+           "--hidden-import", "kaitaistruct",
            "--hidden-import", "keyring", "--collect-submodules", "keyring",
            "--hidden-import", "certifi", "--collect-data", "certifi",
            # pygame-ce ships its own PyInstaller hook; drop what preview never uses

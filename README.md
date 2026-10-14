@@ -541,7 +541,7 @@ never touches them.
 
 ```bash
 python3.12 -m venv .venv
-./.venv/bin/pip install -U pip mutagen keyring certifi pygame-ce pyinstaller
+./.venv/bin/pip install -U pip mutagen kaitaistruct keyring certifi pygame-ce pyinstaller
 ./.venv/bin/python build/build_app.py
 ```
 
@@ -625,6 +625,11 @@ yourself or anyone you like come from `tools/licence_admin.py gift`.
 ## License
 
 GPL-3.0-or-later — see [LICENSE](LICENSE).
+
+Gig prep reads rekordbox's export.pdb with a parser generated from
+[crate-digger](https://github.com/Deep-Symmetry/crate-digger)'s format description, used
+under MPL-2.0 (see `sortero/vendor/rekordbox_pdb.py`), on the MIT-licensed
+[kaitaistruct](https://pypi.org/project/kaitaistruct/) runtime.
 
 Sortero links [mutagen](https://mutagen.readthedocs.io/), which is GPL-2.0-or-later,
 so distributed builds have to be GPL-compatible. keyring is MIT, and PyInstaller

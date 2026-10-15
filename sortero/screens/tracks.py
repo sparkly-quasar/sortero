@@ -276,9 +276,13 @@ class LibraryScreen(Screen):
             return
         if not messagebox.askyesno(
                 APP, f"Send {ui.plural(len(recs), 'track')} to analysis?\n\n"
-                     "They move into 'To Be Processed'. Run that folder through your "
-                     "analysis tool and save the results into 'Processed'. To do will "
-                     "then offer to sort them back into your library.\n\n"
+                     "They move into 'To Be Processed' and Sortero takes you to the "
+                     "To do screen.\n\n"
+                     "Then:\n"
+                     "  1. Run 'To Be Processed' through your analysis tool.\n"
+                     "  2. Save or move the results into 'Processed'.\n"
+                     "  3. Come back to To do and press Sort them… to file them "
+                     "back into your library.\n\n"
                      "If you use Platinum Notes, run it BEFORE analysing. It re-encodes "
                      "the audio.\n\nTheir playlists remember them, and this can be "
                      "undone from History."):
@@ -294,10 +298,16 @@ class LibraryScreen(Screen):
 
         def done(res):
             _, n = res
+            self.app.show("todo")
             messagebox.showinfo(
                 APP, f"Moved {ui.plural(n, 'track')} into 'To Be Processed'.\n\n"
                      "Next, run that folder through your analysis tool (Mixed In Key, "
-                     "rekordbox, Mixxx) and save the results into 'Processed'.\n\n"
+                     "rekordbox, Mixxx) and save the results into 'Processed'. "
+                     "Sortero doesn't move anything out of 'To Be Processed' itself.\n\n"
+                     "Once they're in 'Processed', this To do screen shows a "
+                     "Sort them… button that files them back into your library. "
+                     "It also offers to clear out the originals left behind in "
+                     "'To Be Processed'.\n\n"
                      "If you use Platinum Notes, run it FIRST. Running it after "
                      "analysis throws the analysis away.")
             self.app.changed()

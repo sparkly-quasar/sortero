@@ -606,10 +606,12 @@ class Wizard(tk.Toplevel):
         if not pending:
             self.an_btn.configure(state="disabled")
         ttk.Label(self.body, style="Muted.TLabel", wraplength=690, justify="left",
-                  text="\nAfterwards: analyse them, save the results into 'Processed', "
-                       "then press Sort them… on the To do screen. Tracks taken "
-                       "out of a set rejoin its playlist automatically when they come "
-                       "back."
+                  text="\nAfterwards: analyse them, then save or move the results into "
+                       "'Processed'. Sortero doesn't move anything out of 'To Be "
+                       "Processed' itself. Once they're in 'Processed', the To do "
+                       "screen shows a Sort them… button that files them back. Tracks "
+                       "taken out of a set rejoin its playlist automatically when they "
+                       "come back."
                   ).pack(anchor="w", pady=(10, 0))
 
     def _apply_stage(self):

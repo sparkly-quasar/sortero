@@ -101,6 +101,62 @@ def plan(root, recs, progress=None):
     return res, dups
 
 
+def _under(rec, root, folder):
+    prefix = os.path.normpath(os.path.join(root, folder)) + os.sep
+    return os.path.normpath(rec.path).startswith(prefix)
+
+
+def leftover_originals(root, recs):
+    """Tracks in To Be Processed that have already come back analysed.
+
+    Platinum Notes leaves its original behind, and some analysis tools write a
+    copy rather than tagging in place, so once the processed version is in
+    Processed (or already filed) the file still in To Be Processed is spare.
+    Returns [(original Rec, processed Rec)]. A different-length match is
+    skipped - that is more likely another edit than the same track.
+    """
+    staged, done = [], collections.defaultdict(list)
+    for r in recs:
+        if _under(r, root, importer.TO_PROCESS):
+            staged.append(r)
+        elif r.analyzed and (not r.protected or _under(r, root, importer.PROCESSED)):
+            done[ident(r)].append(r)
+    out = []
+    for r in staged:
+        for c in done.get(ident(r), ()):
+            if r.duration and c.duration and abs(r.duration - c.duration) > 3:
+                continue
+            out.append((r, c))
+            break
+    return out
+
+
+def set_aside_originals(root, recs, log=print, progress=None):
+    """Move spare originals into _Quarantine/originals. Returns (journal, moved)."""
+    j = Journal("remove-originals", root)
+    qdir = os.path.join(root, QUARANTINE, "originals")
+    total = len(recs) or 1
+    n = 0
+    for i, r in enumerate(recs):
+        if progress and i % 10 == 0:
+            progress(i, total)
+        if not os.path.exists(r.path):
+            continue
+        try:
+            dest = _unique(os.path.join(qdir, os.path.basename(r.path)))
+            os.makedirs(qdir, exist_ok=True)
+            shutil.move(r.path, dest)
+            j.moved(r.path, dest)
+            n += 1
+        except Exception as e:
+            log(f"  ! {os.path.basename(r.path)}: {e}")
+    if progress:
+        progress(total, total)
+    path = j.save()
+    log(f"set aside {n} originals | journal: {path}")
+    return path, n
+
+
 # ----------------------------------------------------------------- resolving
 def resolve(root, rows, log=print, progress=None):
     """rows: [(new Rec, library Rec, action)]. Returns (journal, Counter, failed).
@@ -192,7 +248,7 @@ class ProcessedDialog(tk.Toplevel):
         self.changed = False
         self.busy = False
         self._first = True
-        self.res, self.dups, self._btns = [], [], []
+        self.res, self.dups, self.originals, self._btns = [], [], [], []
         self.dtv = None
 
         self.title(TITLE)
@@ -270,10 +326,10 @@ class ProcessedDialog(tk.Toplevel):
 
         def work(progress):
             recs = cached if cached is not None else library.scan(root, progress=progress)
-            return plan(root, recs, progress=progress)
+            return plan(root, recs, progress=progress), leftover_originals(root, recs)
 
         def done(out):
-            self.res, self.dups = out
+            (self.res, self.dups), self.originals = out
             self.render()
 
         self._run(work, done, "Reading Processed")
@@ -286,8 +342,11 @@ class ProcessedDialog(tk.Toplevel):
         res = self.res
         if not res:
             self.status.configure(text="Processed is empty — everything in it has been dealt with.")
-            ttk.Label(self.body, text="Nothing left to sort.",
-                      font=ui.HEADING).pack(anchor="w", pady=20)
+            if self.originals:
+                self._render_originals()
+            else:
+                ttk.Label(self.body, text="Nothing left to sort.",
+                          font=ui.HEADING).pack(anchor="w", pady=20)
             return
         ready = [x for x in res if x["action"] in ("sort", "mix", "to-process")]
         held = [x["rec"] for x in res if x["action"] == "needs-folder"]
@@ -295,6 +354,9 @@ class ProcessedDialog(tk.Toplevel):
             text=f"{len(res)} tracks in Processed. Each group below has its own way out, "
                  "and nothing moves until you press that group's button. Every step is "
                  "undoable from History.")
+
+        if self.originals:
+            self._render_originals()
 
         f1 = ttk.LabelFrame(self.body, text=f"Ready to file — {len(ready)}", padding=10)
         f1.pack(fill="x", pady=(0, 8))
@@ -372,6 +434,40 @@ class ProcessedDialog(tk.Toplevel):
         b = ttk.Button(row, text=f"Sort out {len(self.dups)}", command=self.resolve_dups)
         b.pack(side="right")
         self._btns.append(b)
+
+    def _render_originals(self):
+        pairs = self.originals
+        f = ttk.LabelFrame(self.body, text=f"Originals left in To Be Processed — {len(pairs)}",
+                           padding=10)
+        f.pack(fill="x", pady=(0, 8))
+        ttk.Label(f, style="Muted.TLabel", wraplength=940, justify="left",
+                  text="These already have an analysed version in Processed or your "
+                       "library, so the copies still in 'To Be Processed' aren't needed. "
+                       "Usually Platinum Notes left the original behind."
+                  ).pack(anchor="w", pady=(0, 6))
+        lines = [f"{os.path.basename(o.path)}  →  {os.path.relpath(c.path, self.root_dir)}"
+                 for o, c in pairs[:6]]
+        if len(pairs) > 6:
+            lines.append(f"… and {len(pairs) - 6} more")
+        ttk.Label(f, font=ui.MONO, justify="left", text="\n".join(lines)).pack(anchor="w")
+        b = ttk.Button(f, text=f"Remove {len(pairs)} original{'s' if len(pairs) != 1 else ''}",
+                       command=self.remove_originals)
+        b.pack(anchor="w", pady=(8, 0))
+        self._btns.append(b)
+
+    def remove_originals(self):
+        recs = [o for o, _ in self.originals]
+        if not messagebox.askyesno(
+                TITLE, f"Remove {len(recs)} originals from 'To Be Processed'?\n\n"
+                       f"They go to {QUARANTINE}/originals, so you can undo this "
+                       "from History. Delete that folder once you're sure.",
+                parent=self):
+            return
+        root = self.root_dir
+        self._run(lambda progress: set_aside_originals(root, recs, log=lambda m: None,
+                                                       progress=progress),
+                  lambda out: self._after_action(f"Removed {out[1]} originals."),
+                  "Removing originals")
 
     def _cycle(self, e):
         if self.busy or self.dtv is None:

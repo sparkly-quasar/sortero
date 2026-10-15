@@ -136,8 +136,9 @@ class TodoScreen(Screen):
         if waiting:
             folder = os.path.join(root, importer.TO_PROCESS)
             self._card(f"{ui.plural(waiting, 'track')} waiting in To Be Processed",
-                       "Run them through your analysis tool and save the results into "
-                       "Processed. They'll show up here, ready to sort.",
+                       "Run them through your analysis tool, then save or move the "
+                       "results into Processed. A Sort them… button appears here once "
+                       "they're there.",
                        "Show folder", lambda: paths.reveal(folder))
 
         if not self.jobs:

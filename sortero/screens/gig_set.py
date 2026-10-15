@@ -18,11 +18,14 @@ from ..gig import sources
 from .base import APP
 
 # Headings in the playlist list, once there's more than Sortero's own to show
-GROUPS = [(sources.SORTERO, "In your collection"), (sources.WATCHED, ""),
+GROUPS = [(sources.SORTERO, "In your collection"),
+          (sources.COLLECTION, "Found in your collection's folders"), (sources.WATCHED, ""),
           (sources.M3U, "Playlist files"),
           (sources.FOLDER, "Folders of tracks"), (sources.REKORDBOX, "From rekordbox"),
           (sources.MIXXX, "From Mixxx")]
 TICK, NO_TICK, REMOVE = "☑", "☐", "×"
+# Listed by Sortero itself, so there's nothing to take off the list
+FOUND = {sources.SORTERO, sources.COLLECTION}
 
 
 def short(path):
@@ -53,6 +56,10 @@ class SetPicker(tk.Frame):
         menu.add_separator()
         menu.add_command(label="From a rekordbox XML…", command=self.add_rekordbox)
         menu.add_command(label="From Mixxx…", command=self.add_mixxx)
+        menu.add_separator()
+        self.search_var = tk.BooleanVar(value=sources.searching_collection())
+        menu.add_checkbutton(label="Find playlist files anywhere in my collection",
+                             variable=self.search_var, command=self.toggle_search)
         add.configure(menu=menu)
         add.pack(side="right")
 
@@ -190,7 +197,7 @@ class SetPicker(tk.Frame):
         src, n = self.sources[key], self.counts.get(key)
         on = key in self.chosen
         self.tv.item(key, values=(TICK if on else NO_TICK, src.name, "?" if n is None else n,
-                                  "" if src.kind == sources.SORTERO else REMOVE),
+                                  "" if src.kind in FOUND else REMOVE),
                      tags=("chosen",) if on else ("unreadable",) if n is None else ())
 
     def _fill_set(self, focus=None):
@@ -218,6 +225,9 @@ class SetPicker(tk.Frame):
         if src.kind == sources.WATCHED:
             return (f"From {short(src.where)}. Its folder is watched, so playlists "
                     "you save there show up here by themselves.")
+        if src.kind == sources.COLLECTION:
+            return (f"From {os.path.relpath(src.path, src.ref[0])} in your collection. "
+                    "Playlist files saved anywhere in your collection show up here.")
         return f"From {short(src.where)}."
 
     # ------------------------------------------------------------ changing the set
@@ -231,7 +241,7 @@ class SetPicker(tk.Frame):
         if not row or row not in self.sources:
             return "break"
         self.tv.focus(row)
-        if self.tv.identify_column(e.x) == "#4" and self.sources[row].kind != sources.SORTERO:
+        if self.tv.identify_column(e.x) == "#4" and self.sources[row].kind not in FOUND:
             self.remove(row)
         else:
             self.toggle(row)
@@ -281,7 +291,7 @@ class SetPicker(tk.Frame):
     def remove(self, key):
         """Take an added playlist off the list. The playlist itself is untouched."""
         src = self.sources.get(key)
-        if not src or src.kind == sources.SORTERO:
+        if not src or src.kind in FOUND:
             return
         if src.kind == sources.WATCHED:
             self.unwatch(src.folder)
@@ -297,6 +307,18 @@ class SetPicker(tk.Frame):
         self._undo = snapshot
         if was_chosen:
             self._changed(None, undoable=snapshot)
+
+    def toggle_search(self):
+        on = self.search_var.get()
+        settings.set("gig_search_collection", on)
+        before = list(self.chosen)
+        self.load()
+        n = sum(1 for s in self.sources.values() if s.kind == sources.COLLECTION)
+        self._say(f"Found {ui.plural(n, 'playlist file')} in your collection's folders."
+                  if on else "Stopped finding playlist files in your collection. Turn it "
+                             "back on from Add playlists….")
+        if self.chosen != before:
+            self._changed("You changed the set")
 
     def unwatch(self, folder):
         """Stop watching a folder: its playlists leave the list, files untouched."""
@@ -340,7 +362,11 @@ class SetPicker(tk.Frame):
         if not src or src.kind == sources.SORTERO:
             return "break"
         menu = tk.Menu(self, tearoff=0)
-        if src.kind == sources.WATCHED:
+        if src.kind == sources.COLLECTION:
+            menu.add_command(label="Stop finding playlist files in my collection",
+                             command=lambda: (self.search_var.set(False),
+                                              self.toggle_search()))
+        elif src.kind == sources.WATCHED:
             menu.add_command(label=f"Stop watching {os.path.basename(src.folder) or src.folder}",
                              command=lambda: self.unwatch(src.folder))
         else:

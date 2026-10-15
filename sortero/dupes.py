@@ -67,9 +67,13 @@ def _filed(r):
     return not set_name(r) and is_filing_folder(os.path.dirname(r.rel))
 
 
-def keeper(group):
-    """Best copy: lossless first, then longer, then richer tags, then the one in
-    a genre folder, then shorter path."""
+def keeper(group, chosen=()):
+    """The copy that stays. One the user picked (its path in `chosen`) wins;
+    otherwise the best: lossless first, then longer, then richer tags, then the
+    one in a genre folder, then shorter path."""
+    for r in group:
+        if r.path in chosen:
+            return r
     def score(r):
         return (r.ext in LOSSLESS,
                 round(r.duration or 0),
@@ -148,8 +152,8 @@ def canonical_map(found, include_likely=True):
     return m
 
 
-def reclaimable(groups):
-    return sum(sum(r.size for r in g if r is not keeper(g)) for g in groups)
+def reclaimable(groups, chosen=()):
+    return sum(sum(r.size for r in g if r is not keeper(g, chosen)) for g in groups)
 
 
 def _unique(path):
@@ -161,8 +165,11 @@ def _unique(path):
     return path
 
 
-def plan(groups, one_folder=True):
+def plan(groups, one_folder=True, chosen=()):
     """What happens to every copy. Returns [(group, keeper, home folder)].
+
+    `chosen` holds the paths of copies the user picked to keep; a group with
+    none of them keeps its best copy. A picked copy goes through the same rules.
 
     The keeper normally stays put. With one_folder, a keeper sitting in a set or
     other curated folder moves into the genre folder another copy is in, so the
@@ -170,7 +177,7 @@ def plan(groups, one_folder=True):
     """
     out = []
     for g in groups:
-        k = keeper(g)
+        k = keeper(g, chosen)
         home = os.path.dirname(k.path)
         if one_folder and set_name(k):
             filed = [r for r in g if r is not k and _filed(r)]
@@ -180,24 +187,27 @@ def plan(groups, one_folder=True):
     return out
 
 
-def describe(r, k, home, one_folder=True):
+def describe(r, k, home, one_folder=True, chosen=()):
     """One short phrase for the table: what this copy is about to go through."""
     if r is k:
+        what = "keep (your pick)" if r.path in chosen else "keep"
         if home != os.path.dirname(k.path):
-            return "keep, moves to " + os.path.basename(home)
-        return "keep"
+            return what + ", moves to " + os.path.basename(home)
+        return what
     name = set_name(r) if one_folder else None
     return f"set aside; playlist '{name}'" if name else "set aside"
 
 
-def quarantine(root, groups, log=print, recs=None, one_folder=False, progress=None):
+def quarantine(root, groups, log=print, recs=None, one_folder=False, progress=None,
+               chosen=()):
     """Move non-keepers into _Quarantine (reversible). Never deletes.
 
     Playlists always follow the copy that stays. With one_folder, every set or
     other curated folder that loses a copy is saved as a playlist with the kept
     copy in that copy's place, and a keeper found only in a curated folder moves
     into the genre folder another copy was filed in. `recs` (the whole scan)
-    is what those playlists are built from. Returns (journal path, files set aside).
+    is what those playlists are built from. `chosen` holds copies the user
+    picked to keep. Returns (journal path, files set aside).
     """
     from .organize import QUARANTINE
     from .journal import prune_empty
@@ -208,7 +218,7 @@ def quarantine(root, groups, log=print, recs=None, one_folder=False, progress=No
     qdir = os.path.join(root, QUARANTINE, "duplicates")
     remap, lost_from = {}, collections.defaultdict(set)   # playlist name -> paths gone
     n = 0
-    steps = plan(groups, one_folder)
+    steps = plan(groups, one_folder, chosen)
     total = len(steps) or 1
     for i, (g, k, home) in enumerate(steps):
         if progress and i % 10 == 0:

@@ -707,18 +707,22 @@ class FixBpmScreen(ToolScreen):
 # ------------------------------------------------------------ duplicates
 class DuplicatesScreen(ToolScreen):
     title = "Duplicates"
-    summary = "Find extra copies of the same track and set them aside. Nothing is deleted."
+    summary = ("Find extra copies of the same track. One copy of each stays; the rest are "
+               "set aside. Nothing is deleted.")
     details = ("Exact copies have identical audio. Likely copies share artist, title and "
                "version and are the same length. Different remixes are never grouped "
                "together. The whole collection is searched, apart from 'To Be "
-               "Processed', 'Processed' and _Quarantine. The best copy stays (lossless "
-               "and higher bitrate win) and the extras move to _Quarantine, so you can "
-               "check them before deleting anything yourself.\n\n"
+               "Processed', 'Processed' and _Quarantine.\n\n"
+               "One copy of each track always stays. Sortero picks it for you: a "
+               "lossless file first, then the longer one, then the one with more tags "
+               "filled in, then the one in a genre folder. To keep a different copy, "
+               "double-click it in the list. The other copies move to _Quarantine, so "
+               "you can check them before deleting anything yourself.\n\n"
                "With 'Keep each track in one folder', the copy that stays lives in its "
-               "genre folder, and a set or other folder you made that loses a copy "
-               "becomes a playlist in _Playlists with the track in the same place. "
-               "Playlists that pointed at a copy always follow the one that stays. "
-               "You can undo it from History.")
+               "genre folder, even one you picked from a set, and a set or other "
+               "folder you made that loses a copy becomes a playlist in _Playlists "
+               "with the track in the same place. Playlists that pointed at a copy "
+               "always follow the one that stays. You can undo it from History.")
 
     def build(self):
         self.one_folder = tk.BooleanVar(value=settings.get("dupes_one_folder") is not False)
@@ -731,13 +735,19 @@ class DuplicatesScreen(ToolScreen):
                                     ("format", "Format", 60), ("length", "Length", 70),
                                     ("path", "File", 460)], height=15)
         f.pack(fill="both", expand=True)
+        self.tv.bind("<Double-Button-1>", self._pick)
         # The count of likely copies is printed above, so the way to act on it
         # belongs on the screen too. It used to be a menu item, which left the
         # screen saying "17 likely groups (1.2 GB)" over a button that offered
         # to search again.
         self.also = ttk.Button(self.bar.left, command=lambda: self.quarantine("all"))
-        self.bar.set_more([("Search again", self.find)])
+        self.bar.set_more([("Keep the selected copy instead", self._pick_selected),
+                           ("Go back to Sortero's picks", self._clear_picks),
+                           None,
+                           ("Search again", self.find)])
         self.found = None
+        self.chosen = set()            # paths of copies the user picked to keep
+        self.rows = {}                 # tree row -> (group, Rec)
         self._reset()
 
     def invalidate(self):
@@ -745,6 +755,8 @@ class DuplicatesScreen(ToolScreen):
 
     def _reset(self):
         self.found = None
+        self.chosen = set()
+        self.rows = {}
         self.tv.delete(*self.tv.get_children())
         self.result.configure(text="")
         self.bar.set_primary("Find duplicates", self.find)
@@ -764,17 +776,68 @@ class DuplicatesScreen(ToolScreen):
         if self.found:
             self._fill()
 
-    def _fill(self):
+    # -- choosing the copy to keep -----------------------------------------
+    def _pick(self, e):
+        row = self.tv.identify_row(e.y)
+        if row:
+            self._choose(row)
+        return "break"
+
+    def _pick_selected(self):
+        sel = self.tv.selection()
+        if not sel:
+            messagebox.showinfo(APP, "Select the copy you want to keep first.")
+            return
+        for row in sel:
+            self._choose(row)
+
+    def _choose(self, row):
+        if row not in self.rows:
+            return
+        g, r = self.rows[row]
+        self.chosen -= {x.path for x in g}
+        if r is not dupes.keeper(g):
+            self.chosen.add(r.path)
+        self._fill(keep_view=row)
+
+    def _clear_picks(self):
+        if self.chosen:
+            self.chosen = set()
+            self._fill()
+
+    def _fill(self, keep_view=None):
         res, one = self.found, self.one_folder.get()
         self.tv.delete(*self.tv.get_children())
+        self.rows = {}
+        self.tv.tag_configure("keep", foreground=ui.c("good"))
         root = self.app.root_dir.get()
+        n = 0
         for kind in ("exact", "likely"):
-            for gi, (g, k, home) in enumerate(dupes.plan(res[kind], one), 1):
+            for gi, (g, k, home) in enumerate(dupes.plan(res[kind], one, self.chosen), 1):
                 for r in g:
-                    self.tv.insert("", "end", values=(
-                        f"{kind.capitalize()} {gi}", dupes.describe(r, k, home, one),
-                        r.ext.lstrip("."), f"{(r.duration or 0)/60:.1f} min",
-                        os.path.relpath(r.path, root)))
+                    row = str(n)
+                    n += 1
+                    self.rows[row] = (g, r)
+                    self.tv.insert("", "end", iid=row, tags=("keep",) if r is k else (),
+                                   values=(f"{kind.capitalize()} {gi}",
+                                           dupes.describe(r, k, home, one, self.chosen),
+                                           r.ext.lstrip("."),
+                                           f"{(r.duration or 0)/60:.1f} min",
+                                           os.path.relpath(r.path, root)))
+        if keep_view in self.rows:
+            self.tv.see(keep_view)
+            self.tv.selection_set(keep_view)
+        self._summarise()
+
+    def _summarise(self):
+        ex, lk = self.found["exact"], self.found["likely"]
+        picked = len(self.chosen)
+        self.result.configure(
+            text=f"{ui.plural(len(ex), 'exact group')} ({human_size(dupes.reclaimable(ex, self.chosen))} "
+                 f"to free) · {ui.plural(len(lk), 'likely group')} "
+                 f"({human_size(dupes.reclaimable(lk, self.chosen))}). One copy of each "
+                 "stays: double-click a copy to keep that one instead"
+                 + (f" ({picked} picked by you)." if picked else "."))
 
     def find(self):
         if self.need_scan():
@@ -785,27 +848,23 @@ class DuplicatesScreen(ToolScreen):
 
         def done(res):
             self.found = res
+            self.chosen = set()
             self._fill()
             ex, lk = res["exact"], res["likely"]
-            self.result.configure(
-                text=f"{ui.plural(len(ex), 'exact group')} ({human_size(dupes.reclaimable(ex))} "
-                     f"to free) · {ui.plural(len(lk), 'likely group')} "
-                     f"({human_size(dupes.reclaimable(lk))})")
             n = sum(len(g) - 1 for g in ex)
             nl = sum(len(g) - 1 for g in lk)
             if n:
                 # Exact copies are the safe default; the likely ones ride along
                 # on their own button rather than hiding in a menu.
-                self.bar.set_primary(f"Set aside {ui.plural(n, 'exact copy', 'exact copies')}…",
+                self.bar.set_primary(f"Keep 1 copy of each, set aside {n:,}…",
                                      lambda: self.quarantine("exact"))
                 self._show_also(nl)
             elif nl:
                 # Nothing exact to offer, so the likely ones are the job. This
                 # used to fall through to "Search again" with the real action
                 # left in the menu.
-                self.bar.set_primary(
-                    f"Set aside {ui.plural(nl, 'likely copy', 'likely copies')}…",
-                    lambda: self.quarantine("all"))
+                self.bar.set_primary(f"Keep 1 copy of each, set aside {nl:,}…",
+                                     lambda: self.quarantine("all"))
                 self._show_also(0)
             else:
                 self.bar.set_primary("Search again", self.find)
@@ -820,34 +879,40 @@ class DuplicatesScreen(ToolScreen):
         count = sum(len(g) - 1 for g in groups)
         if not count:
             return
-        one = self.one_folder.get()
-        sets = len({dupes.set_name(r) for g, k, home in dupes.plan(groups, one)
+        one, chosen = self.one_folder.get(), set(self.chosen)
+        steps = dupes.plan(groups, one, chosen)
+        sets = len({dupes.set_name(r) for g, k, home in steps
                     for r in g if (r is not k or home != os.path.dirname(k.path))
                     and dupes.set_name(r)}) if one else 0
-        moving = sum(1 for g, k, home in dupes.plan(groups, one)
-                     if home != os.path.dirname(k.path))
+        moving = sum(1 for g, k, home in steps if home != os.path.dirname(k.path))
+        picked = sum(1 for g, k, _ in steps if k.path in chosen)
         extra = ""
+        if picked:
+            extra += f"\n\n{ui.plural(picked, 'kept copy is', 'kept copies are')} your pick."
         if sets:
             extra += (f"\n\n{ui.plural(sets, 'set or folder you made', 'sets and folders you made')} "
                       "will keep these tracks as playlist entries in _Playlists.")
         if moving:
             extra += (f"\n\n{ui.plural(moving, 'kept copy moves', 'kept copies move')} "
                       "into the genre folder another copy was in.")
-        if not messagebox.askyesno(APP, f"Move {ui.plural(count, 'extra copy', 'extra copies')} "
-                                        "to _Quarantine?" + extra + "\n\nPlaylists follow "
-                                        "the copy that stays. Nothing is deleted, and you "
-                                        "can undo this from History."):
+        if not messagebox.askyesno(
+                APP, f"Keep 1 copy of each of {ui.plural(len(groups), 'track')} and set "
+                     f"aside {ui.plural(count, 'extra copy', 'extra copies')} in "
+                     "_Quarantine?" + extra + "\n\nPlaylists follow the copy that "
+                     "stays. Nothing is deleted, and you can undo this from History."):
             return
         root = self.app.root_dir.get()
         recs = self.app.recs
 
         def work(progress, log):
             return dupes.quarantine(root, groups, log=log, recs=recs, one_folder=one,
-                                    progress=progress)
+                                    progress=progress, chosen=chosen)
 
         def done(res):
             _, n = res
-            messagebox.showinfo(APP, f"Moved {ui.plural(n, 'file')} to _Quarantine.")
+            messagebox.showinfo(APP, f"Kept 1 copy of each and moved "
+                                     f"{ui.plural(n, 'extra copy', 'extra copies')} to "
+                                     "_Quarantine.")
             self.app.changed()
 
         self.app.task.run(work, done, "Setting copies aside")

@@ -109,6 +109,40 @@ class OneFolder(TempDir):
         self.assertEqual(self.playlist("Sets - Burn"), [
             "../Techno/Elsewhere.mp3", "../Techno/Madness.mp3", "../Sets/Burn/Other.mp3"])
 
+    def test_a_picked_copy_is_kept_instead_of_the_best_one(self):
+        flac = self.track("Techno/Madness.flac", b"lossless audio")
+        mp3 = self.track("House/Madness.mp3", b"lossy")
+        self.assertIs(dupes.keeper([flac, mp3]), flac)
+        self.assertIs(dupes.keeper([flac, mp3], {mp3.path}), mp3)
+        _, n = dupes.quarantine(self.root, [[flac, mp3]], log=lambda m: None,
+                                recs=[flac, mp3], one_folder=True, chosen={mp3.path})
+        self.assertEqual(n, 1)
+        self.assertTrue(os.path.exists(mp3.path))
+        self.assertFalse(os.path.exists(flac.path))
+
+    def test_a_copy_picked_from_a_set_still_moves_to_the_genre_folder(self):
+        filed = self.track("Techno/Madness.flac", b"lossless audio")
+        in_set = self.track("Sets/Burn/Madness.mp3", b"lossy")
+        _, n = dupes.quarantine(self.root, [[filed, in_set]], log=lambda m: None,
+                                recs=[filed, in_set], one_folder=True,
+                                chosen={in_set.path})
+        self.assertEqual(n, 1)
+        kept = os.path.join(self.root, "Techno", "Madness.mp3")
+        self.assertTrue(os.path.exists(kept))
+        self.assertFalse(os.path.exists(filed.path))
+        self.assertFalse(os.path.exists(in_set.path))
+        self.assertEqual(self.playlist("Sets - Burn"), ["../Techno/Madness.mp3"])
+
+    def test_a_pick_only_affects_its_own_group(self):
+        a1 = self.track("Techno/A.flac", b"lossless a", title="A")
+        a2 = self.track("House/A.mp3", b"a", title="A")
+        b1 = self.track("Techno/B.flac", b"lossless b", title="B")
+        b2 = self.track("House/B.mp3", b"b", title="B")
+        steps = dupes.plan([[a1, a2], [b1, b2]], one_folder=True, chosen={a2.path})
+        self.assertEqual([k for _, k, _ in steps], [a2, b1])
+        self.assertEqual(dupes.describe(a2, a2, os.path.dirname(a2.path), True, {a2.path}),
+                         "keep (your pick)")
+
     def test_undo_puts_everything_back(self):
         flac = self.track("Sets/Burn/Madness.flac", b"lossless audio")
         mp3 = self.track("Techno/Madness.mp3", b"lossy")

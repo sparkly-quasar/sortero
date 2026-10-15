@@ -5,6 +5,8 @@ are always listed. Others are added from Gig prep and remembered:
 
   * a playlist file (.m3u or .m3u8), as rekordbox, Traktor, Mixxx, VirtualDJ or
     Apple Music export them, wherever it lives
+  * any playlist file inside the collection itself, found afresh each time
+    (on unless turned off), apart from _Playlists and _Quarantine
   * a watched folder of playlist files: every .m3u or .m3u8 in it, or in the
     folders inside it, is listed each time Gig prep looks, so a new export
     turns up without being added
@@ -16,7 +18,7 @@ are always listed. Others are added from Gig prep and remembered:
 Each is read again whenever it's used, so a playlist changed in the app that
 made it is picked up. Nothing here ever writes to any of them.
 """
-import os, re, sqlite3, urllib.parse
+import collections, os, re, sqlite3, urllib.parse
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 
@@ -25,7 +27,9 @@ from ..common import AUDIO_EXTS
 from .cues import location_path
 
 SORTERO, M3U, FOLDER, REKORDBOX, MIXXX = "sortero", "m3u", "folder", "rekordbox", "mixxx"
-WATCHED = "watched"
+WATCHED, COLLECTION = "watched", "collection"
+# Not searched for playlist files: Sortero's own (listed already) and set-asides
+NOT_SEARCHED = {"_Playlists", "_Quarantine"}
 PLAYLIST_EXTS = (".m3u", ".m3u8")
 # rekordbox XML: playlist NODEs are Type 1 (Type 0 is a folder); a playlist's
 # TRACK Keys are TrackIDs when KeyType is 0, Locations when it's 1.
@@ -148,6 +152,50 @@ def watched_sources(skip=()):
     return out
 
 
+def searching_collection():
+    return settings.get("gig_search_collection") is not False
+
+
+def collection_sources(root, skip=()):
+    """Every playlist file inside the collection, found afresh."""
+    if not root or not os.path.isdir(root) or not searching_collection():
+        return []
+    seen = set(skip)
+    out = []
+    for p in find_m3u(root, skip_top=NOT_SEARCHED):
+        if p not in seen:
+            seen.add(p)
+            out.append(Source(COLLECTION, p, os.path.splitext(os.path.basename(p))[0],
+                              (root,)))
+    return out
+
+
+def _tell_apart(found):
+    """Playlist files Sortero found by itself are named after the file, so two
+    can share a name - often one playlist saved as both .m3u and .m3u8. Those
+    get their folder when they're in different ones, and the file type when
+    that still isn't enough: "Peak (Sets)", "Peak (.m3u8)", "Peak (Inbox, .m3u)"."""
+    def clashing(labels):
+        n = collections.Counter(" ".join(x).casefold() for x in labels)
+        return [n[" ".join(x).casefold()] > 1 for x in labels]
+
+    names = [src.name for src in found]
+    dirs = collections.defaultdict(set)
+    for src in found:
+        dirs[src.name.casefold()].add(os.path.dirname(src.path))
+    # [folder, file type]: each added only where the name alone clashes
+    extra = [[] for _ in found]
+    for i, (src, clash) in enumerate(zip(found, clashing([[n] for n in names]))):
+        if clash and len(dirs[src.name.casefold()]) > 1:
+            extra[i].append(os.path.basename(os.path.dirname(src.path)))
+    for i, (src, clash) in enumerate(zip(found, clashing(
+            [[n] + e for n, e in zip(names, extra)]))):
+        if clash:
+            extra[i].append(os.path.splitext(src.path)[1].lower())
+    return [Source(src.kind, src.path, f"{src.name} ({', '.join(e)})", src.ref) if e
+            else src for src, e in zip(found, extra)]
+
+
 def missing_watched():
     return [f for f in watched() if not os.path.isdir(f)]
 
@@ -166,7 +214,9 @@ def listed(root):
     if root:
         skip |= {os.path.join(playlists.playlist_dir(root), n + ".m3u8")
                  for n in playlists.existing(root)}
-    return own + watched_sources(skip) + extra
+    watch = watched_sources(skip)
+    found = collection_sources(root, skip | {s.path for s in watch})
+    return own + _tell_apart(found + watch) + extra
 
 
 # ------------------------------------------------------------------ tracks
@@ -178,7 +228,7 @@ def tracks(src, root=None):
     try:
         if src.kind == SORTERO:
             return playlists.entries(root, src.name)
-        if src.kind in (M3U, WATCHED):
+        if src.kind in (M3U, WATCHED, COLLECTION):
             return read_m3u(src.path)
         if src.kind == FOLDER:
             return folder_tracks(src.path)
@@ -262,11 +312,13 @@ def m3u_sources(paths):
             for p in paths]
 
 
-def find_m3u(folder):
-    """Every playlist file in this folder and the folders inside it, by name."""
+def find_m3u(folder, skip_top=()):
+    """Every playlist file in this folder and the folders inside it, by name.
+    Folders named in `skip_top`, directly inside `folder`, aren't looked in."""
     found = []
     for dp, dns, fns in os.walk(folder):
-        dns[:] = sorted(d for d in dns if not d.startswith("."))
+        dns[:] = sorted(d for d in dns if not d.startswith(".")
+                        and not (dp == folder and d in skip_top))
         found += [os.path.join(dp, f) for f in fns
                   if f.lower().endswith(PLAYLIST_EXTS) and not f.startswith("._")]
     return sorted(found, key=lambda p: natural(os.path.relpath(p, folder)))

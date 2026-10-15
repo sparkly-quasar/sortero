@@ -301,6 +301,57 @@ class Watching(TempDir):
         self.assertEqual([s.kind for s in S.listed(root)], [S.SORTERO, S.M3U])
 
 
+class InTheCollection(TempDir):
+    def setUp(self):
+        super().setUp()
+        for key, empty in (("gig_sources", []), ("gig_watch_folders", []),
+                           ("gig_search_collection", None)):
+            settings.set(key, empty)
+            self.addCleanup(settings.set, key, empty)
+        self.root = self.path("Music")
+        a = touch(os.path.join(self.root, "Techno", "a.mp3"))
+        playlists.write(self.root, "Warmup", [a])                  # Sortero's own
+        touch(os.path.join(self.root, "_Quarantine", "old.m3u8"))  # set aside
+        self.navi = touch(os.path.join(self.root, "_Inbox", "navidrome", "Peak.m3u8"))
+
+    def test_found_anywhere_but_playlists_and_quarantine(self):
+        got = S.listed(self.root)
+        self.assertEqual([(s.kind, s.name) for s in got],
+                         [(S.SORTERO, "Warmup"), (S.COLLECTION, "Peak")])
+        self.assertEqual(got[1].path, self.navi)
+
+    def test_a_new_file_turns_up(self):
+        touch(os.path.join(self.root, "Sets", "Burn.m3u"))
+        self.assertEqual([s.name for s in S.listed(self.root)
+                          if s.kind == S.COLLECTION], ["Peak", "Burn"])
+
+    def test_can_be_turned_off(self):
+        settings.set("gig_search_collection", False)
+        self.assertEqual([s.kind for s in S.listed(self.root)], [S.SORTERO])
+
+    def test_a_watched_folder_inside_wins(self):
+        S.watch(os.path.join(self.root, "_Inbox"))
+        self.assertEqual([s.kind for s in S.listed(self.root)], [S.SORTERO, S.WATCHED])
+
+    def test_same_names_told_apart(self):
+        touch(os.path.join(self.root, "_Inbox", "navidrome", "Peak.m3u"))
+        touch(os.path.join(self.root, "Sets", "Peak.m3u8"))
+        names = [s.name for s in S.listed(self.root) if s.kind == S.COLLECTION]
+        self.assertEqual(names, ["Peak (navidrome, .m3u)", "Peak (navidrome, .m3u8)",
+                                 "Peak (Sets)"])
+
+    def test_one_playlist_saved_twice_in_one_folder(self):
+        touch(os.path.join(self.root, "_Inbox", "navidrome", "Peak.m3u"))
+        names = [s.name for s in S.listed(self.root) if s.kind == S.COLLECTION]
+        self.assertEqual(names, ["Peak (.m3u)", "Peak (.m3u8)"])
+
+    def test_tracks_read_like_any_playlist_file(self):
+        a = os.path.join(self.root, "Techno", "a.mp3")
+        with open(self.navi, "w") as fh:
+            fh.write("#EXTM3U\n../../Techno/a.mp3\n")
+        self.assertEqual(S.tracks(S.listed(self.root)[1]), [a])
+
+
 class Downstream(unittest.TestCase):
     sets = [("Warmup", ["/m/a.mp3", "/m/b.mp3"]), ("Peak", ["/m/b.mp3", "/m/c.mp3"])]
 

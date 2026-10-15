@@ -428,7 +428,7 @@ def check_names(entries, profile):
     if dots:
         warns.append(f"{_plural(len(dots), 'macOS “._” file')} (e.g. {dots[0]}). Players "
                      "browsing folders may list them as tracks that won't load. Sortero's "
-                     "backup step removes them, or run dot_clean on the stick.")
+                     "backup step removes them.")
     if fails:
         return Check("Names and sizes", FAIL, f"{_plural(len(fails), 'problem')}.",
                      sorted(fails) + warns)

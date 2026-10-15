@@ -250,6 +250,57 @@ class Remembering(TempDir):
         self.assertIn("gone", said[0])
 
 
+class Watching(TempDir):
+    def setUp(self):
+        super().setUp()
+        for key in ("gig_sources", "gig_watch_folders"):
+            settings.set(key, [])
+            self.addCleanup(settings.set, key, [])
+        self.exports = self.path("Exports")
+        touch(os.path.join(self.exports, "Warmup.m3u8"))
+
+    def test_a_playlist_saved_later_turns_up(self):
+        self.assertTrue(S.watch(self.exports))
+        self.assertEqual([s.name for s in S.listed(None)], ["Warmup"])
+        touch(os.path.join(self.exports, "Peak", "Peak time.m3u"))
+        got = S.listed(None)
+        self.assertEqual([(s.kind, s.name) for s in got],
+                         [(S.WATCHED, "Peak time"), (S.WATCHED, "Warmup")])
+        self.assertEqual({s.folder for s in got}, {os.path.abspath(self.exports)})
+
+    def test_watched_once_and_unwatched(self):
+        self.assertTrue(S.watch(self.exports))
+        self.assertFalse(S.watch(self.exports + os.sep))
+        S.unwatch(os.path.abspath(self.exports))
+        self.assertEqual(S.listed(None), [])
+
+    def test_keys_stay_the_same_between_looks(self):
+        S.watch(self.exports)
+        self.assertEqual([s.key for s in S.listed(None)], [s.key for s in S.listed(None)])
+
+    def test_tracks_read_like_any_playlist_file(self):
+        a = touch(os.path.join(self.exports, "music", "a.mp3"))
+        with open(os.path.join(self.exports, "Warmup.m3u8"), "w") as fh:
+            fh.write("#EXTM3U\nmusic/a.mp3\n")
+        S.watch(self.exports)
+        self.assertEqual(S.tracks(S.listed(None)[0]), [a])
+
+    def test_a_missing_folder_lists_nothing_and_is_reported(self):
+        gone = self.path("Unplugged")
+        S.watch(gone)
+        self.assertEqual(S.listed(None), [])
+        self.assertEqual(S.missing_watched(), [gone])
+
+    def test_not_listed_twice(self):
+        root = self.path("Music")
+        a = touch(os.path.join(root, "Techno", "a.mp3"))
+        playlists.write(root, "Warmup", [a])
+        S.watch(playlists.playlist_dir(root))           # Sortero's own folder
+        S.watch(self.exports)
+        S.remember(S.m3u_sources([os.path.join(self.exports, "Warmup.m3u8")]))
+        self.assertEqual([s.kind for s in S.listed(root)], [S.SORTERO, S.M3U])
+
+
 class Downstream(unittest.TestCase):
     sets = [("Warmup", ["/m/a.mp3", "/m/b.mp3"]), ("Peak", ["/m/b.mp3", "/m/c.mp3"])]
 

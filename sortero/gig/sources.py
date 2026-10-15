@@ -5,6 +5,9 @@ are always listed. Others are added from Gig prep and remembered:
 
   * a playlist file (.m3u or .m3u8), as rekordbox, Traktor, Mixxx, VirtualDJ or
     Apple Music export them, wherever it lives
+  * a watched folder of playlist files: every .m3u or .m3u8 in it, or in the
+    folders inside it, is listed each time Gig prep looks, so a new export
+    turns up without being added
   * a folder of tracks, played in filename order ("01 ...", "02 ...")
   * a playlist from a rekordbox XML export (File > Export Collection in xml
     format), found by its place in rekordbox's playlist folders
@@ -22,6 +25,7 @@ from ..common import AUDIO_EXTS
 from .cues import location_path
 
 SORTERO, M3U, FOLDER, REKORDBOX, MIXXX = "sortero", "m3u", "folder", "rekordbox", "mixxx"
+WATCHED = "watched"
 PLAYLIST_EXTS = (".m3u", ".m3u8")
 # rekordbox XML: playlist NODEs are Type 1 (Type 0 is a folder); a playlist's
 # TRACK Keys are TrackIDs when KeyType is 0, Locations when it's 1.
@@ -41,7 +45,8 @@ class Source:
     path: str               # playlist file, track folder, XML, or Mixxx database
     name: str               # the playlist's own name
     ref: tuple = ()         # rekordbox: folder names, then the playlist's;
-                            # Mixxx: ("playlist" or "crate", id)
+                            # Mixxx: ("playlist" or "crate", id);
+                            # watched: (the watched folder,)
 
     @property
     def key(self):
@@ -62,6 +67,11 @@ class Source:
         if self.kind == SORTERO:
             return "Sortero"
         return self.path
+
+    @property
+    def folder(self):
+        """The watched folder a watched playlist was found in."""
+        return self.ref[0] if self.kind == WATCHED and self.ref else ""
 
     def to_dict(self):
         return {"kind": self.kind, "path": self.path, "name": self.name,
@@ -102,13 +112,61 @@ def forget(key):
     settings.set("gig_sources", [s.to_dict() for s in added() if s.key != key])
 
 
+def watched():
+    """The folders of playlist files Gig prep watches, in the order added."""
+    return [f for f in settings.get("gig_watch_folders") or [] if isinstance(f, str)]
+
+
+def watch(folder):
+    """Start watching a folder. Returns False if it was already watched."""
+    folder = os.path.abspath(folder)
+    have = watched()
+    if folder in have:
+        return False
+    settings.set("gig_watch_folders", have + [folder])
+    return True
+
+
+def unwatch(folder):
+    settings.set("gig_watch_folders", [f for f in watched() if f != folder])
+
+
+def watched_sources(skip=()):
+    """Every playlist file in the watched folders, found afresh. A folder that
+    isn't there (a drive that's unplugged) contributes nothing. `skip` holds
+    playlist files already listed some other way."""
+    out, seen = [], set(skip)
+    for folder in watched():
+        if not os.path.isdir(folder):
+            continue
+        for p in find_m3u(folder):
+            if p in seen:
+                continue
+            seen.add(p)
+            out.append(Source(WATCHED, p, os.path.splitext(os.path.basename(p))[0],
+                              (folder,)))
+    return out
+
+
+def missing_watched():
+    return [f for f in watched() if not os.path.isdir(f)]
+
+
 def listed(root):
-    """Every playlist Gig prep offers: Sortero's own first, then the added ones."""
+    """Every playlist Gig prep offers: Sortero's own first, then the watched
+    folders' playlists, then the added ones."""
     own = []
     if root and os.path.isdir(root):
         own = [Source(SORTERO, playlists.playlist_dir(root), n)
                for n in playlists.existing(root)]
-    return own + added()
+    extra = added()
+    # Sortero's own playlists, or a file added by hand, aren't listed twice
+    # just because they sit in a watched folder too.
+    skip = {s.path for s in extra if s.kind == M3U}
+    if root:
+        skip |= {os.path.join(playlists.playlist_dir(root), n + ".m3u8")
+                 for n in playlists.existing(root)}
+    return own + watched_sources(skip) + extra
 
 
 # ------------------------------------------------------------------ tracks
@@ -120,7 +178,7 @@ def tracks(src, root=None):
     try:
         if src.kind == SORTERO:
             return playlists.entries(root, src.name)
-        if src.kind == M3U:
+        if src.kind in (M3U, WATCHED):
             return read_m3u(src.path)
         if src.kind == FOLDER:
             return folder_tracks(src.path)

@@ -18,7 +18,7 @@ file with the original it came from.
 Files are copied without macOS metadata, so no "._" files are made, and any
 already there are cleared (sweep_appledouble).
 """
-import json, os, shutil, subprocess, sys, time
+import json, os, shutil, time
 from dataclasses import dataclass, field
 
 from .verify import FAT32_MAX, FAT_ILLEGAL, RESERVED
@@ -176,9 +176,12 @@ def _copy(src, dest):
 
 
 def sweep_appledouble(stick):
-    """Remove macOS "._" files: only real ones, recognised by their header."""
-    if sys.platform == "darwin" and shutil.which("dot_clean"):
-        subprocess.run(["dot_clean", "-m", stick], capture_output=True)
+    """Remove macOS "._" files: only real ones, recognised by their header.
+
+    This used to run macOS's dot_clean first. dot_clean removes every file
+    whose name starts with "._", including a real track that happens to be
+    named that way, and it left nothing for the count below to report.
+    """
     n = 0
     for dirpath, dirnames, filenames in os.walk(stick):
         for fn in filenames:

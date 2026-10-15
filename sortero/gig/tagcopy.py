@@ -21,7 +21,7 @@ from mutagen.aiff import AIFF
 from mutagen.flac import FLAC, Picture
 from mutagen.id3 import (ID3, APIC, COMM, GEOB, TALB, TBPM, TCOM, TCON, TCOP, TDRC, TIT1,
                          TIT2, TIT3, TKEY, TPE1, TPE2, TPE4, TPOS, TPUB, TRCK, TSRC, TXXX,
-                         ID3NoHeaderError, PictureType)
+                         UFID, ID3NoHeaderError, PictureType)
 from mutagen.mp4 import MP4, MP4Cover
 
 from . import ffmpeg
@@ -37,6 +37,42 @@ VORBIS = {"TITLE": TIT2, "ARTIST": TPE1, "ALBUM": TALB, "GENRE": TCON, "DATE": T
 VORBIS_COMMENT = {"COMMENT", "DESCRIPTION"}
 VORBIS_SKIP = {"METADATA_BLOCK_PICTURE", "COVERART", "COVERARTMIME", "ENCODER",
                "ENCODED-BY", "ENCODEDBY"}
+
+# MusicBrainz and AcoustID tags go into an MP3 under the names MusicBrainz
+# Picard gives them, from its tag mapping table (picard-docs,
+# appendices/tag_mapping.rst; also at
+# https://picard-docs.musicbrainz.org/downloads/MusicBrainz_Picard_Tag_Map.html),
+# so Picard, Navidrome and anything else that reads them finds them. Vorbis
+# MUSICBRAINZ_TRACKID is the *recording* id, which ID3 keeps in a UFID frame.
+# Tags whose Picard name is the Vorbis key itself (BARCODE, CATALOGNUMBER,
+# REPLAYGAIN_*, ...) already come out right as TXXX:<key>.
+MB_UFID_OWNER = "http://musicbrainz.org"
+VORBIS_UFID = "MUSICBRAINZ_TRACKID"
+MP4_UFID = "MusicBrainz Track Id"
+PICARD_TXXX = {
+    "ACOUSTID_ID": "Acoustid Id",
+    "ACOUSTID_FINGERPRINT": "Acoustid Fingerprint",
+    "MUSICBRAINZ_ARTISTID": "MusicBrainz Artist Id",
+    "MUSICBRAINZ_ALBUMARTISTID": "MusicBrainz Album Artist Id",
+    "MUSICBRAINZ_ALBUMID": "MusicBrainz Album Id",
+    "MUSICBRAINZ_RELEASEGROUPID": "MusicBrainz Release Group Id",
+    "MUSICBRAINZ_RELEASETRACKID": "MusicBrainz Release Track Id",
+    "MUSICBRAINZ_WORKID": "MusicBrainz Work Id",
+    "MUSICBRAINZ_DISCID": "MusicBrainz Disc Id",
+    "MUSICBRAINZ_ORIGINALARTISTID": "MusicBrainz Original Artist Id",
+    "MUSICBRAINZ_ORIGINALALBUMID": "MusicBrainz Original Album Id",
+    "MUSICBRAINZ_TRMID": "MusicBrainz TRM Id",
+    "MUSICIP_PUID": "MusicIP PUID",
+    "RELEASECOUNTRY": "MusicBrainz Album Release Country",
+    "RELEASESTATUS": "MusicBrainz Album Status",
+    "RELEASETYPE": "MusicBrainz Album Type",
+    "WRITER": "Writer",
+}
+
+
+def _recording_id(value):
+    return UFID(owner=MB_UFID_OWNER, data=value.strip().encode("ascii", "ignore"))
+
 
 MP4_TEXT = {"\xa9nam": TIT2, "\xa9ART": TPE1, "\xa9alb": TALB, "\xa9gen": TCON,
             "\xa9day": TDRC, "aART": TPE2, "\xa9grp": TIT1, "\xa9wrt": TCOM, "cprt": TCOP}
@@ -96,6 +132,10 @@ def _from_vorbis(tags, pictures):
             out.append(geob)
         elif key in VORBIS:
             out.append(VORBIS[key](encoding=3, text=values))
+        elif key == VORBIS_UFID:
+            out.append(_recording_id(values[0]))
+        elif key in PICARD_TXXX:
+            out.append(TXXX(encoding=3, desc=PICARD_TXXX[key], text=values))
         elif key in VORBIS_COMMENT:
             out.append(COMM(encoding=3, lang="eng", desc="", text=values))
         elif key in ("ENERGYLEVEL", "ENERGY") and values[0].strip().isdigit():
@@ -131,6 +171,8 @@ def _from_mp4(tags):
             geob = mik_frame(text)
             if geob:
                 out.append(geob)
+            elif name == MP4_UFID:
+                out.append(_recording_id(text))
             elif name.lower() in MP4_FREEFORM:
                 out.append(_text(MP4_FREEFORM[name.lower()], text))
             elif name.lower() in ("energylevel", "energy") and text.strip().isdigit():

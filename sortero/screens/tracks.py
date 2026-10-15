@@ -53,7 +53,8 @@ class LibraryScreen(Screen):
                "and fix them together.")
     details = ("Choose what to show, then select tracks. Shift-click selects a range. "
                "Click a column heading to sort by it: sorting by artist or folder lets "
-               "you select whole groups at once. Set a genre directly, or use More to "
+               "you select whole groups at once. Right-click a track to edit its "
+               "artist, title or album. Set a genre directly, or use More to "
                "copy genres from folder names or look them up on Discogs. Tracks that "
                "should never have a genre can be ignored from More, so they stop "
                "being flagged.\n\n"
@@ -102,6 +103,19 @@ class LibraryScreen(Screen):
         self.tv.bind("<Double-Button-1>", lambda e: self.review_one_by_one())
         self.tv.bind("<Command-a>" if paths.IS_MAC else "<Control-a>",
                      lambda e: (self.select_all(), "break")[1])
+        for seq in (("<Button-2>", "<Button-3>", "<Control-Button-1>") if paths.IS_MAC
+                    else ("<Button-3>",)):
+            self.tv.bind(seq, self._context_menu)
+        self.menu = tk.Menu(self.tv, tearoff=0)
+        self.menu.add_command(label="Edit details…", command=self.edit_details)
+        self.menu.add_separator()
+        self.menu.add_command(label="Swap artist and title…", command=self.swap_names)
+        self.menu.add_command(label="Send to analysis…", command=self.stage)
+        self.menu.add_command(label="Place one by one…", command=self.review_one_by_one)
+        self.menu.add_separator()
+        self.menu.add_command(label="Show in Finder" if paths.IS_MAC else "Show in folder",
+                              command=self.reveal)
+        self.menu.add_command(label="Copy track names", command=self.copy)
 
         left = self.bar.left
         self.count = ttk.Label(left, style="Muted.TLabel")
@@ -114,6 +128,7 @@ class LibraryScreen(Screen):
         self.set_btn.pack(side="left", padx=(ui.GAP, 0))
         self.bar.set_more([
             ("Select all", self.select_all),
+            ("Edit details of selected…", self.edit_details),
             None,
             ("Look up selected on Discogs…", self.lookup),
             ("Use folder names as genres…", self.apply_from_folder),
@@ -276,9 +291,13 @@ class LibraryScreen(Screen):
             return
         if not messagebox.askyesno(
                 APP, f"Send {ui.plural(len(recs), 'track')} to analysis?\n\n"
-                     "They move into 'To Be Processed'. Run that folder through your "
-                     "analysis tool and save the results into 'Processed'. To do will "
-                     "then offer to sort them back into your library.\n\n"
+                     "They move into 'To Be Processed' and Sortero takes you to the "
+                     "To do screen.\n\n"
+                     "Then:\n"
+                     "  1. Run 'To Be Processed' through your analysis tool.\n"
+                     "  2. Save or move the results into 'Processed'.\n"
+                     "  3. Come back to To do and press Sort them… to file them "
+                     "back into your library.\n\n"
                      "If you use Platinum Notes, run it BEFORE analysing. It re-encodes "
                      "the audio.\n\nTheir playlists remember them, and this can be "
                      "undone from History."):
@@ -294,10 +313,16 @@ class LibraryScreen(Screen):
 
         def done(res):
             _, n = res
+            self.app.show("todo")
             messagebox.showinfo(
                 APP, f"Moved {ui.plural(n, 'track')} into 'To Be Processed'.\n\n"
                      "Next, run that folder through your analysis tool (Mixed In Key, "
-                     "rekordbox, Mixxx) and save the results into 'Processed'.\n\n"
+                     "rekordbox, Mixxx) and save the results into 'Processed'. "
+                     "Sortero doesn't move anything out of 'To Be Processed' itself.\n\n"
+                     "Once they're in 'Processed', this To do screen shows a "
+                     "Sort them… button that files them back into your library. "
+                     "It also offers to clear out the originals left behind in "
+                     "'To Be Processed'.\n\n"
                      "If you use Platinum Notes, run it FIRST. Running it after "
                      "analysis throws the analysis away.")
             self.app.changed()
@@ -378,6 +403,50 @@ class LibraryScreen(Screen):
                     then=lambda done: [self.suggested.pop(r.path, None) for r, _ in done])
 
     # -- artist and title --------------------------------------------------
+    def _context_menu(self, e):
+        row = self.tv.identify_row(e.y)
+        if not row:
+            return
+        # Right-clicking outside the selection acts on that one track, as in Finder.
+        if row not in self.tv.selection():
+            self.tv.selection_set(row)
+            self.tv.focus(row)
+            self._sync()
+        n = len(self.tv.selection())
+        self.menu.entryconfigure(0, label="Edit details…" if n == 1
+                                 else f"Edit details of {n:,} tracks…")
+        try:
+            self.menu.tk_popup(e.x_root, e.y_root)
+        finally:
+            self.menu.grab_release()
+        return "break"
+
+    def edit_details(self):
+        recs = [r for r in self._selected() if not r.protected]
+        if not recs:
+            messagebox.showinfo(APP, "Select a track first."
+                                if not self._selected() else
+                                "Tracks in 'To Be Processed', 'Processed' and "
+                                "_Quarantine can't be edited here.")
+            return
+        EditDetails(self, recs, self._write_details)
+
+    def _write_details(self, changes):
+        root = self.app.root_dir.get()
+
+        def work(progress, log):
+            return fixtags.apply(root, changes, log=log, progress=progress,
+                                 kind="edit-details")
+
+        def done(res):
+            _, n, failed = res
+            if failed:
+                messagebox.showinfo(APP, f"Updated {ui.plural(n, 'track')}.\n"
+                                         f"{failed} couldn't be written.")
+            self.app.changed()
+
+        self.app.task.run(work, done, "Writing tags")
+
     def swap_names(self):
         """For tracks tagged the wrong way round: put each name in its own field."""
         recs = self._selected()
@@ -538,3 +607,95 @@ class LibraryScreen(Screen):
                      "press Accept suggestions.")
 
         self.app.task.run(work, done, "Asking Discogs")
+
+
+class EditDetails(tk.Toplevel):
+    """Change artist, title and album by hand, for one track or several at once.
+
+    Only fields that end up different from what was shown are written, so with
+    several tracks a field left blank keeps each track's own value.
+    """
+    FIELDS = (("artist", "Artist"), ("title", "Title"), ("album", "Album"))
+
+    def __init__(self, screen, recs, on_save):
+        super().__init__(screen)
+        self.recs, self.on_save = recs, on_save
+        self.single = len(recs) == 1
+        self.title("Edit details" if self.single
+                   else f"Edit details of {len(recs):,} tracks")
+        self.transient(screen.winfo_toplevel())
+        self.resizable(True, False)
+
+        pad = ttk.Frame(self, padding=ui.PAD)
+        pad.pack(fill="both", expand=True)
+        pad.columnconfigure(1, weight=1)
+        heading = (os.path.basename(recs[0].path) if self.single
+                   else f"{len(recs):,} tracks selected")
+        ttk.Label(pad, text=heading, font=ui.HEADING).grid(
+            row=0, column=0, columnspan=2, sticky="w", pady=(0, ui.GAP))
+        if not self.single:
+            ttk.Label(pad, style="Muted.TLabel", wraplength=420, justify="left",
+                      text="A field left blank keeps each track's own value."
+                      ).grid(row=1, column=0, columnspan=2, sticky="w",
+                             pady=(0, ui.GAP))
+
+        self.shown, self.vars, first = {}, {}, None
+        for i, (field, label) in enumerate(self.FIELDS, start=2):
+            values = {self._current(r, field) or "" for r in recs}
+            shown = values.pop() if len(values) == 1 else ""
+            self.shown[field] = shown
+            var = self.vars[field] = tk.StringVar(value=shown)
+            ttk.Label(pad, text=label).grid(row=i, column=0, sticky="w",
+                                            padx=(0, ui.GAP), pady=4)
+            entry = ttk.Entry(pad, textvariable=var, width=48)
+            entry.grid(row=i, column=1, sticky="ew", pady=4)
+            first = first or entry
+
+        buttons = ttk.Frame(pad)
+        buttons.grid(row=9, column=0, columnspan=2, sticky="e", pady=(ui.SECTION, 0))
+        ttk.Button(buttons, text="Cancel", command=self.destroy).pack(side="right")
+        ttk.Button(buttons, text="Save", default="active",
+                   command=self.save).pack(side="right", padx=(0, ui.GAP))
+        self.bind("<Return>", lambda e: self.save())
+        self.bind("<Escape>", lambda e: self.destroy())
+
+        self.update_idletasks()
+        self.geometry(f"+{screen.winfo_rootx() + 80}+{screen.winfo_rooty() + 60}")
+        self.grab_set()
+        first.focus_set()
+        first.select_range(0, "end")
+
+    @staticmethod
+    def _current(r, field):
+        if field == "artist":
+            return r.artist
+        if field == "title":
+            return r.title
+        return r.album
+
+    @staticmethod
+    def _tagged(r, field):
+        """What is on disk - a name read off the filename isn't tagged yet."""
+        if field in ("artist", "title"):
+            a, t = fixtags.tagged_names(r)
+            return a if field == "artist" else t
+        return r.album
+
+    def save(self):
+        edits = {}
+        for field, _ in self.FIELDS:
+            new = self.vars[field].get().strip()
+            if new == self.shown[field].strip():
+                continue
+            if not new and not self.single:
+                continue
+            edits[field] = new or None
+        changes = []
+        for r in self.recs:
+            ch = {f: (self._tagged(r, f), v) for f, v in edits.items()
+                  if self._tagged(r, f) != v}
+            if ch:
+                changes.append((r, ch))
+        self.destroy()
+        if changes:
+            self.on_save(changes)

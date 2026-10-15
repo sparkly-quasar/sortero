@@ -1,9 +1,11 @@
 """Settings: the collection folder, updates, and the online services Sortero uses."""
-import os
+import os, shutil
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from .. import ui, auth, settings, paths
+from .. import ui, auth, settings, paths, session
+from ..common import human_size
+from ..organize import QUARANTINE
 from ..version import __version__
 from .base import Screen, APP
 
@@ -23,6 +25,19 @@ class SettingsScreen(Screen):
         ttk.Button(row, text="Show in Finder" if paths.IS_MAC else "Open folder",
                    command=self._reveal_root).pack(side="right", padx=(0, ui.GAP))
         ttk.Label(row, textvariable=app.root_dir).pack(side="left", fill="x", expand=True)
+
+        # Quarantine lives inside the collection, so it sits here rather than
+        # under its own heading: Settings doesn't scroll, and the window's
+        # default height has no room for another section.
+        row = ttk.Frame(self)
+        row.pack(fill="x", pady=(ui.GAP, 0))
+        self.q_label = ttk.Label(row, style="Muted.TLabel")
+        self.q_label.pack(side="left")
+        self.q_empty = ttk.Button(row, text="Empty quarantine…", command=self.empty_quarantine)
+        self.q_empty.pack(side="right")
+        self.q_show = ttk.Button(row, text="Show quarantine",
+                                 command=lambda: paths.reveal(self._quarantine()))
+        self.q_show.pack(side="right", padx=(0, ui.GAP))
 
         self._section("Updates")
         row = ttk.Frame(self)
@@ -93,6 +108,7 @@ class SettingsScreen(Screen):
                    command=lambda: paths.reveal(paths.data_dir())).pack(side="left",
                                                                         padx=(ui.GAP, 0))
         self._refresh_conn()
+        self._refresh_quarantine()
 
     def _section(self, title, first=False):
         ttk.Label(self, text=title, style="Heading.TLabel").pack(
@@ -100,6 +116,73 @@ class SettingsScreen(Screen):
 
     def shown(self):
         self._refresh_conn()
+        self._refresh_quarantine()
+
+    # -- quarantine --------------------------------------------------------
+    def _quarantine(self):
+        root = self.app.root_dir.get()
+        return os.path.join(root, QUARANTINE) if root else None
+
+    def _quarantine_size(self):
+        """(files, bytes) in the quarantine folder; (0, 0) when there is none."""
+        files = size = 0
+        q = self._quarantine()
+        if not q or not os.path.isdir(q):
+            return 0, 0
+        for dirpath, _, filenames in os.walk(q):
+            for fn in filenames:
+                if fn == ".DS_Store":
+                    continue
+                files += 1
+                try:
+                    size += os.path.getsize(os.path.join(dirpath, fn))
+                except OSError:
+                    pass
+        return files, size
+
+    def _refresh_quarantine(self):
+        files, size = self._quarantine_size()
+        self.q_label.configure(
+            text=f"{ui.plural(files, 'file')} ({human_size(size)}) set aside in {QUARANTINE}, "
+                 "kept so History can undo." if files
+            else f"{QUARANTINE} is empty. Sortero sets duplicates and replaced copies "
+                 "aside there instead of deleting them.")
+        state = "normal" if files else "disabled"
+        self.q_empty.configure(state=state)
+        self.q_show.configure(state=state)
+
+    def empty_quarantine(self):
+        q = self._quarantine()
+        files, size = self._quarantine_size()
+        if not files:
+            self._refresh_quarantine()
+            return
+        if session.active():
+            messagebox.showinfo(APP, "The setup's restore point is still open, and it may "
+                                     f"need files in {QUARANTINE} to undo.\n\nKeep or "
+                                     "undo the setup in History first, then empty it.")
+            return
+        if not messagebox.askyesno(
+                APP, f"Permanently delete {ui.plural(files, 'file')} ({human_size(size)}) "
+                     f"in {QUARANTINE}?\n\nThis can't be undone. Steps in History that "
+                     "set these files aside won't be able to bring them back.",
+                icon="warning", default="no"):
+            return
+
+        def work(progress, log):
+            shutil.rmtree(q, ignore_errors=True)
+            left = os.path.isdir(q)
+            log(f"emptied {QUARANTINE}: {files} files, {human_size(size)}")
+            return left
+
+        def done(left):
+            self._refresh_quarantine()
+            if left:
+                messagebox.showwarning(APP, f"Some files in {QUARANTINE} couldn't be "
+                                            "deleted. They may be open in another app.")
+            self.app.changed()
+
+        self.app.task.run(work, done, "Emptying quarantine")
 
     def _reveal_root(self):
         d = self.app.require_root()

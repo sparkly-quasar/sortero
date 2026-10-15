@@ -533,7 +533,9 @@ them bigger.
 - **A preview first.** Every track, its format, its size now and as an MP3,
   and the total saved. Nothing changes until you start.
 - **Every tag comes across**: artist, title, key, BPM, energy, comments, Mixed In
-  Key's cue points and beat grid, and the artwork exactly as it was. Hi-res
+  Key's cue points and beat grid, and the artwork exactly as it was.
+  MusicBrainz and AcoustID IDs are written the way MusicBrainz Picard writes them
+  in an MP3, so Picard, Navidrome and other apps that read them find them. Hi-res
   audio is resampled with the SoX resampler and dithered, as Gig prep does.
 - **Each MP3 is checked before its original moves**: it has to decode from start
   to finish, be as long as the original, and read back the same artist, title,
@@ -547,6 +549,12 @@ them bigger.
   missing in rekordbox until you relocate them to the MP3s there. Check one
   track's cues afterwards: an MP3 can start a few milliseconds later than its
   original in some players.
+- **Navidrome** (and Subsonic apps on top of it, like Amperfy) should see each
+  MP3 as the same track, play counts, stars and playlists included: when a file
+  goes missing, Navidrome matches it by its tags, then by its persistent ID, then
+  by its path without the extension, and Shrink keeps folder and name the same.
+  Let Navidrome scan before retagging anything; `navidrome missing list` shows
+  any it didn't match, and `navidrome missing fix` moves their history across.
 - **It's one entry in History**, so all of it can be undone, until you delete
   the archived originals. The Shrink screen lists each archive with **Delete
   them…**, which asks you to type DELETE, keeps any original whose MP3 has gone,

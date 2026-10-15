@@ -710,16 +710,26 @@ class DuplicatesScreen(ToolScreen):
     summary = "Find extra copies of the same track and set them aside. Nothing is deleted."
     details = ("Exact copies have identical audio. Likely copies share artist, title and "
                "version and are the same length. Different remixes are never grouped "
-               "together. The best copy stays (lossless and higher bitrate win) and the "
-               "extras move to _Quarantine, so you can check them before deleting "
-               "anything yourself. You can undo it from History.")
+               "together. The whole collection is searched, apart from 'To Be "
+               "Processed', 'Processed' and _Quarantine. The best copy stays (lossless "
+               "and higher bitrate win) and the extras move to _Quarantine, so you can "
+               "check them before deleting anything yourself.\n\n"
+               "With 'Keep each track in one folder', the copy that stays lives in its "
+               "genre folder, and a set or other folder you made that loses a copy "
+               "becomes a playlist in _Playlists with the track in the same place. "
+               "Playlists that pointed at a copy always follow the one that stays. "
+               "You can undo it from History.")
 
     def build(self):
+        self.one_folder = tk.BooleanVar(value=settings.get("dupes_one_folder") is not False)
+        ttk.Checkbutton(self, variable=self.one_folder, command=self._toggle_one_folder,
+                        text="Keep each track in one folder (sets and folders you made "
+                             "get a playlist entry instead)").pack(anchor="w", pady=(0, 4))
         self.result = ttk.Label(self, style="Muted.TLabel")
         self.result.pack(anchor="w", pady=(0, 4))
-        f, self.tv = ui.tree(self, [("group", "Group", 100), ("keep", "", 60),
-                                    ("format", "Format", 70), ("length", "Length", 70),
-                                    ("path", "File", 560)], height=15)
+        f, self.tv = ui.tree(self, [("group", "Group", 90), ("then", "What happens", 230),
+                                    ("format", "Format", 60), ("length", "Length", 70),
+                                    ("path", "File", 460)], height=15)
         f.pack(fill="both", expand=True)
         # The count of likely copies is printed above, so the way to act on it
         # belongs on the screen too. It used to be a menu item, which left the
@@ -749,6 +759,23 @@ class DuplicatesScreen(ToolScreen):
         else:
             self.also.pack_forget()
 
+    def _toggle_one_folder(self):
+        settings.set("dupes_one_folder", self.one_folder.get())
+        if self.found:
+            self._fill()
+
+    def _fill(self):
+        res, one = self.found, self.one_folder.get()
+        self.tv.delete(*self.tv.get_children())
+        root = self.app.root_dir.get()
+        for kind in ("exact", "likely"):
+            for gi, (g, k, home) in enumerate(dupes.plan(res[kind], one), 1):
+                for r in g:
+                    self.tv.insert("", "end", values=(
+                        f"{kind.capitalize()} {gi}", dupes.describe(r, k, home, one),
+                        r.ext.lstrip("."), f"{(r.duration or 0)/60:.1f} min",
+                        os.path.relpath(r.path, root)))
+
     def find(self):
         if self.need_scan():
             return
@@ -758,16 +785,7 @@ class DuplicatesScreen(ToolScreen):
 
         def done(res):
             self.found = res
-            self.tv.delete(*self.tv.get_children())
-            root = self.app.root_dir.get()
-            for kind in ("exact", "likely"):
-                for gi, g in enumerate(res[kind], 1):
-                    k = dupes.keeper(g)
-                    for r in g:
-                        self.tv.insert("", "end", values=(
-                            f"{kind.capitalize()} {gi}", "keep" if r is k else "extra",
-                            r.ext.lstrip("."), f"{(r.duration or 0)/60:.1f} min",
-                            os.path.relpath(r.path, root)))
+            self._fill()
             ex, lk = res["exact"], res["likely"]
             self.result.configure(
                 text=f"{ui.plural(len(ex), 'exact group')} ({human_size(dupes.reclaimable(ex))} "
@@ -802,14 +820,30 @@ class DuplicatesScreen(ToolScreen):
         count = sum(len(g) - 1 for g in groups)
         if not count:
             return
+        one = self.one_folder.get()
+        sets = len({dupes.set_name(r) for g, k, home in dupes.plan(groups, one)
+                    for r in g if (r is not k or home != os.path.dirname(k.path))
+                    and dupes.set_name(r)}) if one else 0
+        moving = sum(1 for g, k, home in dupes.plan(groups, one)
+                     if home != os.path.dirname(k.path))
+        extra = ""
+        if sets:
+            extra += (f"\n\n{ui.plural(sets, 'set or folder you made', 'sets and folders you made')} "
+                      "will keep these tracks as playlist entries in _Playlists.")
+        if moving:
+            extra += (f"\n\n{ui.plural(moving, 'kept copy moves', 'kept copies move')} "
+                      "into the genre folder another copy was in.")
         if not messagebox.askyesno(APP, f"Move {ui.plural(count, 'extra copy', 'extra copies')} "
-                                        "to _Quarantine?\n\nNothing is deleted, and you "
+                                        "to _Quarantine?" + extra + "\n\nPlaylists follow "
+                                        "the copy that stays. Nothing is deleted, and you "
                                         "can undo this from History."):
             return
         root = self.app.root_dir.get()
+        recs = self.app.recs
 
         def work(progress, log):
-            return dupes.quarantine(root, groups, log=log)
+            return dupes.quarantine(root, groups, log=log, recs=recs, one_folder=one,
+                                    progress=progress)
 
         def done(res):
             _, n = res

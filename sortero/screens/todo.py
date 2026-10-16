@@ -1,10 +1,15 @@
 """To do: the home screen. One card per job worth doing, most useful first."""
-import os
+import os, traceback
 from tkinter import ttk, messagebox
 
 from .. import ui, importer, paths, review, settings, headers, fixtags
 from ..common import human_size, NAME_ORDERS, NAME_ORDER_LABELS, ARTIST_TITLE
 from .base import Screen, APP, needs_genre, is_mix, in_unsorted
+
+
+def count_in(root, folder):
+    p = os.path.join(root or "", folder)
+    return len(importer.gather([p])) if root and os.path.isdir(p) else 0
 
 
 def _accent_example(best, others):
@@ -73,6 +78,28 @@ class TodoScreen(Screen):
             f"{h['pct_genre']:.0f}% have a genre",
             f"{h['pct_energy']:.0f}% have an energy rating"]))
         live = [r for r in app.recs if not r.protected and not is_mix(r)]
+
+        # The checks are guarded: one that fails must not take the cards it
+        # already made, or the rest of the screen, down with it. It used to:
+        # a single missing helper left To do blank, with no sign anything broke.
+        try:
+            self._checks(app, h, live, root)
+        except Exception:
+            app.log("To do couldn't finish checking your collection:\n"
+                    + traceback.format_exc())
+            self._job("Part of To do couldn't be worked out",
+                      "Something went wrong while checking your collection, so this "
+                      "list may be missing things. History → Show log has the details.",
+                      "Open History", lambda: app.show("history"), tone="warn")
+
+        if not self.jobs:
+            self._card("Nothing needs doing",
+                       "Your collection is in good shape. Add new music, or look in "
+                       "Tidy up for more tools.", "Add music", lambda: app.show("add"))
+        self._done(self.jobs)
+
+    def _checks(self, app, h, live, root):
+        """Every job and note To do can show, in the order they appear."""
 
         # First, because a file a player refuses is worse than one badly tagged.
         damaged = h.get("stray_id3", [])
@@ -159,12 +186,6 @@ class TodoScreen(Screen):
                        "results into Processed. A Sort them… button appears here once "
                        "they're there.",
                        "Show folder", lambda: paths.reveal(folder))
-
-        if not self.jobs:
-            self._card("Nothing needs doing",
-                       "Your collection is in good shape. Add new music, or look in "
-                       "Tidy up for more tools.", "Add music", lambda: app.show("add"))
-        self._done(self.jobs)
 
     def _job(self, *a, **kw):
         self.jobs += 1

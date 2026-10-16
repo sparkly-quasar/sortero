@@ -402,7 +402,57 @@ def tree(parent, columns, height=14, selectmode="extended"):
     # window, gone entirely in the smallest one, on every table in the app.
     sb.pack(side="right", fill="y")
     tv.pack(side="left", fill="both", expand=True)
+    if selectmode == "extended":
+        keyboard_ranges(tv)
     return frame, tv
+
+
+def keyboard_ranges(tv):
+    """Shift+↑ and Shift+↓ grow or shrink the selection from where it started,
+    as in Finder and Explorer. Tk's table only knows Shift-click, so without
+    this the keyboard could move through a list but never select a run of it.
+
+    The range runs from an anchor: the row last clicked or arrowed to without
+    Shift. Shift-click leaves the anchor alone, as Tk's own Shift-click does.
+    """
+    tv._anchor = None
+
+    def remember(_event=None):
+        tv.after_idle(lambda: setattr(tv, "_anchor", tv.focus() or None))
+
+    tv.bind("<ButtonPress-1>", remember, add="+")
+    def shift_click(event):
+        # Tk's Shift-click selects the range but leaves the keyboard on the row
+        # clicked before, so a Shift+↓ after it would carry on from there.
+        row = tv.identify_row(event.y)
+        if row:
+            tv.after_idle(lambda: tv.focus(row))
+
+    tv.bind("<Shift-ButtonPress-1>", shift_click, add="+")
+    for key in ("Up", "Down", "Prior", "Next", "Home", "End"):
+        tv.bind(f"<KeyPress-{key}>", remember, add="+")
+
+    def extend(step):
+        rows = tv.get_children()
+        if not rows:
+            return "break"
+        sel = tv.selection()
+        here = tv.focus() or (sel[-1] if sel else rows[0])
+        if here not in rows:
+            here = rows[0]
+        anchor = tv._anchor if tv._anchor in rows else here
+        i = rows.index(here)
+        j = min(max(i + step, 0), len(rows) - 1)
+        a = rows.index(anchor)
+        lo, hi = sorted((a, j))
+        tv.selection_set(rows[lo:hi + 1])
+        tv.focus(rows[j])
+        tv.see(rows[j])
+        tv._anchor = anchor
+        return "break"
+
+    tv.bind("<Shift-KeyPress-Up>", lambda e: extend(-1))
+    tv.bind("<Shift-KeyPress-Down>", lambda e: extend(1))
 
 
 def plural(n, one, many=None):

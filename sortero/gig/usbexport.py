@@ -17,15 +17,18 @@ refused rather than overwritten. Sortero marks its own exports (MARKER) and
 keeps a list of the audio it copied, so a second run replaces only its own
 files and anything else on the stick is left alone.
 
-Not written yet: the OneLibrary database (exportLibrary.db) the CDJ-3000X,
-XDJ-AZ, OPUS-QUAD and OMNIS-DUO read instead of export.pdb, waveforms, and
-artwork. Nothing here has been played on a real player yet.
+  PIONEER/rekordbox/exportLibrary.db              the same, as OneLibrary (onelibrary.py)
+
+OneLibrary is what the CDJ-3000X, XDJ-AZ, OPUS-QUAD and OMNIS-DUO read instead
+of export.pdb; it's written whenever Sortero has SQLCipher, which the app
+always carries. Not written yet: waveforms and artwork. Nothing here has been
+played on a real player yet.
 """
 import json, os, shutil, time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 
-from . import anlz, devicesql
+from . import anlz, devicesql, onelibrary
 from .backup import TMP, _copy, fat_name
 from .cues import Grid, Mark, location_path, _float
 from .pdb import EXTRA, RELATIVE
@@ -55,6 +58,7 @@ class Result:
     unchanged: list = field(default_factory=list)
     removed: list = field(default_factory=list)
     missing: list = field(default_factory=list)
+    onelibrary: bool = False
 
 
 def _int(v):
@@ -146,18 +150,22 @@ def foreign(stick):
     """Why this stick's library isn't Sortero's to replace, or None if it is (or there's none)."""
     mark = _marker(stick)
     pdb_path = os.path.join(stick, RELATIVE)
+    ol_path = os.path.join(stick, os.path.dirname(RELATIVE), onelibrary.FILE_NAME)
     # rekordbox exporting over Sortero's library leaves the marker behind; the
-    # database it wrote won't be the size Sortero's was.
+    # databases it wrote won't be the sizes Sortero's were.
     ours = bool(mark) and (not os.path.isfile(pdb_path)
                            or os.path.getsize(pdb_path) == mark.get("pdb_size"))
     for rel in [RELATIVE] + [os.path.join(os.path.dirname(RELATIVE), x) for x in EXTRA]:
-        if os.path.exists(os.path.join(stick, rel)):
-            if not ours:
-                return (f"it already has a rekordbox library ({rel.replace(os.sep, '/')}) "
-                        "that Sortero didn't write")
-            if os.path.basename(rel) in EXTRA:
-                return (f"rekordbox has added {os.path.basename(rel)} since Sortero wrote "
-                        "it, so it's rekordbox's library now")
+        path = os.path.join(stick, rel)
+        if not os.path.exists(path):
+            continue
+        if not ours:
+            return (f"it already has a rekordbox library ({rel.replace(os.sep, '/')}) "
+                    "that Sortero didn't write")
+        mine = path == ol_path and os.path.getsize(path) == mark.get("onelibrary_size")
+        if os.path.basename(rel) in EXTRA and not mine:
+            return (f"rekordbox has added {os.path.basename(rel)} since Sortero wrote "
+                    "it, so it's rekordbox's library now")
     return None
 
 
@@ -225,11 +233,23 @@ def write(stick, xml_path, progress=None, log=print):
         _put(stick, t.analyze_path, anlz.dat(t.file_path, t.beats, t.cues))
         if progress:
             progress(i, total)
-    # The database last: until it's there, no player sees a half-written library.
+    # The databases last: until they're there, no player sees a half-written library.
     db = devicesql.build(p.tracks, p.playlists)
+    folder = os.path.join(stick, os.path.dirname(RELATIVE))
+    os.makedirs(folder, exist_ok=True)
+    ol_path = os.path.join(folder, onelibrary.FILE_NAME)
+    ol_size = None
+    if onelibrary.available():
+        name = os.path.basename(os.path.normpath(stick))
+        onelibrary.build(ol_path, p.tracks, p.playlists, device_name=name)
+        ol_size = os.path.getsize(ol_path)
+        res.onelibrary = True
+    elif os.path.exists(ol_path):
+        os.remove(ol_path)          # Sortero's from an earlier run; it no longer matches
     _put(stick, MARKER.replace(os.sep, "/"), json.dumps(
         {"written_by": f"Sortero {__version__}", "when": time.strftime("%Y-%m-%d %H:%M"),
-         "pdb_size": len(db), "audio": sorted(wanted)}, indent=1).encode("utf-8"))
+         "pdb_size": len(db), "onelibrary_size": ol_size, "audio": sorted(wanted)},
+        indent=1).encode("utf-8"))
     _put(stick, RELATIVE.replace(os.sep, "/"), db)
     log(f"Wrote {res.tracks} tracks and {res.playlists} playlists to {stick}: "
         f"{len(res.copied)} copied, {len(res.unchanged)} already there.")

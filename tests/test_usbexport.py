@@ -4,7 +4,7 @@ uses), and pyrekordbox's for the analysis files when it's installed."""
 import json, os, struct, unittest
 
 from sortero.gig import anlz, cues, devicesql as D, pdb, profiles as P, usbexport as U
-from sortero.gig import rbxml, verify as V
+from sortero.gig import onelibrary as O, rbxml, verify as V
 from tests.audio import write_wav
 from tests.test_tagio import TempDir
 
@@ -12,6 +12,10 @@ try:
     from pyrekordbox.anlz import AnlzFile
 except ImportError:
     AnlzFile = None
+try:
+    from pyrekordbox.onelibrary.database import OneLibrary as OneLibraryReader
+except ImportError:
+    OneLibraryReader = None
 
 NXS2 = P.get("cdj-2000nxs2")
 
@@ -189,8 +193,40 @@ class Stick(TempDir):
             with open(p, "rb") as fh:
                 self.assertEqual(fh.read(4), b"PMAI")
 
-    def test_the_newest_players_still_need_onelibrary(self):
+    @unittest.skipUnless(O.available(), "needs sqlcipher3")
+    def test_onelibrary_for_the_newest_players(self):
+        res = U.write(self.stick, self.xml, log=lambda *a: None)
+        self.assertTrue(res.onelibrary)
+        ol = os.path.join(self.stick, "PIONEER", "rekordbox", O.FILE_NAME)
+        tracks, lists = O.read(ol)
+        e = pdb.read(os.path.join(self.stick, pdb.RELATIVE))
+        self.assertEqual([(i, p, t) for i, p, t, _ in tracks],
+                         [(t.id, t.path, t.title) for t in e.tracks])
+        self.assertEqual(lists, e.playlists)
+        check, _ = V.check_export(self.stick, V.walk(self.stick), P.get("cdj-3000x"))
+        self.assertEqual(check.level, V.PASS, check.summary)
+        check, _ = V.check_export(self.stick, V.walk(self.stick), P.EVERY)
+        self.assertEqual(check.level, V.PASS, check.summary)
+        self.assertIsNone(U.foreign(self.stick))    # still Sortero's to replace
+
+    @unittest.skipUnless(O.available() and OneLibraryReader, "needs sqlcipher3 and pyrekordbox")
+    def test_pyrekordbox_reads_the_onelibrary(self):
         U.write(self.stick, self.xml, log=lambda *a: None)
+        db = OneLibraryReader(os.path.join(self.stick, "PIONEER", "rekordbox", O.FILE_NAME))
+        titles = sorted(c.title for c in db.get_content().all())
+        self.assertEqual(titles, ["Banger", "Closer", "Opener"])
+        cue = db.get_cue().one()
+        self.assertEqual((cue.kind, cue.inUsec), (1, 15_100_000))      # hot cue A
+        self.assertEqual(sorted(p.name for p in db.get_playlist().all()),
+                         ["01 Warmup", "02 Peak", "Gig"])
+
+    def test_without_sqlcipher_the_newest_players_are_told_its_missing(self):
+        from unittest import mock
+        with mock.patch.object(O, "available", return_value=False):
+            res = U.write(self.stick, self.xml, log=lambda *a: None)
+        self.assertFalse(res.onelibrary)
+        self.assertFalse(os.path.exists(os.path.join(self.stick, "PIONEER", "rekordbox",
+                                                     O.FILE_NAME)))
         check, _ = V.check_export(self.stick, V.walk(self.stick), P.get("cdj-3000x"))
         self.assertEqual(check.level, V.FAIL)
 

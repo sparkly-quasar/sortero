@@ -90,6 +90,8 @@ def main():
            "--distpath", DIST, "--workpath", WORK, "--specpath", BUILD,
            "--hidden-import", "mutagen", "--collect-submodules", "mutagen",
            "--hidden-import", "kaitaistruct",
+           # OneLibrary on the main stick (sortero/gig/onelibrary.py)
+           "--hidden-import", "sqlcipher3", "--collect-binaries", "sqlcipher3",
            "--hidden-import", "keyring", "--collect-submodules", "keyring",
            "--hidden-import", "certifi", "--collect-data", "certifi",
            # pygame-ce ships its own PyInstaller hook; drop what preview never uses

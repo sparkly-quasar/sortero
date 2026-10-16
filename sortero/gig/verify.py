@@ -3,8 +3,9 @@
 Six checks, each pass, warn or fail:
 
   Stick            file system, partition map, partitions (profiles.check_volume)
-  rekordbox        export.pdb is there and readable, and every track it lists
-                   is on the stick, the size rekordbox exported
+  rekordbox        export.pdb and exportLibrary.db (OneLibrary) are there and
+                   readable, and every track they list is on the stick, the
+                   size it was when the library was written
   Formats          every audio file plays on the chosen players
   Decode test      every audio file decodes from start to finish
   Names and sizes  nothing a FAT32 stick or a player can't handle
@@ -27,7 +28,7 @@ import argparse, concurrent.futures, hashlib, os, re, sys
 from dataclasses import dataclass, field
 
 from .. import headers
-from . import disks, ffmpeg, pdb, profiles
+from . import disks, ffmpeg, onelibrary, pdb, profiles
 from .probe import ProbeError, probe
 
 PASS, WARN, FAIL = "pass", profiles.WARN, profiles.FAIL
@@ -209,8 +210,10 @@ def check_export(stick, entries, profile=None):
     """(Check, set of rel paths the export lists).
 
     A rekordbox export holds one or both libraries (see profiles.DEVICE_LIBRARY):
-    the stick needs whichever the chosen players read. Only the Device Library
-    can be read here; OneLibrary is encrypted, so its track list isn't checked.
+    the stick needs whichever the chosen players read. Each one that's there is
+    read, and every track it lists must be on the stick. OneLibrary is
+    encrypted; it's read when Sortero has SQLCipher (onelibrary.available()),
+    and otherwise only its being there is checked.
     """
     profile = profile or profiles.EVERY
     folder = os.path.join(stick, "PIONEER", "rekordbox")
@@ -219,7 +222,7 @@ def check_export(stick, entries, profile=None):
     if not present:
         if os.path.isdir(os.path.join(stick, "PIONEER")):
             return Check("rekordbox", FAIL, "there's a PIONEER folder but no rekordbox "
-                         "library in it. Export the stick again from rekordbox."), set()
+                         "library in it. Write the main stick again."), set()
         who = "players" if profile.brand == "Pioneer" else "Pioneer players"
         return Check("rekordbox", PASS, f"no rekordbox export, so {who} will browse "
                                         "it as folders."), set()
@@ -228,42 +231,74 @@ def check_export(stick, entries, profile=None):
     for lib in sorted((profile.libraries & profiles.REKORDBOX_LIBRARIES) - present):
         levels.append(FAIL)
         details.append(f"No {lib} ({LIBRARY_FILES[lib]}), which {WHO_READS[lib]} need to "
-                       "list these playlists. Export again with rekordbox 7.2.11 or later, "
-                       "which writes both.")
+                       "list these playlists. Write the main stick again: Sortero writes "
+                       "both (so does rekordbox 7.2.11 or later).")
+    sizes = {e.rel.lower(): e.size for e in entries}
+
+    def on_stick(tracks):
+        """(missing, changed) for [(path on the stick, title, size)]."""
+        missing, changed = [], []
+        for path, title, size in tracks:
+            rel = path.lstrip("/")
+            listed.add(rel.lower())
+            if rel.lower() not in sizes:
+                missing.append(f"missing: {rel}" + (f" ({title})" if title else ""))
+            elif size and sizes[rel.lower()] != size:
+                changed.append(f"changed since export: {rel}")
+        return missing, changed
+
+    one = None                  # OneLibrary's (tracks, playlists), when it can be read
+    if profiles.ONE_LIBRARY in present and onelibrary.available():
+        try:
+            one = onelibrary.read(os.path.join(folder, LIBRARY_FILES[profiles.ONE_LIBRARY]))
+        except onelibrary.OneLibraryError as e:
+            return Check("rekordbox", FAIL, f"exportLibrary.db (OneLibrary) {e}. Write "
+                                            "the main stick again.", details), set()
     if profiles.DEVICE_LIBRARY in present:
         try:
             export = pdb.read(os.path.join(stick, pdb.RELATIVE))
         except pdb.ExportError as e:
-            return Check("rekordbox", FAIL, f"export.pdb can't be read: {e}. Export the "
-                                            "stick again from rekordbox.", details), set()
-        sizes = {e.rel.lower(): e.size for e in entries}
-        missing, changed = [], []
-        for t in export.tracks:
-            rel = t.path.lstrip("/")
-            listed.add(rel.lower())
-            if rel.lower() not in sizes:
-                missing.append(f"missing: {rel}" + (f" ({t.title})" if t.title else ""))
-            elif t.size and sizes[rel.lower()] != t.size:
-                changed.append(f"changed since export: {rel}")
+            return Check("rekordbox", FAIL, f"export.pdb can't be read: {e}. Write the "
+                                            "main stick again.", details), set()
+        missing, changed = on_stick((t.path, t.title, t.size) for t in export.tracks)
+        if one is not None:
+            m2, c2 = on_stick((p, t, z) for _, p, t, z in one[0])
+            missing += [m for m in m2 if m not in missing]
+            changed += [c for c in c2 if c not in changed]
+            if sorted(t.path for t in export.tracks) != sorted(p for _, p, _, _ in one[0]):
+                levels.append(WARN)
+                parts.append("its two libraries list different tracks, so the newest "
+                             "players won't show the same set as the others. Write "
+                             "the main stick again")
         n, lists = len(export.tracks), len(export.playlists)
         if missing:
             levels.append(FAIL)
             parts.append(f"{len(missing)} of {_plural(n, 'track')} in the export aren't on "
-                         "the stick. Export again from rekordbox, don't copy files by hand")
+                         "the stick. Write the main stick again, don't copy files by hand")
         elif changed:
             levels.append(WARN)
             parts.append(f"{_plural(n, 'track')}, all on the stick, but {len(changed)} "
-                         "changed after rekordbox exported them, so their waveforms and "
+                         "changed after the library was written, so their waveforms and "
                          "cues may be off")
         else:
             parts.append(f"{_plural(n, 'track')}"
                          + (f" in {_plural(lists, 'playlist')}" if lists else "")
                          + ", all on the stick")
         details = missing + changed + details
+    elif one is not None:
+        missing, changed = on_stick((p, t, z) for _, p, t, z in one[0])
+        n = len(one[0])
+        if missing:
+            levels.append(FAIL)
+            parts.append(f"{len(missing)} of {_plural(n, 'track')} in its OneLibrary "
+                         "aren't on the stick. Write the main stick again, don't copy files by hand")
+        else:
+            parts.append(f"{_plural(n, 'track')} in OneLibrary, all on the stick")
+        details = missing + changed + details
     elif profiles.ONE_LIBRARY in present:
         levels.append(WARN)
-        parts.append("only a OneLibrary export, which is encrypted, so Sortero can't "
-                     "check its tracks are all there")
+        parts.append("only a OneLibrary export, which is encrypted, and this copy of "
+                     "Sortero can't open it, so it can't check its tracks are all there")
     if present == {profiles.DEVICE_LIBRARY, profiles.ONE_LIBRARY}:
         parts.append("both Device Library and OneLibrary are there")
     elif not parts:
@@ -302,25 +337,32 @@ def check_main(stick, profile, playlists=None):
             levels.append(WARN)
             parts.append(f"no {app} library, so {brand} players will only browse it as "
                          "folders")
+    one_path = os.path.join(pioneer, LIBRARY_FILES[profiles.ONE_LIBRARY])
+    on_stick = None                     # if neither can be read, the rekordbox check says why
     if has_rb and playlists and os.path.isfile(os.path.join(stick, pdb.RELATIVE)):
         try:
             on_stick = {_bare(n) for n in pdb.read(os.path.join(stick, pdb.RELATIVE)).playlists}
         except pdb.ExportError:
-            on_stick = None             # the rekordbox check says why
-        if on_stick is not None:
-            missing = [n for n in playlists if _bare(n) not in on_stick]
-            if len(missing) == len(playlists):
-                levels.append(FAIL)
-                parts.append("none of tonight's playlists are in its rekordbox library. "
-                             "Is it an older export? Put the set on it again")
-            elif missing:
-                levels.append(WARN)
-                parts.append(f"{_plural(len(missing), 'playlist')} of tonight's set "
-                             "isn't in its rekordbox library")
-                details += [f"not in the library: {n}" for n in missing]
-            else:
-                parts.append(f"tonight's {_plural(len(playlists), 'playlist')} are in "
-                             "its rekordbox library")
+            pass
+    elif has_rb and playlists and os.path.isfile(one_path) and onelibrary.available():
+        try:
+            on_stick = {_bare(n) for n in onelibrary.read(one_path)[1]}
+        except onelibrary.OneLibraryError:
+            pass
+    if on_stick is not None:
+        missing = [n for n in playlists if _bare(n) not in on_stick]
+        if len(missing) == len(playlists):
+            levels.append(FAIL)
+            parts.append("none of tonight's playlists are in its rekordbox library. "
+                         "Is it an older export? Put the set on it again")
+        elif missing:
+            levels.append(WARN)
+            parts.append(f"{_plural(len(missing), 'playlist')} of tonight's set "
+                         "isn't in its rekordbox library")
+            details += [f"not in the library: {n}" for n in missing]
+        else:
+            parts.append(f"tonight's {_plural(len(playlists), 'playlist')} are in "
+                         "its rekordbox library")
     if not parts:
         found = [w[2] for w in wanted if w[1]]
         parts.append(f"its {' and '.join(found)} "

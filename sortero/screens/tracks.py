@@ -32,9 +32,34 @@ FILTERS = [
 ]
 LABELS = {k: label for k, label, _ in FILTERS}
 
-COLUMNS = [("artist", "Artist", 160), ("title", "Title", 230), ("key", "Key", 46),
+COLUMNS = [("artist", "Artist", 160), ("title", "Title", 230),
+           ("becomes", "Becomes  (artist · title)", 260), ("key", "Key", 46),
            ("bpm", "BPM", 46), ("energy", "Energy", 54), ("genre", "Genre", 130),
            ("suggested", "Discogs suggests", 140), ("folder", "Folder", 180)]
+
+
+# Lists that ask for a decision say what they are and what to do, right above
+# the table: a filter on its own left people at a list with no way forward.
+GUIDES = {
+    "title_artist": "These titles start with an artist who isn't the one in the artist "
+                    "tag, and the filename agrees with the title. Check the Becomes "
+                    "column, select the tracks it gets right (⌘A for all), and press "
+                    "the button at the bottom right. For any that are right as they "
+                    "are, such as a remix credited to the original artist, select them "
+                    "and choose Leave as they are, so they stop being listed.",
+    "repeat": "These titles have the artist in them. Clean tags fixes them all at "
+              "once: press the button at the bottom right to preview the changes "
+              "first. The Becomes column shows what each one will be.",
+    "swapped": "These look like the artist and title went in the wrong way round. "
+               "The Becomes column shows them swapped. Select the ones that are "
+               "wrong and press the button at the bottom right.",
+    "key": "These have no key yet. Select the ones to analyse and press the button "
+           "at the bottom right: they move to 'To Be Processed' for your analysis "
+           "tool.",
+}
+if not paths.IS_MAC:
+    GUIDES["title_artist"] = GUIDES["title_artist"].replace("⌘A", "Ctrl+A")
+BECOMES = ("title_artist", "repeat", "swapped")
 
 
 def _num(v):
@@ -97,6 +122,13 @@ class LibraryScreen(Screen):
         self.stop_btn = ttk.Button(self.strip, text="Stop", command=self.stop_lookup)
         self.stop_btn.pack(side="right", padx=(0, ui.GAP))
 
+        # what the chosen list is and how to act on it (GUIDES)
+        self.guide = ttk.Frame(self)
+        self.guide_lab = ui.WrapLabel(self.guide)
+        self.guide_lab.pack(side="left", fill="x", expand=True)
+        self.leave_link = ui.link(self.guide, "Leave selected as they are",
+                                  self.leave_title_artist)
+
         self.table, self.tv = ui.tree(self, COLUMNS, height=14)
         self.table.pack(fill="both", expand=True)
         for cid, heading, _ in COLUMNS:
@@ -141,6 +173,8 @@ class LibraryScreen(Screen):
             None,
             ("Swap artist and title on selected…", self.swap_names),
             ("Take artist and title from the title on selected…", self.credit_from_title),
+            ("Leave selected as they are (title names another artist)",
+             self.leave_title_artist),
             ("Read artist and title from the filename…", self.names_from_file),
             None,
             ("Send selected to analysis…", self.stage),
@@ -153,7 +187,7 @@ class LibraryScreen(Screen):
             ("Shrink lossless tracks to MP3 320…", self.shrink),
         ])
 
-        self.rows, self.suggested = [], {}
+        self.rows, self.suggested, self._becomes = [], {}, {}
         self.sort_col, self.sort_desc = "artist", False
         self._stop = threading.Event()
         self._looking = False
@@ -205,6 +239,7 @@ class LibraryScreen(Screen):
         return {
             "artist": lambda r: ((r.artist or "~").lower(), (r.title or "").lower()),
             "title": lambda r: (r.title or "").lower(),
+            "becomes": lambda r: self._becomes.get(r.path, "~").lower(),
             "key": _camelot,
             "bpm": lambda r: _num(r.bpm),
             "energy": lambda r: r.energy if r.energy is not None else -1,
@@ -227,6 +262,7 @@ class LibraryScreen(Screen):
             rows = [r for r in recs
                     if not r.protected and pred(r) and not (hide and is_mix(r))
                     and (not q or q in f"{r.artist or ''} {r.title or ''} {r.rel}".lower())]
+            self._becomes = self._after_fix(rows)
             rows.sort(key=self._sort_key(), reverse=self.sort_desc)
             self.rows = rows
             reselect = []
@@ -234,6 +270,7 @@ class LibraryScreen(Screen):
                 sug = self.suggested.get(r.path, (None, []))[0] or ""
                 self.tv.insert("", "end", iid=str(i), values=(
                     r.artist or "—", r.title or os.path.basename(r.path),
+                    self._becomes.get(r.path, ""),
                     r.camelot or r.key or "—", r.bpm or "—",
                     r.energy if r.energy is not None else "—",
                     r.genre or "—", sug, os.path.dirname(r.rel) or "(top level)"))
@@ -244,12 +281,43 @@ class LibraryScreen(Screen):
         shown = [c for c, _, _ in COLUMNS]
         if not any(self.suggested.get(r.path, (None,))[0] for r in self.rows):
             shown.remove("suggested")
+        if self.filter_key() not in BECOMES:
+            shown.remove("becomes")
         self.tv.configure(displaycolumns=shown)
         for cid, heading, _ in COLUMNS:
             arrow = (" ▼" if self.sort_desc else " ▲") if cid == self.sort_col else ""
             self.tv.heading(cid, text=heading + arrow)
         self._update_strip()
+        self._update_guide()
         self._sync()
+
+    def _after_fix(self, rows):
+        """{path: "artist · title"} as the chosen list's fix would leave them."""
+        key = self.filter_key()
+        out = {}
+        if key in ("title_artist", "repeat"):
+            order = self._order()
+            for r in rows:
+                got = fixtags.title_credit(r, order)
+                if got:
+                    out[r.path] = f"{got[1] or r.artist or '—'}  ·  {got[2]}"
+        elif key == "swapped":
+            for r in rows:
+                out[r.path] = f"{r.title or '—'}  ·  {r.artist or '—'}"
+        return out
+
+    def _update_guide(self):
+        text = GUIDES.get(self.filter_key()) if self.rows else None
+        if not text:
+            self.guide.pack_forget()
+            return
+        self.guide_lab.configure(text=text)
+        if self.filter_key() == "title_artist":
+            self.leave_link.pack(side="right", anchor="n", padx=(ui.SECTION, 0))
+        else:
+            self.leave_link.pack_forget()
+        if not self.guide.winfo_manager():
+            self.guide.pack(fill="x", pady=(0, ui.GAP), before=self.table)
 
     def _sync(self):
         n = len(self.tv.selection())
@@ -258,9 +326,23 @@ class LibraryScreen(Screen):
                                  + (f" · {n:,} selected" if n else ""))
         else:
             self.count.configure(text="")
-        if self.filter_key() == "key":
+        key = self.filter_key()
+        if key == "key":
             self.bar.set_primary(f"Send {n:,} to analysis…" if n else "Send to analysis…",
                                  self.stage, state="normal" if n else "disabled")
+        elif key == "title_artist":
+            self.bar.set_primary(
+                f"Use the title's artist for {ui.plural(n, 'track')}…" if n
+                else "Select tracks to fix",
+                self.credit_from_title, state="normal" if n else "disabled")
+        elif key == "repeat":
+            self.bar.set_primary(f"Fix all {len(self.rows):,} in Clean tags…",
+                                 lambda: self.app.clean_tags("repeat"),
+                                 state="normal" if self.rows else "disabled")
+        elif key == "swapped":
+            self.bar.set_primary(f"Swap {ui.plural(n, 'track')}…" if n
+                                 else "Select tracks to swap",
+                                 self.swap_names, state="normal" if n else "disabled")
         else:
             self.bar.set_primary("Place one by one…", self.review_one_by_one,
                                  state="normal" if self.rows else "disabled")
@@ -477,6 +559,15 @@ class LibraryScreen(Screen):
     def _order(self):
         order = settings.get("name_order")
         return order if order in NAME_ORDERS else ARTIST_TITLE
+
+    def leave_title_artist(self):
+        recs = self._selected()
+        if not recs:
+            messagebox.showinfo(APP, "Select the tracks that are right as they are first.")
+            return
+        fixtags.leave_title_artist(recs)
+        self.refresh()
+        self.app.refresh_todo()
 
     def credit_from_title(self):
         """For titles shaped "Artist - Title": the artist tag takes the credit

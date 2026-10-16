@@ -5,7 +5,7 @@ from tkinter import ttk, filedialog, messagebox
 
 from . import (library, organize, journal, playlists, paths, settings, updates, wizard,
                session, updater, review, flatten, processed, importer, ui, licence,
-               supporter)
+               supporter, tagcache)
 from .screens.base import APP, RESCAN, changes
 from .screens.todo import TodoScreen
 from .screens.add_music import AddMusicScreen
@@ -126,6 +126,7 @@ class Sortero(tk.Tk):
         filem.add_command(label="Choose Collection Folder…", command=self.choose)
         filem.add_command(label="Read Collection Again", accelerator=ACCEL + "R",
                           command=self.scan)
+        filem.add_command(label="Re-read Every File's Tags", command=self.reread_all)
         filem.add_separator()
         filem.add_command(label="Sort the Processed Folder…", command=self.open_processed)
         filem.add_command(label="Place a Folder's Tracks by Hand…", command=self.review_folder)
@@ -287,6 +288,15 @@ class Sortero(tk.Tk):
         self.screens["history"].append(str(msg))
 
     # -- collection --------------------------------------------------------
+    def reread_all(self):
+        """Read every file from scratch. A rescan only reads files whose size or
+        dates changed (tagcache), so this is for when tags changed anyway."""
+        if self.task.running:
+            messagebox.showinfo(APP, "Another operation is still running.")
+            return
+        tagcache.clear()
+        self.scan()
+
     def choose(self):
         d = filedialog.askdirectory(title="Choose your DJ collection folder")
         if d:

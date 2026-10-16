@@ -10,7 +10,7 @@ from tkinter import ttk, filedialog, messagebox
 
 from .. import mixxx, ui, paths, settings
 from ..common import human_size
-from ..gig import backup, checklist, convert, cues, ffmpeg, profiles, rbxml, verify
+from ..gig import backup, checklist, convert, cues, ffmpeg, profiles, rbxml, usbexport, verify
 from ..gig.checklist import DONE, NEXT, WAITING
 from .base import Screen, APP
 from .gig_set import SetPicker, short
@@ -193,6 +193,10 @@ class GigScreen(Screen):
             self.xml_label = _label(top)
             self.xml_label.pack(side="left", fill="x", expand=True)
             self.copy_link = _link(top, "Copy the file's location", self._copy_xml)
+            self.direct_row = _links(body)
+            _label(self.direct_row, "No rekordbox to hand?").pack(side="left")
+            _link(self.direct_row, "Write the set to a stick directly…",
+                  self.write_main).pack(side="left", padx=(ui.GAP, 0))
             self.cue_row = _links(body)
             self.cue_row.pack(fill="x", pady=(2, 0))
             self.cue_label = _label(self.cue_row)
@@ -461,6 +465,10 @@ class GigScreen(Screen):
             else:
                 self.how_toggle.pack_forget()
                 self.copy_link.pack_forget()
+            if have_xml and profiles.reads_rekordbox(self.profile):
+                self.direct_row.pack(fill="x", pady=(2, 0), before=self.cue_row)
+            else:
+                self.direct_row.pack_forget()
             if show_how:
                 self.how.pack(fill="both", expand=not report, pady=(6, 0),
                               after=self.cue_row)
@@ -698,6 +706,49 @@ class GigScreen(Screen):
             sets = self.state.sets
             self._verify(stick, verify.MAIN, decode,
                          rbxml.playlist_names(sets) if sets else None)
+
+    def write_main(self):
+        """The main stick without rekordbox: copy the set and write its library (usbexport)."""
+        path, sets = self.state.xml_path, self.state.sets
+        if not path:
+            return
+        stick = self._choose_stick("main")
+        if not stick:
+            return
+        why = usbexport.foreign(stick)
+        if why:
+            messagebox.showwarning(APP, f"Sortero won't write to this stick: {why}.\n\n"
+                                        "Use another stick, or format this one first.")
+            return
+        if not messagebox.askokcancel(
+                APP, "Sortero will copy tonight's tracks to the stick and write the rekordbox "
+                     "library Pioneer players read, with your playlists, beat grids and cue "
+                     "points. Then it checks the stick.\n\n"
+                     "It doesn't write waveforms yet, or the OneLibrary the CDJ-3000X, XDJ-AZ, "
+                     "OPUS-QUAD and OMNIS-DUO need. And it's new: it hasn't been tried on a "
+                     "player yet, so bring a stick exported from rekordbox as well."):
+            return
+
+        def work(progress, log):
+            try:
+                return usbexport.write(stick, path, progress=progress, log=log), None
+            except (usbexport.StickError, OSError) as e:
+                return None, str(e)
+
+        def done(res):
+            result, error = res
+            if error:
+                messagebox.showerror(APP, error)
+                return
+            if result.missing:
+                messagebox.showwarning(
+                    APP, f"{ui.plural(len(result.missing), 'track')} in the playlists file "
+                         "couldn't be found on this computer, so they're not on the stick:\n\n"
+                         + "\n".join(t for t, _ in result.missing[:10]))
+            self._verify(stick, verify.MAIN, True,
+                         rbxml.playlist_names(sets) if sets else None)
+
+        self.app.task.run(work, done, "Writing the main stick")
 
     def check_backup(self, decode=True):
         stick = self._choose_stick("backup")

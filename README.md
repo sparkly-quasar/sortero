@@ -476,7 +476,23 @@ are just a title.
    rekordbox 7.2.11 or later, which writes both the Device Library older
    players read and the OneLibrary the newest (CDJ-3000X, OPUS-QUAD) read; for
    Denon players, Engine DJ imports the same XML, cues included, and its Sync
-   Manager exports it. Then **Check the main stick…**: the file system and
+   Manager exports it.
+
+   **No rekordbox to hand?** **Write the set to a stick directly…** does
+   rekordbox's part itself: it copies tonight's tracks to the stick and writes
+   the Device Library Pioneer players read (`PIONEER/rekordbox/export.pdb` and
+   each track's analysis file), with the playlists in set order, beat grids,
+   hot cues, memory cues and loops, then checks the stick. It works on Linux,
+   where rekordbox doesn't run. It refuses a stick that already holds a
+   library Sortero didn't write, and running it again replaces only what
+   Sortero put there. Not yet: waveforms (the players show none), artwork, and
+   the OneLibrary the CDJ-3000X, XDJ-AZ, OPUS-QUAD and OMNIS-DUO read instead.
+   **This is new and hasn't been played on a real player yet**, so bring a
+   stick exported from rekordbox too until it has. The writer is a port of
+   [openboxxx](https://github.com/sparkly-quasar/openboxxx)'s, laid out page
+   by page like a real rekordbox export.
+
+   Then **Check the main stick…**: the file system and
    partitions (FAT32 on one MBR partition is what every player reads), that a
    library the players read is on it (either rekordbox's or Engine DJ's will
    do; the missing one is a warning) and that tonight's playlists are in the

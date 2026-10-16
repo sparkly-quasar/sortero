@@ -5,6 +5,7 @@ from tkinter import ttk, messagebox
 from .. import ui, importer, paths, review, settings, headers, fixtags
 from ..common import human_size, NAME_ORDERS, NAME_ORDER_LABELS, ARTIST_TITLE
 from .base import Screen, APP, needs_genre, is_mix, in_unsorted
+from .spellings import SpellingsDialog
 
 
 def count_in(root, folder):
@@ -160,7 +161,11 @@ class TodoScreen(Screen):
                       f"Like “{others[0]}” and “{best}”. Clean tags spells each one "
                       "the same way everywhere, and you'll see every change before "
                       "anything is written.", "Clean them…",
-                      lambda: app.clean_tags("spelling"))
+                      lambda: app.clean_tags("spelling"),
+                      link_text="Check the spellings first…",
+                      link_command=lambda: SpellingsDialog(
+                          app, app.recs, on_close=lambda changed: app.refresh_todo()
+                          if changed else None))
 
         votes = h.get("name_order") or {}
         saved = settings.get("name_order")

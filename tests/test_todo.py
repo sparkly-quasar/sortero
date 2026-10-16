@@ -77,5 +77,46 @@ class TodoCards(unittest.TestCase):
         self.assertNotIn("Nothing needs doing", text)
 
 
+class SpellingsWindow(unittest.TestCase):
+    def setUp(self):
+        from sortero import fixtags
+        from sortero.library import Rec
+        try:
+            self.tk = tk.Tk()
+        except tk.TclError as e:
+            raise unittest.SkipTest(f"Tk can't open a window here ({e})")
+        self.tk.withdraw()
+        self.addCleanup(self.tk.destroy)
+        settings.set(fixtags.CHOICES, {})
+        self.addCleanup(settings.set, fixtags.CHOICES, {})
+        self.fixtags = fixtags
+        self.recs = [Rec(path=f"/m/{a}{i}.mp3", rel=f"{a}{i}.mp3", artist=a, title="T")
+                     for i, a in enumerate(["Christopher Schwarzwalder"] * 3
+                                           + ["Christopher Schwarzwälder", "ANNE", "ANNĒ"])]
+
+    def test_rows_and_choices(self):
+        from sortero.screens.spellings import SpellingsDialog, EditSpelling
+        closed = []
+        d = SpellingsDialog(self.tk, self.recs, on_close=closed.append)
+        rows = {k: d.tv.item(k, "values") for k in d.tv.get_children()}
+        self.assertEqual(rows["christopherschwarzwalder"][1], "Christopher Schwarzwälder")
+        self.assertEqual(rows["christopherschwarzwalder"][2], "Sortero's guess")
+
+        e = EditSpelling(d, d.rows["anne"], lambda v: d._chosen("anne", v))
+        e.leave.set(True)
+        e.save()
+        self.assertEqual(d.tv.item("anne", "values")[1:], ("Leave these as they are",
+                                                           "your choice"))
+        e = EditSpelling(d, d.rows["christopherschwarzwalder"],
+                         lambda v: d._chosen("christopherschwarzwalder", v))
+        e.var.set("Christopher Schwarzwälder")       # the guess: no choice needed
+        e.save()
+        self.assertNotIn("christopherschwarzwalder", self.fixtags.spelling_choices())
+        d.close()
+        self.assertEqual(closed, [True])
+        self.assertEqual(self.fixtags.spelled_differently(self.recs),
+                         [("Christopher Schwarzwälder", ["Christopher Schwarzwalder"])])
+
+
 if __name__ == "__main__":
     unittest.main()

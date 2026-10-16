@@ -33,7 +33,8 @@ FILTERS = [
 LABELS = {k: label for k, label, _ in FILTERS}
 
 COLUMNS = [("artist", "Artist", 160), ("title", "Title", 230),
-           ("becomes", "Becomes  (artist · title)", 260), ("key", "Key", 46),
+           ("new_artist", "New artist", 160), ("new_title", "New title", 230),
+           ("key", "Key", 46),
            ("bpm", "BPM", 46), ("energy", "Energy", 54), ("genre", "Genre", 130),
            ("suggested", "Discogs suggests", 140), ("folder", "Folder", 180)]
 
@@ -42,16 +43,18 @@ COLUMNS = [("artist", "Artist", 160), ("title", "Title", 230),
 # the table: a filter on its own left people at a list with no way forward.
 GUIDES = {
     "title_artist": "These titles start with an artist who isn't the one in the artist "
-                    "tag, and the filename agrees with the title. Check the Becomes "
-                    "column, select the tracks it gets right (⌘A for all), and press "
+                    "tag, and the filename agrees with the title. Check the New artist "
+                    "and New title columns, select the tracks it gets right (⌘A for all), and press "
                     "the button at the bottom right. For any that are right as they "
                     "are, such as a remix credited to the original artist, select them "
                     "and choose Leave as they are, so they stop being listed.",
     "repeat": "These titles have the artist in them. Clean tags fixes them all at "
               "once: press the button at the bottom right to preview the changes "
-              "first. The Becomes column shows what each one will be.",
+              "first. The New artist and New title columns show what each one "
+              "will be.",
     "swapped": "These look like the artist and title went in the wrong way round. "
-               "The Becomes column shows them swapped. Select the ones that are "
+               "The New artist and New title columns show them swapped. Select "
+               "the ones that are "
                "wrong and press the button at the bottom right.",
     "key": "These have no key yet. Select the ones to analyse and press the button "
            "at the bottom right: they move to 'To Be Processed' for your analysis "
@@ -59,7 +62,9 @@ GUIDES = {
 }
 if not paths.IS_MAC:
     GUIDES["title_artist"] = GUIDES["title_artist"].replace("⌘A", "Ctrl+A")
+# Lists that show what a track's artist and title will be after their fix
 BECOMES = ("title_artist", "repeat", "swapped")
+NEW_COLUMNS = ("new_artist", "new_title")
 
 
 def _num(v):
@@ -239,7 +244,9 @@ class LibraryScreen(Screen):
         return {
             "artist": lambda r: ((r.artist or "~").lower(), (r.title or "").lower()),
             "title": lambda r: (r.title or "").lower(),
-            "becomes": lambda r: self._becomes.get(r.path, "~").lower(),
+            "new_artist": lambda r: (self._becomes.get(r.path, ("~", ""))[0].lower(),
+                                     self._becomes.get(r.path, ("", ""))[1].lower()),
+            "new_title": lambda r: self._becomes.get(r.path, ("", "~"))[1].lower(),
             "key": _camelot,
             "bpm": lambda r: _num(r.bpm),
             "energy": lambda r: r.energy if r.energy is not None else -1,
@@ -270,7 +277,7 @@ class LibraryScreen(Screen):
                 sug = self.suggested.get(r.path, (None, []))[0] or ""
                 self.tv.insert("", "end", iid=str(i), values=(
                     r.artist or "—", r.title or os.path.basename(r.path),
-                    self._becomes.get(r.path, ""),
+                    *self._becomes.get(r.path, ("", "")),
                     r.camelot or r.key or "—", r.bpm or "—",
                     r.energy if r.energy is not None else "—",
                     r.genre or "—", sug, os.path.dirname(r.rel) or "(top level)"))
@@ -282,7 +289,8 @@ class LibraryScreen(Screen):
         if not any(self.suggested.get(r.path, (None,))[0] for r in self.rows):
             shown.remove("suggested")
         if self.filter_key() not in BECOMES:
-            shown.remove("becomes")
+            for c in NEW_COLUMNS:
+                shown.remove(c)
         self.tv.configure(displaycolumns=shown)
         for cid, heading, _ in COLUMNS:
             arrow = (" ▼" if self.sort_desc else " ▲") if cid == self.sort_col else ""
@@ -292,7 +300,7 @@ class LibraryScreen(Screen):
         self._sync()
 
     def _after_fix(self, rows):
-        """{path: "artist · title"} as the chosen list's fix would leave them."""
+        """{path: (artist, title)} as the chosen list's fix would leave them."""
         key = self.filter_key()
         out = {}
         if key in ("title_artist", "repeat"):
@@ -300,10 +308,10 @@ class LibraryScreen(Screen):
             for r in rows:
                 got = fixtags.title_credit(r, order)
                 if got:
-                    out[r.path] = f"{got[1] or r.artist or '—'}  ·  {got[2]}"
+                    out[r.path] = (got[1] or r.artist or "—", got[2])
         elif key == "swapped":
             for r in rows:
-                out[r.path] = f"{r.title or '—'}  ·  {r.artist or '—'}"
+                out[r.path] = (r.title or "—", r.artist or "—")
         return out
 
     def _update_guide(self):

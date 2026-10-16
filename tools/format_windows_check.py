@@ -61,13 +61,16 @@ def check(round_):
     reason = R.why_not(d, keep)
     assert reason and "USB" in reason, f"a virtual disk must never be offered: {reason}"
     print(f"round {round_}: Disk {d.number}, {d.size} bytes, {d.protocol}")
+    print("  clearing and writing")
     lay = R._windows_write(d, "GIG")
     print(f"  wrote {lay}")
     v, letter = volume(d.number)
     print(f"  Windows sees {v} on {letter}:")
     assert v["FileSystem"] == "FAT32", v
     assert v["FileSystemLabel"] == "GIG", v
-    r = subprocess.run(["chkdsk", f"{letter}:"], capture_output=True, text=True)
+    print("  chkdsk")
+    r = subprocess.run(["chkdsk", f"{letter}:"], capture_output=True, text=True,
+                       stdin=subprocess.DEVNULL, timeout=120)
     print(r.stdout[-800:])
     assert r.returncode == 0, f"chkdsk exit {r.returncode}"
     p = f"{letter}:\\hello.txt"
@@ -84,6 +87,7 @@ def main():
     if os.path.exists(vhd):
         os.remove(vhd)
     diskpart([f'create vdisk file="{vhd}" maximum={SIZE // 1024 ** 2} type=expandable'])
+    print("attaching")
     R._powershell(f"Mount-DiskImage -ImagePath '{vhd}' -NoDriveLetter | Out-Null")
     try:
         check(1)

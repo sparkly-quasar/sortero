@@ -14,10 +14,11 @@ on:
 jobs:
   vhd:
     runs-on: windows-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Format a virtual disk and check it
-        run: python tools/format_windows_check.py
+        run: python -u tools/format_windows_check.py

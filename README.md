@@ -11,7 +11,7 @@ tags, and an intake lane for new music. Runs on macOS, Windows and Linux.
 > independent project: I pay to build and release it, with the help of Claude
 > Code, and supporters are what keep it improving.
 
-### ⬇️ [Try Sortero free (v0.18.0)](https://github.com/sparkly-quasar/sortero/releases/tag/v0.18.0) · [How to install](#install--update)
+### ⬇️ [Try Sortero free (v0.18.0)](https://github.com/sparkly-quasar/sortero/releases/tag/v0.18.0) · [How to install](#install--update) · [What's new since v0.18.0](#whats-new-since-v0180)
 
 Ready-to-run for macOS, Windows and Linux. The app isn't code-signed, so your
 computer warns you once on first launch; [the install steps](#install--update)
@@ -434,7 +434,10 @@ are just a title.
    in play order, where ↑ and ↓ move them. **Add playlists…** brings in ones
    you have elsewhere:
    - **Playlist files** (`.m3u`, `.m3u8`) exported from rekordbox, Traktor,
-     Mixxx, VirtualDJ or Apple Music, one at a time or every one in a folder.
+     Mixxx, VirtualDJ or Apple Music, one at a time, or a **watched folder**
+     whose playlist files are listed afresh each time, so new exports turn up
+     by themselves. Playlist files anywhere inside your collection are found
+     too (turn that off from the same menu).
    - **A folder of tracks**, played in filename order, so number the files
      (`01`, `02`, …) to set it.
    - **Playlists from a rekordbox XML** (in rekordbox, *File → Export Collection
@@ -590,14 +593,67 @@ Management**, or keep Sortero somewhere in your home folder.
 
 It can also check automatically on launch (at most once a day) — toggle that in
 Settings.
+## What's new since v0.18.0
+
+v0.18.0 is the free download. The current version, **v0.32.0**, is what
+[Supporter licence](#supporting-sortero) holders get, and what you get by
+[building from source](#building-from-source). It adds:
+
+**Gig prep**, a new screen: one checklist from your playlists to a USB stick you
+can trust at the venue.
+- Profiles for Pioneer and Denon players: what each one reads off a stick.
+- Playable copies of only the tracks a player can't play. A small ffmpeg comes
+  with the app, so this works out of the box.
+- A rekordbox XML with your cue points, and a plain-folder backup stick.
+- Safe formatting of a stick, and a **GIG READY / NOT READY** check before you
+  leave.
+- Playlists from anywhere: Sortero's own, playlist files, watched folders, any
+  playlist file inside your collection, a rekordbox XML, or Mixxx.
+
+**Shrink to MP3.** Lossless tracks become MP3 320 with their tags kept. The
+originals wait in an archive outside your collection until you're sure.
+
+**Cleaner tags**
+- Titles with the artist in them ("Nora En Pure - Sphinx" becomes "Sphinx"),
+  filling in a missing or partial artist tag from the title.
+- Titles that name a different artist from the tag ("Hraach - Una Mattina",
+  tagged as by Dalal), listed with the result shown, so you fix the ones you
+  pick.
+- Artists spelled more than one way (Schwarzwalder and Schwarzwälder) spelled
+  one way everywhere, with a window to check and correct the spelling Sortero
+  picks.
+- Right-click a track in Library to edit its artist, title or album.
+- AIFF and WAV tags written inside the file, with a repair for files written
+  the old way, and MusicBrainz and AcoustID IDs written into MP3s the way
+  Picard does.
+- Tracks that should never have a genre can be left out of the genre checks.
+
+**Duplicates.** Keep each track in one folder: the set it was also in keeps it
+as a playlist entry. You can choose which copy stays.
+
+**Clearer next steps.** To do cards open Clean tags on just the problem they
+name. Library lists that need a decision say what to do and show each track's
+new artist and title before anything is written.
+
+**Housekeeping**
+- After analysis, Sortero offers to clear the originals left behind in
+  'To Be Processed'.
+- Settings can empty `_Quarantine`.
+- Rescans after a change take a fraction of a second instead of several, since
+  only files that changed are read again.
+
+**Fixes.** Writing the backup stick no longer risks deleting a real track whose
+name starts with "._".
+
 ## Install & update
 
 There are three ways to run Sortero. All of them have every feature.
 
 - **Try it free:** download the ready-to-run app from
   **[v0.18.0](https://github.com/sparkly-quasar/sortero/releases/tag/v0.18.0)**,
-  the last release with public downloads. It's a few versions behind, but it's
-  the quickest way to see whether Sortero suits you.
+  the last release with public downloads. It's a few versions behind (see
+  [what's new since](#whats-new-since-v0180)), but it's the quickest way to see
+  whether Sortero suits you.
 - **Supporter licence:** the latest app for macOS, Windows and Linux, with
   one-click updates. See [Supporting Sortero](#supporting-sortero).
 - **From source, free and always current:** see

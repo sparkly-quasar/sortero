@@ -77,6 +77,79 @@ class TodoCards(unittest.TestCase):
         self.assertNotIn("Nothing needs doing", text)
 
 
+class LibraryNextSteps(unittest.TestCase):
+    """A list that needs a decision says what to do, and offers it."""
+
+    @classmethod
+    def setUpClass(cls):
+        from mutagen.id3 import ID3, TPE1, TIT2
+        cls.root = tempfile.mkdtemp(prefix="sortero-lib-")
+        for name, artist, title in (
+                ("040. Hraach - Una Mattina (Original Mix)_PN", "Dalal",
+                 "Hraach - Una Mattina (Original Mix)"),
+                ("037. DAVÍ - Boarding Call_PN", "Orbient", "DAVÍ - Boarding Call"),
+                ("Andy Bach - Ipanema - Extended Mix", "Andy Bach", "Ipanema - Extended Mix")):
+            p = os.path.join(cls.root, "Sultry", name + ".mp3")
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            tags = ID3()
+            tags.add(TPE1(encoding=3, text=[artist]))
+            tags.add(TIT2(encoding=3, text=[title]))
+            tags.save(p)
+        for key, value in (("root", cls.root), ("setup_complete", True),
+                           ("check_updates_on_launch", False), ("title_artist_ignored", [])):
+            settings.set(key, value)
+        from sortero import fixtags
+        fixtags._left_alone_cache = None
+        from sortero.app import Sortero
+        try:
+            cls.app = Sortero()
+        except tk.TclError as e:
+            raise unittest.SkipTest(f"Tk can't open a window here ({e})")
+        cls.app.withdraw()
+        cls.app.recs = library.scan(cls.root)
+        cls.app.health = library.health(cls.app.recs)
+
+    @classmethod
+    def tearDownClass(cls):
+        from sortero import fixtags
+        settings.set("title_artist_ignored", [])
+        fixtags._left_alone_cache = None
+        app = getattr(cls, "app", None)
+        if app:
+            app.destroy()
+        shutil.rmtree(cls.root, ignore_errors=True)
+
+    def test_title_names_a_different_artist(self):
+        app = self.app
+        app.show_library("title_artist")
+        app.update()
+        lib = app.screens["library"]
+        self.assertEqual(sorted(r.title for r in lib.rows),
+                         ["DAVÍ - Boarding Call", "Hraach - Una Mattina (Original Mix)"])
+        self.assertEqual(lib.guide.winfo_manager(), "pack")
+        self.assertIn("Becomes column", lib.guide_lab.cget("text"))
+        self.assertIn("becomes", lib.tv.cget("displaycolumns"))
+        hraach = next(i for i in lib.tv.get_children()
+                      if lib.rows[int(i)].artist == "Dalal")
+        self.assertEqual(lib.tv.set(hraach, "becomes"), "Hraach  ·  Una Mattina (Original Mix)")
+        self.assertEqual(str(lib.bar.primary.cget("state")), "disabled")
+        lib.tv.selection_set(lib.tv.get_children())
+        lib._sync()
+        self.assertEqual(lib.bar.primary.cget("text"), "Use the title's artist for 2 tracks…")
+
+        lib.tv.selection_set(hraach)
+        lib.leave_title_artist()
+        self.assertEqual([r.title for r in lib.rows], ["DAVÍ - Boarding Call"])
+
+    def test_no_guide_or_becomes_on_plain_lists(self):
+        app = self.app
+        app.show_library("all")
+        app.update()
+        lib = app.screens["library"]
+        self.assertEqual(lib.guide.winfo_manager(), "")
+        self.assertNotIn("becomes", lib.tv.cget("displaycolumns"))
+
+
 class SpellingsWindow(unittest.TestCase):
     def setUp(self):
         from sortero import fixtags

@@ -199,6 +199,19 @@ class CreditInTitle(unittest.TestCase):
                          [(r, {"artist": (None, "John Digweed"),
                                "title": ("John Digweed - Mantis", "Mantis")})])
 
+    def test_left_alone_stops_being_flagged(self):
+        settings.set(fixtags.LEFT_ALONE, [])
+        self.addCleanup(fixtags.leave_title_artist, [], True)
+        self.addCleanup(settings.set, fixtags.LEFT_ALONE, [])
+        r = filed("Dj Dark & Mentol - Say It Right", "Nelly Furtado",
+                  "Dj Dark & Mentol - Say It Right")
+        self.assertTrue(fixtags.names_other_artist(r))
+        fixtags.leave_title_artist([r])
+        self.assertFalse(fixtags.names_other_artist(r))
+        self.assertEqual(settings.get(fixtags.LEFT_ALONE), ["dj dark & mentol - say it right.mp3"])
+        fixtags.leave_title_artist([r], on=False)
+        self.assertTrue(fixtags.names_other_artist(r))
+
     def test_picked_tracks_take_the_credit_from_the_title(self):
         r = filed("Hraach - Una Mattina", "Dalal", "Hraach - Una Mattina")
         self.assertEqual(fixtags.credit_from_title([r]),

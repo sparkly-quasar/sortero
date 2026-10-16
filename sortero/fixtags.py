@@ -159,9 +159,40 @@ def artist_in_title(r, order=ARTIST_TITLE):
 
 def names_other_artist(r, order=ARTIST_TITLE):
     """Does the title name a different artist from the tag, with the filename
-    backing it up? Those are listed for you to pick from, not fixed in bulk."""
+    backing it up? Those are listed for you to pick from, not fixed in bulk,
+    leaving out the ones you said are right as they are."""
+    if _left_alone_key(r) in _left_alone():
+        return False
     got = title_credit(r, order)
     return bool(got) and got[0] == OTHER
+
+
+# Tracks whose title names another artist on purpose, a remix credited to its
+# original artist say, so they stop being flagged. By filename, like
+# library.genre_ignored, since filing moves a track but keeps its name.
+LEFT_ALONE = "title_artist_ignored"
+_left_alone_cache = None
+
+
+def _left_alone_key(r):
+    return os.path.basename(r.path).lower()
+
+
+def _left_alone():
+    global _left_alone_cache
+    if _left_alone_cache is None:
+        from . import settings
+        _left_alone_cache = set(settings.get(LEFT_ALONE) or [])
+    return _left_alone_cache
+
+
+def leave_title_artist(recs, on=True):
+    """Stop (or start again) flagging these tracks' titles as naming another artist."""
+    global _left_alone_cache
+    from . import settings
+    keys = {_left_alone_key(r) for r in recs}
+    _left_alone_cache = (_left_alone() | keys) if on else (_left_alone() - keys)
+    settings.set(LEFT_ALONE, sorted(_left_alone_cache))
 
 
 def credit_from_title(recs, order=ARTIST_TITLE):

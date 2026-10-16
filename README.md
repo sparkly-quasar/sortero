@@ -595,7 +595,7 @@ It can also check automatically on launch (at most once a day) — toggle that i
 Settings.
 ## What's new since v0.18.0
 
-v0.18.0 is the free download. The current version, **v0.32.0**, is what
+v0.18.0 is the free download. The current version, **v0.32.1**, is what
 [Supporter licence](#supporting-sortero) holders get, and what you get by
 [building from source](#building-from-source). It adds:
 
@@ -633,7 +633,8 @@ as a playlist entry. You can choose which copy stays.
 
 **Clearer next steps.** To do cards open Clean tags on just the problem they
 name. Library lists that need a decision say what to do and show each track's
-new artist and title before anything is written.
+new artist and title before anything is written. Shift+↑ and Shift+↓ select a
+run of tracks in any list.
 
 **Housekeeping**
 - After analysis, Sortero offers to clear the originals left behind in

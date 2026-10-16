@@ -141,5 +141,72 @@ class YourSpellings(unittest.TestCase):
         self.assertEqual(fixtags.spelled_differently(self.recs), [("Godo", ["_GODO"])])
 
 
+def filed(name, artist, title):
+    """A track whose filename is `name`, tagged with this artist and title."""
+    from sortero.library import Rec
+    return Rec(path=f"/m/Sultry/{name}.mp3", rel=f"Sultry/{name}.mp3",
+               artist=artist, title=title)
+
+
+class CreditInTitle(unittest.TestCase):
+    def test_the_four_kinds(self):
+        cases = [
+            (filed("Nora En Pure - Sphinx", "Nora En Pure", "Nora En Pure - Sphinx"),
+             (fixtags.REPEAT, None, "Sphinx")),
+            (filed("015. Djuma Soundsystem & Westerby - Koma Kobache_PN",
+                   "Djuma Soundsystem", "Djuma Soundsystem & Westerby - Koma Kobache"),
+             (fixtags.MORE, "Djuma Soundsystem & Westerby", "Koma Kobache")),
+            (filed("025. John Digweed & Nick Muir - Mantis_PN", None,
+                   "John Digweed & Nick Muir - Mantis"),
+             (fixtags.MISSING, "John Digweed & Nick Muir", "Mantis")),
+            (filed("040. Hraach - Una Mattina (Original Mix)_PN", "Dalal",
+                   "Hraach - Una Mattina (Original Mix)"),
+             (fixtags.OTHER, "Hraach", "Una Mattina (Original Mix)")),
+        ]
+        for r, want in cases:
+            with self.subTest(title=r.title):
+                self.assertEqual(fixtags.title_credit(r), want)
+
+    def test_left_alone(self):
+        for r in (
+            # Spotify-style version after the dash: the filename names the artist
+            filed("Andy Bach - Ipanema - Extended Mix", "Andy Bach", "Ipanema - Extended Mix"),
+            # "Song - Artist": the tag is right
+            filed("OH OHH - Deborah De Luca", "Deborah de Luca", "OH OHH - Deborah De Luca"),
+            # a different artist with no filename to back it up
+            filed("Track 01", "Dalal", "Hraach - Una Mattina"),
+            # no dash at all
+            filed("Satori - Umama", "Satori", "Umama (Riva Starr Remix)"),
+        ):
+            with self.subTest(title=r.title):
+                self.assertIsNone(fixtags.title_credit(r))
+
+    def test_the_fix_does_the_safe_ones_only(self):
+        recs = [filed("Djuma Soundsystem & Westerby - Koma Kobache", "Djuma Soundsystem",
+                      "Djuma Soundsystem & Westerby - Koma Kobache"),
+                filed("John Digweed - Mantis", None, "John Digweed - Mantis"),
+                filed("Hraach - Una Mattina", "Dalal", "Hraach - Una Mattina")]
+        got = [c for _, c in fixtags.plan(recs, {"repeat"})]
+        self.assertEqual(got, [
+            {"title": ("Djuma Soundsystem & Westerby - Koma Kobache", "Koma Kobache"),
+             "artist": ("Djuma Soundsystem", "Djuma Soundsystem & Westerby")},
+            {"title": ("John Digweed - Mantis", "Mantis"),
+             "artist": (None, "John Digweed")}])
+
+    def test_with_the_filename_fix_too(self):
+        r = filed("JOHN DIGWEED - Mantis", None, "John Digweed - Mantis")
+        self.assertEqual(fixtags.plan([r], {"artist", "repeat"}),
+                         [(r, {"artist": (None, "John Digweed"),
+                               "title": ("John Digweed - Mantis", "Mantis")})])
+
+    def test_picked_tracks_take_the_credit_from_the_title(self):
+        r = filed("Hraach - Una Mattina", "Dalal", "Hraach - Una Mattina")
+        self.assertEqual(fixtags.credit_from_title([r]),
+                         [(r, {"title": ("Hraach - Una Mattina", "Una Mattina"),
+                               "artist": ("Dalal", "Hraach")})])
+        self.assertTrue(fixtags.names_other_artist(r))
+        self.assertFalse(fixtags.artist_in_title(r))
+
+
 if __name__ == "__main__":
     unittest.main()

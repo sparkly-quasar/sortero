@@ -144,14 +144,29 @@ class TodoScreen(Screen):
                       "the list and swap the ones that are really wrong.",
                       "Show them", lambda: app.show_library("swapped"))
 
-        repeats = [r for r in live if fixtags.repeats_artist(r)]
+        order = settings.get("name_order")
+        order = order if order in NAME_ORDERS else ARTIST_TITLE
+        credits = [(r, fixtags.title_credit(r, order)) for r in live]
+        repeats = [r for r, c in credits if c and c[0] in fixtags.SAFE]
         if repeats:
-            r = repeats[0]
-            self._job(f"{ui.plural(len(repeats), 'track')} with the artist repeated "
-                      "in the title",
-                      f"Like “{r.title}” by {r.artist}. Clean tags takes the name off "
-                      "the front, and you'll see every change before anything is "
-                      "written.", "Clean them…", lambda: app.clean_tags("repeat"))
+            r = next((r for r, c in credits if c and c[0] == fixtags.REPEAT), repeats[0])
+            self._job(f"{ui.plural(len(repeats), 'track')} with the artist in the title",
+                      f"Like “{r.title}”"
+                      + (f" by {r.artist}" if r.artist else "")
+                      + ". Clean tags takes the artist out of the title, and fills in "
+                        "the artist tag where it's missing or names fewer artists. "
+                        "You'll see every change before anything is written.",
+                      "Clean them…", lambda: app.clean_tags("repeat"))
+
+        others = [r for r, c in credits if c and c[0] == fixtags.OTHER]
+        if others:
+            r = others[0]
+            self._job(f"{ui.plural(len(others), 'track')} whose title names a "
+                      "different artist",
+                      f"Like “{r.title}”, tagged as by {r.artist}. The filename agrees "
+                      "with the title, so the artist tag is probably wrong, but some "
+                      "are remixes. Pick the ones to fix.",
+                      "Show them", lambda: app.show_library("title_artist"))
 
         variants = fixtags.spelled_differently(live)
         if variants:

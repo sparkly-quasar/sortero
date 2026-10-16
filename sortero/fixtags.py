@@ -13,8 +13,8 @@ FIX_LABELS = {
               "Grouping tag, a column DJ apps can show and sort by",
     "spam": "Clear download-site spam from Genre and Comment",
     "artist": "Fill in a missing artist or title from the filename",
-    "repeat": "Take the artist's name off the front of the title "
-              "('Nora En Pure - Sphinx' becomes 'Sphinx')",
+    "repeat": "Take the artist out of the title ('Nora En Pure - Sphinx' becomes "
+              "'Sphinx'), filling in a missing or partial artist from it",
     "spelling": "Spell each artist the same way everywhere "
                 "('Christopher Schwarzwalder' becomes 'Christopher Schwarzwälder')",
     "genre": "Tidy genre names into one consistent set",
@@ -101,6 +101,85 @@ def _same_text(a, b):
 
 def _accents(name):
     return sum(1 for c in unicodedata.normalize("NFKD", name) if unicodedata.combining(c))
+
+
+# What title_credit finds in a title shaped "Artist - Title":
+REPEAT = "repeat"     # the tagged artist, again: "Nora En Pure - Sphinx"
+MORE = "more"         # the tagged artist and others: "Djuma Soundsystem & Westerby - ..."
+MISSING = "missing"   # no artist tag, and the filename names the same artist
+OTHER = "other"       # someone else, and the filename agrees with the title
+SAFE = (REPEAT, MORE, MISSING)  # the Clean tags fix; OTHER is for you to pick
+
+
+def _names(credit):
+    return {_plain(n) for n in NAME_SEP.split(credit or "")[::2] if _plain(n)}
+
+
+def title_credit(r, order=ARTIST_TITLE):
+    """(kind, artist, title) when the title tag starts with an artist credit,
+    or None. `artist` is what the artist tag should say, or None to keep it.
+
+    A title like "Ipanema - Extended Mix" is never matched: its first half is
+    neither the tagged artist nor what the filename names as the artist. A
+    title written the other way round ("OH OHH - Deborah De Luca") isn't
+    either, since the tagged artist is in its second half.
+    """
+    a, t = tagged_names(r)
+    if not t:
+        return None
+    if a:
+        stripped = _strip_artist_prefix(t, a)
+        if stripped != t:
+            return REPEAT, None, stripped
+    head = tail = None
+    for sep in (" - ", " – ", " — "):
+        h, found, tl = t.partition(sep)
+        if found and h.strip() and tl.strip():
+            head, tail = h.strip(), tl.strip()
+            break
+    if not head:
+        return None
+    if a and _names(a) < _names(head):
+        return MORE, head, tail
+    file_artist, _ = split_artist_title(clean_stem(r.path), order)
+    if not file_artist or _plain(file_artist) != _plain(head):
+        return None
+    if not a:
+        return MISSING, head, tail
+    if _names(a) & _names(tail) or _plain(a) in _plain(tail):
+        return None                     # "Song - Artist": the tags are right
+    return OTHER, head, tail
+
+
+def artist_in_title(r, order=ARTIST_TITLE):
+    """Is this one the Clean tags fix sorts out by itself?"""
+    got = title_credit(r, order)
+    return bool(got) and got[0] in SAFE
+
+
+def names_other_artist(r, order=ARTIST_TITLE):
+    """Does the title name a different artist from the tag, with the filename
+    backing it up? Those are listed for you to pick from, not fixed in bulk."""
+    got = title_credit(r, order)
+    return bool(got) and got[0] == OTHER
+
+
+def credit_from_title(recs, order=ARTIST_TITLE):
+    """Planned changes taking artist and title from titles shaped "Artist -
+    Title", for tracks you picked (any kind, OTHER included)."""
+    out = []
+    for r in recs:
+        if r.protected:
+            continue
+        got = title_credit(r, order)
+        if not got:
+            continue
+        kind, artist, title = got
+        ch = {"title": (r.title, title)}
+        if artist:
+            ch["artist"] = (tagged_names(r)[0], artist)
+        out.append((r, ch))
+    return out
 
 
 def guess_spelling(spellings):
@@ -254,9 +333,16 @@ def plan(recs, fixes, log=None, order=ARTIST_TITLE):
                 ch["artist"] = (r.artist, new)
 
         if "repeat" in fixes and "title" not in ch:
-            stripped = repeats_artist(r)
-            if stripped:
-                ch["title"] = (r.title, stripped)
+            got = title_credit(r, order)
+            if got and got[0] in SAFE:
+                kind, artist, title = got
+                # the filename fix may have filled the artist in already: fine
+                # when it's the same name, but not when it says someone else
+                if not (artist and "artist" in ch
+                        and _plain(ch["artist"][1]) != _plain(artist)):
+                    ch["title"] = (r.title, title)
+                    if artist:
+                        ch["artist"] = (tagged_names(r)[0], artist)
 
         if "genre" in fixes:
             cur = ch.get("genre", (r.genre, r.genre))[1] if "genre" in ch else r.genre

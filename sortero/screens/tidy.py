@@ -8,6 +8,7 @@ from ..transport import Transport
 from ..common import (human_size, name_order_note, ARTIST_TITLE, NAME_ORDERS,
                       NAME_ORDER_LABELS)
 from .base import Screen, APP, RESCAN, is_mix
+from .spellings import SpellingsDialog
 
 
 class TidyUpScreen(Screen):
@@ -108,8 +109,12 @@ class CleanTagsScreen(ToolScreen):
             v = tk.BooleanVar(value=True)
             v.trace_add("write", lambda *a: self._reset(clear=True))
             self.vars[k] = v
-            ttk.Checkbutton(box, text=fixtags.FIX_LABELS[k], variable=v).pack(anchor="w",
-                                                                           pady=2)
+            line = ttk.Frame(box)
+            line.pack(anchor="w", fill="x", pady=2)
+            ttk.Checkbutton(line, text=fixtags.FIX_LABELS[k], variable=v).pack(side="left")
+            if k == "spelling":
+                ui.link(line, "Check the spellings…", self.check_spellings).pack(
+                    side="left", padx=(ui.GAP, 0))
         row = ttk.Frame(box)
         row.pack(anchor="w", fill="x", pady=(ui.GAP, 0))
         ttk.Label(row, text="Filenames are").pack(side="left")
@@ -138,6 +143,7 @@ class CleanTagsScreen(ToolScreen):
                              height=11)
         f.pack(fill="both", expand=True)
         self.bar.set_more([
+            ("Check artist spellings…", self.check_spellings),
             ("Read artist and title from the filenames again…", self.preview_from_names),
         ])
         self.changes = None
@@ -197,6 +203,22 @@ class CleanTagsScreen(ToolScreen):
                            link_command=(lambda: self.app.show_library("swapped"))
                            if n else None)
         card.pack(fill="x")
+
+    def check_spellings(self):
+        """Show the spelling each artist will get, and let it be changed."""
+        if self.need_scan():
+            return
+
+        def closed(changed):
+            if not changed:
+                return
+            # a preview on screen was made with the old choices
+            again = self.changes is not None and self.job == "fixes"
+            self._reset(clear=True)
+            self.app.refresh_todo()
+            if again:
+                self.preview()
+        SpellingsDialog(self, self.app.recs, on_close=closed)
 
     def only(self, *fixes):
         """Tick just these fixes. A To do card names one problem, so Clean tags

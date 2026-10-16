@@ -103,18 +103,56 @@ def _accents(name):
     return sum(1 for c in unicodedata.normalize("NFKD", name) if unicodedata.combining(c))
 
 
-def artist_spellings(recs):
-    """{plain name: the spelling to use}, each name in "A, B & C" on its own.
+def guess_spelling(spellings):
+    """Sortero's pick among the spellings one artist is tagged with (a Counter).
 
     The accented spelling wins, since accents get lost far more often than
     added ("Schwarzwalder" for "Schwarzwälder"). Then the commoner one, then
-    one that isn't all capitals or all lower case. Spellings that differ only
-    in how an accented letter is encoded count as one, written the standard
-    (NFC) way, so those get fixed too.
+    one that isn't all capitals or all lower case.
     """
-    return {key: max(sp, key=lambda n: (_accents(n), sp[n], not n.isupper(),
-                                        not n.islower(), n))
-            for key, sp in _spellings_seen(recs).items()}
+    return max(spellings, key=lambda n: (_accents(n), spellings[n], not n.isupper(),
+                                         not n.islower(), n))
+
+
+# What the user decided, by plain name: the spelling to use, or LEAVE.
+CHOICES = "artist_spellings"
+LEAVE = ""
+
+
+def spelling_choices():
+    from . import settings
+    got = settings.get(CHOICES)
+    return dict(got) if isinstance(got, dict) else {}
+
+
+def choose_spelling(key, spelling):
+    """Remember a spelling for one artist (by plain name), LEAVE to keep its
+    tags as they are, or None to go back to Sortero's guess."""
+    from . import settings
+    choices = spelling_choices()
+    if spelling is None:
+        choices.pop(key, None)
+    else:
+        choices[key] = unicodedata.normalize("NFC", spelling.strip())
+    settings.set(CHOICES, choices)
+
+
+def artist_spellings(recs, choices=None):
+    """{plain name: the spelling to use}, each name in "A, B & C" on its own.
+
+    Sortero's guess (guess_spelling), unless the user chose a spelling or said
+    to leave an artist alone. Spellings that differ only in how an accented
+    letter is encoded count as one, written the standard (NFC) way, so those
+    get tidied too.
+    """
+    choices = spelling_choices() if choices is None else choices
+    out = {}
+    for key, sp in _spellings_seen(recs).items():
+        chosen = choices.get(key)
+        if chosen == LEAVE:
+            continue
+        out[key] = chosen or guess_spelling(sp)
+    return out
 
 
 def _spellings_seen(recs):
@@ -131,14 +169,29 @@ def _spellings_seen(recs):
     return seen
 
 
-def spelled_differently(recs):
-    """[(spelling to use, [other spellings])] for every artist spelled more
-    than one way, most-used first. Encoding-only differences aren't listed:
-    nobody can see them, though the fix still tidies them."""
-    seen, best = _spellings_seen(recs), artist_spellings(recs)
-    out = [(best[k], sorted(n for n in sp if n != best[k]))
-           for k, sp in seen.items() if len(sp) > 1]
-    return sorted(out, key=lambda x: -sum(seen[_plain(x[0])].values()))
+def spelling_review(recs, choices=None):
+    """Every artist tagged more than one way, for the user to check, most-used
+    first: [{"key", "spellings" (Counter), "guess", "chosen" (their spelling,
+    LEAVE, or None)}]. Encoding-only differences aren't listed: nobody can see
+    them, though the fix still tidies them."""
+    choices = spelling_choices() if choices is None else choices
+    seen = _spellings_seen(recs)
+    rows = [{"key": k, "spellings": sp, "guess": guess_spelling(sp),
+             "chosen": choices.get(k)}
+            for k, sp in seen.items() if len(sp) > 1]
+    return sorted(rows, key=lambda x: (-sum(x["spellings"].values()), x["key"]))
+
+
+def spelled_differently(recs, choices=None):
+    """[(spelling to use, [other spellings])] for each artist still tagged more
+    than one way, most-used first, leaving out artists the user said to leave."""
+    out = []
+    for row in spelling_review(recs, choices):
+        if row["chosen"] == LEAVE:
+            continue
+        best = row["chosen"] or row["guess"]
+        out.append((best, sorted(n for n in row["spellings"] if n != best)))
+    return out
 
 
 def respelled(artist, spellings):

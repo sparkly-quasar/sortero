@@ -1,7 +1,7 @@
 """Clean tags: the artist's name repeated at the start of the title."""
 import unicodedata, unittest
 
-from sortero import fixtags
+from sortero import fixtags, settings
 from sortero.library import Rec
 
 
@@ -96,6 +96,49 @@ class Spelling(unittest.TestCase):
     def test_listed_for_to_do(self):
         recs = [rec("Rebūke", "A"), rec("Rebuke", "B"), rec("REBUKE", "C")]
         self.assertEqual(fixtags.spelled_differently(recs), [("Rebūke", ["REBUKE", "Rebuke"])])
+
+
+class YourSpellings(unittest.TestCase):
+    """What the user says beats what Sortero guesses."""
+
+    def setUp(self):
+        settings.set(fixtags.CHOICES, {})
+        self.addCleanup(settings.set, fixtags.CHOICES, {})
+        self.recs = [rec("Godo", "A"), rec("_GODO", "B"), rec("_GODO", "C"),
+                     rec("_GODO", "E"), rec("Godo & Someone", "D")]
+
+    def artists(self):
+        return [c["artist"][1] for _, c in fixtags.plan(self.recs, {"spelling"})]
+
+    def test_the_guess_by_default(self):
+        self.assertEqual(self.artists(), ["_GODO", "_GODO & Someone"])
+
+    def test_a_chosen_spelling_is_used_everywhere(self):
+        fixtags.choose_spelling("godo", "Godo")
+        self.assertEqual(self.artists(), ["Godo", "Godo", "Godo"])
+
+    def test_a_spelling_of_your_own(self):
+        fixtags.choose_spelling("godo", "  GODO ")
+        self.assertEqual(self.artists(), ["GODO", "GODO", "GODO", "GODO", "GODO & Someone"])
+
+    def test_left_alone_is_neither_changed_nor_flagged(self):
+        fixtags.choose_spelling("godo", fixtags.LEAVE)
+        self.assertEqual(self.artists(), [])
+        self.assertEqual(fixtags.spelled_differently(self.recs), [])
+        self.assertEqual(fixtags.spelling_review(self.recs)[0]["chosen"], fixtags.LEAVE)
+
+    def test_back_to_the_guess(self):
+        fixtags.choose_spelling("godo", "Godo")
+        fixtags.choose_spelling("godo", None)
+        self.assertEqual(fixtags.spelling_choices(), {})
+        self.assertEqual(self.artists(), ["_GODO", "_GODO & Someone"])
+
+    def test_review_lists_counts_guess_and_choice(self):
+        fixtags.choose_spelling("godo", "Godo")
+        row = fixtags.spelling_review(self.recs)[0]
+        self.assertEqual((row["key"], row["guess"], row["chosen"]), ("godo", "_GODO", "Godo"))
+        self.assertEqual(dict(row["spellings"]), {"_GODO": 3, "Godo": 2})
+        self.assertEqual(fixtags.spelled_differently(self.recs), [("Godo", ["_GODO"])])
 
 
 if __name__ == "__main__":

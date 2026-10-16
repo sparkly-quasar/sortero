@@ -370,9 +370,15 @@ their genre (a techno track at 93), listens to a minute of each, and suggests
 a fix only when the audio's strongest tempo sits right on a whole multiple of
 the current value: x2, x3/2 or x4/3, or the inverse. For x3/2 and x4/3 the
 audio must also clearly prefer the new tempo, since a slow track with triplet
-hats pulses at both. Genres without a typical tempo (downtempo, breaks,
+hats pulses at both, and the new tempo has to show up as a beat of its own in
+the audio's spectrum, which a slow track's triplets never do. A track whose
+tempo changes within the minute Sortero listens to is left alone, since no
+single BPM is right for it. Genres without a typical tempo (downtempo, breaks,
 hip-hop, disco) are never touched, and anything that isn't clear-cut is left
 alone.
+
+`tools/tempo_eval.py` scores the fixer against tracks whose true tempo you
+know, so a change to it can be judged by what it fixes and what it breaks.
 
 Before fixing anything you can listen: select a row and it plays from the
 part of the track Sortero checked, with a scrub bar and ±15s. Tap along to

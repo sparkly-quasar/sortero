@@ -127,11 +127,13 @@ class LibraryNextSteps(unittest.TestCase):
         self.assertEqual(sorted(r.title for r in lib.rows),
                          ["DAVÍ - Boarding Call", "Hraach - Una Mattina (Original Mix)"])
         self.assertEqual(lib.guide.winfo_manager(), "pack")
-        self.assertIn("Becomes column", lib.guide_lab.cget("text"))
-        self.assertIn("becomes", lib.tv.cget("displaycolumns"))
+        self.assertIn("New artist and New title columns", lib.guide_lab.cget("text"))
+        shown = lib.tv.cget("displaycolumns")
+        self.assertEqual(shown.index("new_artist") + 1, shown.index("new_title"))
         hraach = next(i for i in lib.tv.get_children()
                       if lib.rows[int(i)].artist == "Dalal")
-        self.assertEqual(lib.tv.set(hraach, "becomes"), "Hraach  ·  Una Mattina (Original Mix)")
+        self.assertEqual((lib.tv.set(hraach, "new_artist"), lib.tv.set(hraach, "new_title")),
+                         ("Hraach", "Una Mattina (Original Mix)"))
         self.assertEqual(str(lib.bar.primary.cget("state")), "disabled")
         lib.tv.selection_set(lib.tv.get_children())
         lib._sync()
@@ -147,7 +149,8 @@ class LibraryNextSteps(unittest.TestCase):
         app.update()
         lib = app.screens["library"]
         self.assertEqual(lib.guide.winfo_manager(), "")
-        self.assertNotIn("becomes", lib.tv.cget("displaycolumns"))
+        self.assertNotIn("new_artist", lib.tv.cget("displaycolumns"))
+        self.assertNotIn("new_title", lib.tv.cget("displaycolumns"))
 
 
 class SpellingsWindow(unittest.TestCase):

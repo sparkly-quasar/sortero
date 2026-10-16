@@ -5,7 +5,8 @@
 
 For CI (.github/workflows/format-windows.yml): needs Windows and administrator
 rights, which GitHub's Windows runners have. It makes a 300 MB virtual disk
-with diskpart, then runs the same steps the elevated helper runs on a real
+with diskpart and attaches it with Mount-DiskImage (an attach from diskpart
+lasts only as long as diskpart runs), then runs the same steps the elevated helper runs on a real
 stick (rawformat._windows_write: Clear-Disk, the raw write through
 \\\\.\\PhysicalDriveN, Update-Disk), and checks Windows mounts FAT32 named GIG,
 chkdsk finds nothing wrong, and a file can be written and read back.
@@ -28,7 +29,7 @@ def diskpart(lines):
     r = subprocess.run(["diskpart", "/s", fh.name], capture_output=True, text=True)
     print(r.stdout)
     if r.returncode:
-        sys.exit(f"diskpart failed: {r.stderr}")
+        sys.exit(f"diskpart failed: {r.stdout}{r.stderr}")
 
 
 def the_disk():
@@ -82,13 +83,16 @@ def main():
     vhd = os.path.join(tempfile.gettempdir(), "sortero-stick.vhdx")
     if os.path.exists(vhd):
         os.remove(vhd)
-    diskpart([f'create vdisk file="{vhd}" maximum={SIZE // 1024 ** 2} type=expandable',
-              f'select vdisk file="{vhd}"', "attach vdisk"])
+    diskpart([f'create vdisk file="{vhd}" maximum={SIZE // 1024 ** 2} type=expandable'])
+    R._powershell(f"Mount-DiskImage -ImagePath '{vhd}' -NoDriveLetter | Out-Null")
     try:
         check(1)
         check(2)
     finally:
-        diskpart([f'select vdisk file="{vhd}"', "detach vdisk"])
+        try:
+            R._powershell(f"Dismount-DiskImage -ImagePath '{vhd}' | Out-Null")
+        except Exception as e:          # never hide why the check itself failed
+            print(f"(couldn't detach the virtual disk: {e})")
     print("OK: Windows mounts, checks and writes the stick Sortero formats")
 
 

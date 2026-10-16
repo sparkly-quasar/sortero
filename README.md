@@ -823,9 +823,6 @@ Buy it from **Support Sortero** in the app, through Stripe. After paying you lan
 on a page with your licence key and download buttons. Paste the key into Sortero
 to turn on updates.
 
-Selling it is set up in [`server/README.md`](server/README.md). Free keys for
-yourself or anyone you like come from `tools/licence_admin.py gift`.
-
 ## Safety
 
 - Previews before every change; nothing moves until you confirm.

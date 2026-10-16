@@ -37,7 +37,7 @@ def the_disk():
     found = [d for d in disks if d.size == SIZE and "Virtual" in d.protocol]
     if len(found) != 1:
         sys.exit(f"expected one {SIZE}-byte virtual disk, found {[vars(d) for d in disks]}")
-    return found[0]
+    return found[0], disks
 
 
 def volume(number):
@@ -56,8 +56,11 @@ def volume(number):
 
 
 def check(round_):
-    d = the_disk()
-    keep = R.windows_protected([], [d])
+    d, disks = the_disk()
+    keep = R.windows_protected([], disks)
+    system = [x.device for x in disks if x.id in keep.disks]
+    print(f"  never offered here: {system}")
+    assert system, "the disk Windows runs from must be protected"
     reason = R.why_not(d, keep)
     assert reason and "USB" in reason, f"a virtual disk must never be offered: {reason}"
     print(f"round {round_}: Disk {d.number}, {d.size} bytes, {d.protocol}")

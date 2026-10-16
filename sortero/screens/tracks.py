@@ -20,7 +20,8 @@ FILTERS = [
     ("key", "Not analysed yet (no key)", lambda r: not r.analyzed),
     ("energy", "No energy rating", lambda r: r.energy is None),
     ("artist", "No artist", lambda r: not r.artist),
-    ("repeat", "Artist repeated in the title", lambda r: fixtags.repeats_artist(r)),
+    ("repeat", "Artist in the title", None),
+    ("title_artist", "Title names a different artist", None),
     ("swapped", "Artist and title look swapped", None),
     ("bpm", "No BPM", lambda r: not r.bpm),
     ("bitrate", "Low bitrate (under 192 kbps)",
@@ -111,6 +112,8 @@ class LibraryScreen(Screen):
         self.menu.add_command(label="Edit details…", command=self.edit_details)
         self.menu.add_separator()
         self.menu.add_command(label="Swap artist and title…", command=self.swap_names)
+        self.menu.add_command(label="Take artist and title from the title…",
+                              command=self.credit_from_title)
         self.menu.add_command(label="Send to analysis…", command=self.stage)
         self.menu.add_command(label="Place one by one…", command=self.review_one_by_one)
         self.menu.add_separator()
@@ -137,6 +140,7 @@ class LibraryScreen(Screen):
             ("Stop ignoring selected for genres", lambda: self.ignore_genre(False)),
             None,
             ("Swap artist and title on selected…", self.swap_names),
+            ("Take artist and title from the title on selected…", self.credit_from_title),
             ("Read artist and title from the filename…", self.names_from_file),
             None,
             ("Send selected to analysis…", self.stage),
@@ -168,6 +172,10 @@ class LibraryScreen(Screen):
         if key == "swapped":
             suspect = {r.path for r in (self.app.health or {}).get("swapped", ())}
             return lambda r: r.path in suspect
+        if key in ("repeat", "title_artist"):
+            order = self._order()
+            test = fixtags.artist_in_title if key == "repeat" else fixtags.names_other_artist
+            return lambda r: test(r, order)
         return dict((k, fn) for k, _, fn in FILTERS)[key]
 
     def set_filter(self, key):
@@ -465,6 +473,29 @@ class LibraryScreen(Screen):
         self._write_names(changes,
                           f"Swap artist and title on {ui.plural(len(changes), 'track')}?",
                           "swap-names")
+
+    def _order(self):
+        order = settings.get("name_order")
+        return order if order in NAME_ORDERS else ARTIST_TITLE
+
+    def credit_from_title(self):
+        """For titles shaped "Artist - Title": the artist tag takes the credit
+        and the title keeps the rest. Hraach - Una Mattina, tagged as by Dalal."""
+        recs = self._selected()
+        if not recs:
+            messagebox.showinfo(APP, "Select the tracks whose title starts with the "
+                                     "right artist first.\n\nShow 'Title names a "
+                                     "different artist' to see the ones Sortero found.")
+            return
+        changes = fixtags.credit_from_title(recs, order=self._order())
+        if not changes:
+            messagebox.showinfo(APP, "Nothing to change: none of these titles start "
+                                     "with an artist, like 'Hraach - Una Mattina'.")
+            return
+        self._write_names(changes,
+                          f"Take the artist from the title of "
+                          f"{ui.plural(len(changes), 'track')}?",
+                          "credit-from-title")
 
     def names_from_file(self):
         """When the tags are a mess but the filenames are right."""

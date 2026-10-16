@@ -1,18 +1,22 @@
 """Tag repair: spam removal, artist/title inference, genre normalisation,
 and promoting Mixed In Key data out of the comment field into sortable tags."""
-import os, re, collections
+import os, re, collections, unicodedata
 from .common import (ARTIST_TITLE, is_spam, clean_stem, fold, split_artist_title,
                      parse_mik, to_camelot)
 from .tagio import Track
 from .journal import Journal
-from .organize import canon_genre
+from .organize import canon_genre, _strip_artist_prefix
 
-FIXES = ("energy", "spam", "artist", "genre")
+FIXES = ("energy", "spam", "artist", "repeat", "spelling", "genre")
 FIX_LABELS = {
     "energy": "Copy Mixed In Key's key and energy (like '8A - Energy 6') into the "
               "Grouping tag, a column DJ apps can show and sort by",
     "spam": "Clear download-site spam from Genre and Comment",
     "artist": "Fill in a missing artist or title from the filename",
+    "repeat": "Take the artist's name off the front of the title "
+              "('Nora En Pure - Sphinx' becomes 'Sphinx')",
+    "spelling": "Spell each artist the same way everywhere "
+                "('Christopher Schwarzwalder' becomes 'Christopher Schwarzwälder')",
     "genre": "Tidy genre names into one consistent set",
 }
 
@@ -41,12 +45,124 @@ def tagged_names(r):
             (None if r.title_from_name else r.title) or None)
 
 
+def repeats_artist(r):
+    """The title without the artist's name in front, when the tagged title
+    starts with it ("Nora En Pure - Sphinx" by Nora En Pure); otherwise None.
+
+    Only an exact match counts, ignoring case, accents and punctuation, so a
+    title like "Ipanema - Extended Mix" is never touched.
+    """
+    a, t = tagged_names(r)
+    if not a or not t:
+        return None
+    stripped = _strip_artist_prefix(t, a)
+    return stripped if stripped != t else None
+
+
+# Between the names in an artist tag: "A, B & C feat. D". Kept when splitting,
+# so a tag is put back together exactly as it was apart from the names.
+NAME_SEP = re.compile(r"(\s*(?:,|&|/|;|\bfeat\.?|\bft\.?|\bfeaturing\b|\bvs\.?|"
+                      r"\bx\b|\band\b)\s*)", re.I)
+
+
+def _plain(name):
+    """A name with case, accents, spacing and punctuation taken out."""
+    s = unicodedata.normalize("NFKD", name.casefold())
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return re.sub(r"[^a-z0-9]+", "", s)
+
+
+PLACEHOLDER = re.compile(r"(?i)^\W*(unknown( artist)?|various( artists)?|va)\W*$")
+
+
+def _core(part):
+    """One name out of an artist tag, without a bracket that belongs to the
+    tag around it: in "John Plaza (Remixes by A and B)" the ")" is not B's.
+    A name's own brackets, like "Mira (Berlin)", stay."""
+    name = part.strip()
+    while name.endswith((")", "]")) and name.count(")") + name.count("]") > \
+            name.count("(") + name.count("["):
+        name = name[:-1].rstrip()
+    while name.startswith(("(", "[")) and name.count("(") + name.count("[") > \
+            name.count(")") + name.count("]"):
+        name = name[1:].lstrip()
+    return name
+
+
+def _counts(name):
+    """Is this a name worth comparing? Not a placeholder, and long enough."""
+    return len(_plain(name)) >= 3 and not PLACEHOLDER.match(name)
+
+
+def _same_text(a, b):
+    """Spelled identically, differing only in how accented letters are encoded."""
+    return a != b and unicodedata.normalize("NFC", a) == unicodedata.normalize("NFC", b)
+
+
+def _accents(name):
+    return sum(1 for c in unicodedata.normalize("NFKD", name) if unicodedata.combining(c))
+
+
+def artist_spellings(recs):
+    """{plain name: the spelling to use}, each name in "A, B & C" on its own.
+
+    The accented spelling wins, since accents get lost far more often than
+    added ("Schwarzwalder" for "Schwarzwälder"). Then the commoner one, then
+    one that isn't all capitals or all lower case. Spellings that differ only
+    in how an accented letter is encoded count as one, written the standard
+    (NFC) way, so those get fixed too.
+    """
+    return {key: max(sp, key=lambda n: (_accents(n), sp[n], not n.isupper(),
+                                        not n.islower(), n))
+            for key, sp in _spellings_seen(recs).items()}
+
+
+def _spellings_seen(recs):
+    """{plain name: Counter of the spellings tags use for it}."""
+    seen = collections.defaultdict(collections.Counter)
+    for r in recs:
+        if r.protected:
+            continue
+        a, _ = tagged_names(r)
+        for part in NAME_SEP.split(a or "")[::2]:
+            name = unicodedata.normalize("NFC", _core(part))
+            if _counts(name):
+                seen[_plain(name)][name] += 1
+    return seen
+
+
+def spelled_differently(recs):
+    """[(spelling to use, [other spellings])] for every artist spelled more
+    than one way, most-used first. Encoding-only differences aren't listed:
+    nobody can see them, though the fix still tidies them."""
+    seen, best = _spellings_seen(recs), artist_spellings(recs)
+    out = [(best[k], sorted(n for n in sp if n != best[k]))
+           for k, sp in seen.items() if len(sp) > 1]
+    return sorted(out, key=lambda x: -sum(seen[_plain(x[0])].values()))
+
+
+def respelled(artist, spellings):
+    """The artist tag with each name spelled the collection's way, or None
+    when nothing about it changes."""
+    if not artist:
+        return None
+    parts = NAME_SEP.split(artist)
+    for i in range(0, len(parts), 2):
+        name = _core(parts[i])
+        best = spellings.get(_plain(name)) if _counts(name) else None
+        if best and best != name:
+            parts[i] = parts[i].replace(name, best)
+    new = "".join(parts)
+    return new if new != artist else None
+
+
 def plan(recs, fixes, log=None, order=ARTIST_TITLE):
     """Compute tag changes without writing. Returns list of (rec, {field: (old,new)}).
 
     `order` is how a "A - B" filename is read when filling in a missing name.
     """
     out = []
+    spellings = artist_spellings(recs) if "spelling" in fixes else {}
     for r in recs:
         if r.protected:
             continue
@@ -78,6 +194,16 @@ def plan(recs, fixes, log=None, order=ARTIST_TITLE):
                 ch["artist"] = (None, a)
             if not cur_t and t:
                 ch["title"] = (None, t)
+
+        if "spelling" in fixes and "artist" not in ch:
+            new = respelled(tagged_names(r)[0], spellings)
+            if new:
+                ch["artist"] = (r.artist, new)
+
+        if "repeat" in fixes and "title" not in ch:
+            stripped = repeats_artist(r)
+            if stripped:
+                ch["title"] = (r.title, stripped)
 
         if "genre" in fixes:
             cur = ch.get("genre", (r.genre, r.genre))[1] if "genre" in ch else r.genre

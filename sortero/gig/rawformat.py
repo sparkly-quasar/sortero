@@ -154,8 +154,9 @@ ConvertTo-Json -InputObject $out -Depth 4 -Compress
 
 
 def _powershell(script, run=ffmpeg.run):
+    # stdin closed: PowerShell started with an open input pipe can wait on it forever.
     r = run(["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-             "-Command", script])
+             "-Command", script], stdin=subprocess.DEVNULL)
     if r.returncode != 0:
         raise FormatError((r.stderr or r.stdout).decode("utf-8", "replace").strip()
                           or "PowerShell failed")

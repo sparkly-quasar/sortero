@@ -595,7 +595,7 @@ It can also check automatically on launch (at most once a day) — toggle that i
 Settings.
 ## What's new since v0.18.0
 
-v0.18.0 is the free download. The current version, **v0.32.1**, is what
+v0.18.0 is the free download. The current version, **v0.32.2**, is what
 [Supporter licence](#supporting-sortero) holders get, and what you get by
 [building from source](#building-from-source). It adds:
 

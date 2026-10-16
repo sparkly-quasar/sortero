@@ -1,7 +1,7 @@
 """Scan a DJ collection into track records and compute library health."""
 import os, re, collections
 from dataclasses import dataclass, field
-from . import settings
+from . import settings, tagcache
 from .common import (AUDIO_EXTS, ARTIST_TITLE, TITLE_ARTIST, is_spam, clean_stem, fold,
                      halves, split_artist_title, strip_version_tail, to_camelot)
 from .tagio import Track
@@ -113,6 +113,7 @@ def scan(root, progress=None, order=None):
 
     recs = []
     total = len(paths)
+    cache = tagcache.Session(root)
     for i, p in enumerate(paths):
         if progress and i % 25 == 0:
             progress(i, total)
@@ -120,23 +121,19 @@ def scan(root, progress=None, order=None):
         r = Rec(path=p, rel=rel, ext=os.path.splitext(p)[1].lower(),
                 protected=is_protected(rel))
         try:
-            r.size = os.path.getsize(p)
+            st = tagcache.stamp(os.stat(p))
         except OSError:
-            pass
-        t = Track(p)
-        r.stray_id3 = t.stray_id3
-        if t.ok:
-            r.artist = _clean(t.get("artist"))
-            r.title = _clean(t.get("title"))
-            r.genre = _clean(t.get("genre"))
-            r.key = _clean(t.get("key"))
-            r.bpm = _clean(t.get("bpm"))
-            r.grouping = _clean(t.get("grouping"))
-            r.comment = _clean(t.get("comment"))
-            r.energylevel = _clean(t.get("energylevel"))
-            r.album = _clean(t.get("album"))
-            r.duration = t.length or 0.0
-            r.bitrate = t.bitrate or 0
+            st = None
+        got = cache.get(p, st) if st else None
+        if got is None:
+            got = _read(p)
+            if st:
+                cache.put(p, st, got)
+        r.size = st["size"] if st else 0
+        r.stray_id3 = got["stray"]
+        for f in TAG_FIELDS:
+            setattr(r, f, got["tags"].get(f))
+        r.duration, r.bitrate = got["duration"], got["bitrate"]
         if not r.artist or not r.title:
             a, ti = split_artist_title(clean_stem(p), order)
             if not r.artist and a:
@@ -144,9 +141,25 @@ def scan(root, progress=None, order=None):
             if not r.title and ti:
                 r.title, r.title_from_name = ti, True
         recs.append(r)
+    cache.save()
     if progress:
         progress(total, total)
     return recs
+
+
+# The tags a scan keeps on each Rec, as tagcache stores them.
+TAG_FIELDS = ("artist", "title", "genre", "key", "bpm", "grouping", "comment",
+              "energylevel", "album")
+
+
+def _read(path):
+    """Everything a scan takes from one file, in the form tagcache keeps."""
+    t = Track(path)
+    if not t.ok:
+        return {"stray": t.stray_id3, "tags": {}, "duration": 0.0, "bitrate": 0}
+    return {"stray": t.stray_id3,
+            "tags": {f: _clean(t.get(f)) for f in TAG_FIELDS},
+            "duration": t.length or 0.0, "bitrate": t.bitrate or 0}
 
 
 def _clean(v):

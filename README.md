@@ -503,14 +503,20 @@ are just a title.
 ![Gig prep with every step done: GIG READY](docs/screenshots/gig-prep.png)
 
 **Format a stick as FAT32…** erases a stick as one FAT32 partition on an MBR
-map, on a Mac (Windows and Linux get the settings to use in their own disk
-tools). It's offered in the stick steps: as a quiet link for a new stick, and
-as a button when a check finds the stick itself is the problem. Only removable
-external disks are offered, never an internal disk, the startup disk, or the
-disk your collection or gig library is on, even an ejected one that's still
-plugged in. It shows the disk, its size and the exact command, and erases only
-once you type the stick's name. Just before erasing it reads the disk again,
-and stops if it isn't the stick you chose.
+map, on macOS, Windows and Linux. It's offered in the stick steps: as a quiet
+link for a new stick, and as a button when a check finds the stick itself is
+the problem. Only removable or USB disks are offered, never an internal disk,
+the disk the system runs from, or the disk your collection or gig library is
+on, even an ejected one that's still plugged in. It shows the disk and its
+size, and erases only once you type the stick's name. Just before erasing it
+reads the disk again, and stops if it isn't the stick you chose.
+
+On a Mac it runs `diskutil`, and shows you the exact command. Windows' own
+tools won't make FAT32 above 32 GB, and Linux's need dosfstools, so on those
+two Sortero writes the file system itself, laid out the way Windows would
+(32 KB clusters above 32 GB). Erasing a disk needs administrator rights: Windows
+asks through its usual prompt, Linux through polkit (`pkexec`), and only that
+one step runs with them.
 
 The same check runs from a terminal:
 
@@ -595,7 +601,7 @@ It can also check automatically on launch (at most once a day) — toggle that i
 Settings.
 ## What's new since v0.18.0
 
-v0.18.0 is the free download. The current version, **v0.32.1**, is what
+v0.18.0 is the free download. The current version, **v0.33.0**, is what
 [Supporter licence](#supporting-sortero) holders get, and what you get by
 [building from source](#building-from-source). It adds:
 
@@ -605,8 +611,8 @@ can trust at the venue.
 - Playable copies of only the tracks a player can't play. A small ffmpeg comes
   with the app, so this works out of the box.
 - A rekordbox XML with your cue points, and a plain-folder backup stick.
-- Safe formatting of a stick, and a **GIG READY / NOT READY** check before you
-  leave.
+- Safe formatting of a stick on macOS, Windows and Linux, at any size, and a
+  **GIG READY / NOT READY** check before you leave.
 - Playlists from anywhere: Sortero's own, playlist files, watched folders, any
   playlist file inside your collection, a rekordbox XML, or Mixxx.
 

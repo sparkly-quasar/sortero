@@ -2,14 +2,14 @@
 import os
 from tkinter import ttk, messagebox
 
-from .. import ui, importer, paths, review, settings, headers
+from .. import ui, importer, paths, review, settings, headers, fixtags
 from ..common import human_size, NAME_ORDERS, NAME_ORDER_LABELS, ARTIST_TITLE
 from .base import Screen, APP, needs_genre, is_mix, in_unsorted
 
 
-def count_in(root, folder):
-    p = os.path.join(root or "", folder)
-    return len(importer.gather([p])) if root and os.path.isdir(p) else 0
+def _accent_example(best, others):
+    """A lost accent ("Schwarzwalder") shows the problem faster than capitals."""
+    return any(fixtags._accents(o) != fixtags._accents(best) for o in others)
 
 
 class TodoScreen(Screen):
@@ -115,6 +115,25 @@ class TodoScreen(Screen):
                       "Their artist tag holds the title and the other way about. Check "
                       "the list and swap the ones that are really wrong.",
                       "Show them", lambda: app.show_library("swapped"))
+
+        repeats = [r for r in live if fixtags.repeats_artist(r)]
+        if repeats:
+            r = repeats[0]
+            self._job(f"{ui.plural(len(repeats), 'track')} with the artist repeated "
+                      "in the title",
+                      f"Like “{r.title}” by {r.artist}. Clean tags takes the name off "
+                      "the front, and you'll see every change before anything is "
+                      "written.", "Clean them…", lambda: app.clean_tags("repeat"))
+
+        variants = fixtags.spelled_differently(live)
+        if variants:
+            best, others = next(((b, o) for b, o in variants if _accent_example(b, o)),
+                                variants[0])
+            self._job(f"{ui.plural(len(variants), 'artist')} spelled more than one way",
+                      f"Like “{others[0]}” and “{best}”. Clean tags spells each one "
+                      "the same way everywhere, and you'll see every change before "
+                      "anything is written.", "Clean them…",
+                      lambda: app.clean_tags("spelling"))
 
         votes = h.get("name_order") or {}
         saved = settings.get("name_order")

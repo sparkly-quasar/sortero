@@ -85,7 +85,9 @@ class CleanTagsScreen(ToolScreen):
                "before anything is written.")
     details = ("Download sites put their names into genre and comment tags, which then "
                "clutter your DJ software. Sortero can clear those, take a missing artist "
-               "from the filename, tidy genre names, and copy Mixed In Key's energy rating "
+               "from the filename, take the artist's name off the front of a title "
+               "that repeats it, spell each artist the same way everywhere, tidy "
+               "genre names, and copy Mixed In Key's energy rating "
                "into a field DJ apps display. Tick what you want, preview, then write.\n\n"
                "Sortero reads a filename like 'Deadmau5 - Strobe' as artist first. If "
                "yours are the other way round, say so under 'Filenames are' and the "
@@ -295,7 +297,10 @@ class CleanTagsScreen(ToolScreen):
                     os.path.basename(r.path), fixtags.field_label(field),
                     # a blank cell reads as missing data; say the tag is empty now
                     "(empty)" if old in (None, "") else str(old)[:120],
-                    "(cleared)" if new is None else str(new)[:120]))
+                    "(cleared)" if new is None else
+                    # looks the same, but an accent was stored a different way
+                    str(new)[:100] + "  (accents re-encoded)"
+                    if fixtags._same_text(old or "", new) else str(new)[:120]))
                 shown += 1
         if not changes:
             self.changes = None

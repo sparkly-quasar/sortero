@@ -20,6 +20,7 @@ FILTERS = [
     ("key", "Not analysed yet (no key)", lambda r: not r.analyzed),
     ("energy", "No energy rating", lambda r: r.energy is None),
     ("artist", "No artist", lambda r: not r.artist),
+    ("repeat", "Artist repeated in the title", lambda r: fixtags.repeats_artist(r)),
     ("swapped", "Artist and title look swapped", None),
     ("bpm", "No BPM", lambda r: not r.bpm),
     ("bitrate", "Low bitrate (under 192 kbps)",

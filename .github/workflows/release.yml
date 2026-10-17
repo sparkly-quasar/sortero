@@ -198,6 +198,9 @@ jobs:
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           name: Sortero ${{ github.event.inputs.tag || github.ref_name }}
+          # Tag the commit that was built. Left out, GitHub tags the default
+          # branch, which is wrong for a beta dispatched from another branch.
+          target_commitish: ${{ github.sha }}
           generate_release_notes: true
           prerelease: ${{ contains(github.event.inputs.tag || github.ref_name, '-') }}
           make_latest: ${{ !contains(github.event.inputs.tag || github.ref_name, '-') }}

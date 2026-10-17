@@ -762,6 +762,13 @@ one step. Without one, it tells you where to get one, or you can
 [build the latest from source](#building-from-source). Details are under
 [First run](#first-run).
 
+**Beta builds.** Tick **Offer beta builds** in Settings to be offered new
+features before they're released, as betas (`v0.34.0-beta.1`). They can have
+bugs, so before a gig bring a stick you've checked with a release build too.
+A beta tester is still offered the final release once it's out, and unticking
+the box goes back to releases only, from the next release newer than the beta
+you have. Betas are published as pre-releases, which nothing else offers.
+
 **Your collection and history are safe either way.** Sortero never stores
 anything inside the app. Your music stays in your collection folder, and the
 journals that make every change reversible live in your app-data folder

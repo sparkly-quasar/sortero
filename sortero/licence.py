@@ -191,8 +191,11 @@ def latest_build(timeout=20):
     if not store.SERVER:
         raise LicenceError("This copy of Sortero doesn't know where to get updates.")
     try:
-        body = _post(store.SERVER.rstrip("/") + "/update",
-                     {"key": key, "platform": platform()}, timeout)
+        from . import updates
+        ask = {"key": key, "platform": platform()}
+        if updates.beta():
+            ask["channel"] = "beta"         # the newest build, betas included
+        body = _post(store.SERVER.rstrip("/") + "/update", ask, timeout)
     except urllib.error.HTTPError as e:
         try:
             reason = json.loads(e.read().decode()).get("error")

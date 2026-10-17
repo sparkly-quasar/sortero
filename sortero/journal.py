@@ -1,7 +1,7 @@
 """Undo journal. Every mutating operation records what it did, so it can be reversed."""
 import json, os, shutil, time, uuid
 
-from . import paths
+from . import durable, paths
 
 
 def _ensure():
@@ -51,10 +51,9 @@ class Journal:
         if not self.entries:
             return None
         _ensure()
-        with open(self.path, "w") as fh:
-            json.dump({**self.extra, "id": self.id, "kind": self.kind, "root": self.root,
-                       "started": self.started, "finished": time.time(),
-                       "entries": self.entries}, fh, indent=1)
+        durable.write_json(self.path, {**self.extra, "id": self.id, "kind": self.kind,
+                                       "root": self.root, "started": self.started,
+                                       "finished": time.time(), "entries": self.entries})
         # If testing mode is running, this operation joins its restore point.
         try:
             from . import session
@@ -93,10 +92,7 @@ def lock(journal_file, reason):
     with open(journal_file) as fh:
         d = json.load(fh)
     d["locked"] = reason
-    tmp = journal_file + ".tmp"
-    with open(tmp, "w") as fh:
-        json.dump(d, fh, indent=1)
-    os.replace(tmp, journal_file)
+    durable.write_json(journal_file, d)
 
 
 def revert(journal_file, log=print):

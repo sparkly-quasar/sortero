@@ -13,7 +13,7 @@ tags, so the log alone is enough to put everything back.
 """
 import json, os, time, uuid
 
-from . import paths, settings, journal
+from . import durable, paths, settings, journal
 
 ACTIVE_KEY = "active_session"
 SESSIONS = "sessions"
@@ -110,9 +110,7 @@ def export(sess=None, path=None):
         "exported": time.time(),
         "journals": blocks,
     }
-    with open(path, "w") as fh:
-        json.dump(payload, fh, indent=1)
-    return path
+    return durable.write_json(path, payload)
 
 
 def load(path):

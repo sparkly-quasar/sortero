@@ -1,6 +1,8 @@
 """Erase a USB stick as FAT32 on one MBR partition: every Pioneer and Denon player reads FAT32.
 
-macOS only, through diskutil:
+find(), erase_stick() and plan() work on every platform. On Linux and Windows
+they hand over to rawformat.py, which keeps the same rules; the rest of this
+module is macOS, through diskutil:
 
     diskutil eraseDisk FAT32 <NAME> MBRFormat /dev/diskN
 
@@ -37,7 +39,31 @@ class FormatError(Exception):
 
 
 def available():
-    return sys.platform == "darwin"
+    from . import rawformat
+    return sys.platform == "darwin" or rawformat.supported()
+
+
+def find(keep_paths):
+    """(sticks that may be erased, [(other external disk, why not)]) on this computer."""
+    if sys.platform == "darwin":
+        return candidates(keep_paths)
+    from . import rawformat
+    return rawformat.candidates(keep_paths)
+
+
+def erase_stick(disk, new_label, typed, keep_paths):
+    if sys.platform == "darwin":
+        return erase(disk, new_label, typed, keep_paths)
+    from . import rawformat
+    return rawformat.erase(disk, new_label, typed, keep_paths)
+
+
+def plan(disk, new_label):
+    """What the window says will happen."""
+    if sys.platform == "darwin":
+        return "Sortero will run:  " + " ".join(command(disk, new_label))
+    from . import rawformat
+    return rawformat.plan_text(disk, new_label)
 
 
 def _diskutil(*args):
@@ -63,6 +89,15 @@ class Disk:
     physical: bool = False
     whole: bool = False
     volumes: list = field(default_factory=list)     # names of the volumes on it
+    dev: str = ""                   # Linux and Windows: /dev/sdb, Disk 2
+    serial: str = ""
+    sector: int = 512               # logical sector size
+    readonly: bool = False
+    system: bool = False            # Windows runs from it
+    offline: bool = False
+    number: int = None              # Windows' disk number
+    letters: set = field(default_factory=set)       # Windows drive letters on it
+    mounted: list = field(default_factory=list)     # Linux: (device, mount point)
 
     @property
     def name(self):
@@ -70,8 +105,12 @@ class Disk:
         return self.volumes[0] if self.volumes else self.id
 
     @property
+    def device(self):
+        return self.dev or f"/dev/{self.id}"
+
+    @property
     def identity(self):
-        return (self.id, self.media, self.size)
+        return (self.id, self.media, self.size, self.serial)
 
 
 def disk_from(info, listing=None):

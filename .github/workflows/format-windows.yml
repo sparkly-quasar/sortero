@@ -1,0 +1,24 @@
+name: Formatting on Windows
+
+# Formats a virtual disk the way Sortero formats a stick on Windows, and checks
+# Windows mounts it as FAT32 and chkdsk is happy, whenever the formatter changes.
+on:
+  push:
+    paths:
+      - "sortero/gig/fat32.py"
+      - "sortero/gig/rawformat.py"
+      - "tools/format_windows_check.py"
+      - ".github/workflows/format-windows.yml"
+  workflow_dispatch:
+
+jobs:
+  vhd:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Format a virtual disk and check it
+        run: python -u tools/format_windows_check.py

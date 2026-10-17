@@ -141,6 +141,16 @@ jobs:
           if [ "$RUNNER_OS" = "Windows" ]; then PY=.venv/Scripts/python.exe; else PY=.venv/bin/python; fi
           $PY -m pip install -q --upgrade pip
           $PY -m pip install -q mutagen kaitaistruct keyring certifi pygame-ce sqlcipher3-wheels pyinstaller
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            # pip picks the arm64 sqlcipher3 wheel on this runner, and the
+            # universal2 app can't bundle a one-architecture library. The
+            # project also publishes a universal2 wheel, so swap that in.
+            $PY -m pip download -q --no-deps --only-binary=:all: \
+              --platform macosx_10_13_universal2 --python-version 3.12 \
+              -d sqlcipher-wheel sqlcipher3-wheels
+            $PY -m pip install -q --no-deps --force-reinstall sqlcipher-wheel/*.whl
+            lipo -archs .venv/lib/python3.12/site-packages/sqlcipher3/_sqlite3*.so
+          fi
 
       - name: Build
         shell: bash

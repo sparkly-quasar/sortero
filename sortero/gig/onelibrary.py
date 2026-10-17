@@ -125,8 +125,10 @@ def cue_kind(hot):
 
 
 # ------------------------------------------------------------------- write
-def build(path, tracks, playlists, device_name="", today=""):
-    """Write exportLibrary.db at `path` (devicesql.Track and Playlist lists), all or nothing."""
+def build(path, tracks, playlists, device_name="", today="", artwork=()):
+    """Write exportLibrary.db at `path` (devicesql.Track and Playlist lists), all or nothing.
+
+    `artwork` is [(image id, path on the stick)], as artwork.Collector.table() gives."""
     import time
     today = today or time.strftime("%Y-%m-%d")
     tmp = path + ".sortero-tmp"
@@ -144,6 +146,7 @@ def build(path, tracks, playlists, device_name="", today=""):
         con.executemany("INSERT INTO sort VALUES (?, ?, ?, ?, ?)", SORTS)
         con.executemany("INSERT INTO color VALUES (?, ?)",
                         [(i + 1, n) for i, n in enumerate(COLORS)])
+        con.executemany("INSERT INTO image VALUES (?, ?)", list(artwork))
         lookups = {"artist": {}, "album": {}, "genre": {}, "key": {}}
 
         def intern(table, name, artist=0):
@@ -172,15 +175,16 @@ def build(path, tracks, playlists, device_name="", today=""):
                 "djComment, rating, releaseYear, dateCreated, dateAdded, path, fileName, "
                 "fileSize, fileType, bitrate, bitDepth, samplingRate, djPlayCount, "
                 "isHotCueAutoLoadOn, masterDbId, masterContentId, analysisDataFilePath, "
-                "analysedBits, hasModified) "
+                "analysedBits, hasModified, image_id) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 16, "
-                "?, 0, 1, 0, 0, ?, ?, 0)",
+                "?, 0, 1, 0, 0, ?, ?, 0, ?)",
                 (t.id, t.title, t.title, tempo, t.duration, t.track_number, artist,
                  intern("album", t.album, artist), intern("genre", t.genre),
                  intern("key", t.key), color_id(t.color), t.comment, t.rating, t.year,
                  today, today, t.file_path, name, t.file_size,
                  FILE_TYPES.get(os.path.splitext(name)[1].lower(), 0), t.bitrate,
-                 t.sample_rate, t.analyze_path, ANALYSED if t.beats else 0))
+                 t.sample_rate, t.analyze_path, ANALYSED if t.beats else 0,
+                 t.artwork_id or None))
             for c in t.cues:
                 loop = c.loop_end_ms is not None
                 con.execute(

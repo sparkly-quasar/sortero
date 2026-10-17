@@ -4,7 +4,7 @@ uses), and pyrekordbox's for the analysis files when it's installed."""
 import json, os, struct, unittest
 
 from sortero.gig import anlz, cues, devicesql as D, pdb, profiles as P, usbexport as U
-from sortero.gig import waveform as W
+from sortero.gig import artwork as A, waveform as W
 from sortero.gig import onelibrary as O, rbxml, verify as V
 from tests.audio import write_wav
 from tests.test_tagio import TempDir
@@ -209,6 +209,65 @@ class Waveforms(TempDir):
         self.assertNotIn(b"PWAV", files[".DAT"])
         self.assertIn(b"PVBR", files[".DAT"])
         self.assertIn(b"PCO2", files[".EXT"])
+
+
+class Artwork(TempDir):
+    def test_where_images_go(self):
+        self.assertEqual(A.path(1), "/PIONEER/Artwork/00001/a1.jpg")
+        self.assertEqual(A.path(19, "b", True), "/PIONEER/Artwork/00001/b19_m.jpg")
+        self.assertEqual(A.path(20), "/PIONEER/Artwork/00002/a20.jpg")
+
+    def covered_mp3(self, name, colour):
+        """An MP3 with a 500 x 500 cover of one colour."""
+        import shutil, subprocess
+        from mutagen.id3 import ID3, APIC
+        if not shutil.which("ffmpeg"):
+            self.skipTest("needs ffmpeg")
+        mp3, jpg = self.path(name + ".mp3"), self.path(name + ".jpg")
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i",
+                        "sine=d=1", "-c:a", "libmp3lame", mp3], check=True)
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i",
+                        f"color=c={colour}:s=500x500", "-frames:v", "1", jpg], check=True)
+        tags = ID3()
+        with open(jpg, "rb") as fh:
+            tags.add(APIC(encoding=3, mime="image/jpeg", type=3, desc="", data=fh.read()))
+        tags.save(mp3)
+        return mp3
+
+    def test_on_the_stick_and_in_both_libraries(self):
+        from sortero.gig import tagcopy
+        red1, red2 = self.covered_mp3("red1", "red"), self.covered_mp3("red2", "red")
+        blue = self.covered_mp3("blue", "blue")
+        bare = write_wav(self.path("bare.wav"), seconds=0.5)
+        xml = gig_xml(self.path("gig.xml"), [(1, red1, "A", "X", ""), (2, red2, "B", "X", ""),
+                                             (3, blue, "C", "Y", ""), (4, bare, "D", "Y", "")],
+                      [("01 Set", [1, 2, 3, 4])])
+        stick = self.path("GIG")
+        os.makedirs(stick)
+        res = U.write(stick, xml, log=lambda *a: None)
+        self.assertEqual(res.artwork, 2)                # the two red covers are one image
+        for image_id, px in ((1, A.SMALL), (2, A.SMALL)):
+            for prefix in "ab":
+                for medium, size in ((False, A.SMALL), (True, A.MEDIUM)):
+                    p = os.path.join(stick, *A.path(image_id, prefix, medium).strip("/").split("/"))
+                    with open(p, "rb") as fh:
+                        self.assertEqual(tagcopy.image_size(fh.read())[:2], (size, size), p)
+        from kaitaistruct import KaitaiStream
+        from sortero.vendor.rekordbox_pdb import RekordboxPdb
+        with open(os.path.join(stick, pdb.RELATIVE), "rb") as fh:
+            db = RekordboxPdb(False, KaitaiStream(fh))
+            art = {r.id: r.path.body.text for r in pdb._rows(db, RekordboxPdb.PageType.artwork)}
+            ids = [r.artwork_id for r in pdb._rows(db, RekordboxPdb.PageType.tracks)]
+        self.assertEqual(ids, [1, 1, 2, 0])
+        self.assertEqual(art, {1: A.path(1), 2: A.path(2)})
+        if O.available():
+            con = O._open(os.path.join(stick, "PIONEER", "rekordbox", O.FILE_NAME))
+            try:
+                self.assertEqual(dict(con.execute("SELECT image_id, path FROM image")), art)
+                self.assertEqual([r[0] for r in con.execute(
+                    "SELECT image_id FROM content ORDER BY content_id")], [1, 1, 2, None])
+            finally:
+                con.close()
 
 
 def gig_xml(path, tracks, sets):

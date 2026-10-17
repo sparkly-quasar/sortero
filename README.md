@@ -473,15 +473,15 @@ are just a title.
    every player since the CDJ-900) and OneLibrary (`exportLibrary.db`, which
    the CDJ-3000X, XDJ-AZ, OPUS-QUAD and OMNIS-DUO read instead), plus each
    track's analysis files: the playlists numbered in set order, BPM, key, beat
-   grids, hot cues (named, in the default colours), memory cues, loops and
-   waveforms, the overview and the scrolling detail, in colour and three-band
-   for the players that show them. Then it checks the stick. Cues come
+   grids, hot cues (named, in the default colours), memory cues, loops,
+   waveforms (the overview and the scrolling detail, in colour and three-band
+   for the players that show them) and each track's embedded artwork. Then it
+   checks the stick. Cues come
    from your rekordbox library if you point Sortero at an XML export of it
    (**Use a rekordbox XML…**; Mixed In Key's `rekordbox.xml` works too), then
    from Mixxx, then from Mixed In Key's analysis in the files themselves. It
    refuses a stick that already holds a library Sortero didn't write, and
-   running it again replaces only what Sortero put there. Not yet: artwork.
-   **This is new and hasn't been played
+   running it again replaces only what Sortero put there. **This is new and hasn't been played
    on a real player yet**, so bring a second stick you trust until it has.
    The writers are ports of [openboxxx](https://github.com/sparkly-quasar/openboxxx)'s
    (`export.pdb`, laid out page by page like a real rekordbox export) and

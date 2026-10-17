@@ -744,7 +744,7 @@ class GigScreen(Screen):
         if not messagebox.askokcancel(
                 APP, "Sortero will copy tonight's tracks to the stick and write the rekordbox "
                      "libraries Pioneer players read, with your playlists, beat grids, cue "
-                     "points and waveforms. Then it checks the stick.\n\n"
+                     "points, waveforms and artwork. Then it checks the stick.\n\n"
                      "This is new: it hasn't been tried on a player yet, so bring a second "
                      "stick you trust."):
             return

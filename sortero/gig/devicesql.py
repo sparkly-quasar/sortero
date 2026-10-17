@@ -93,6 +93,7 @@ class Track:
     bpm: float = 0.0
     rating: int = 0                 # 0-5
     color: tuple = None             # (r, g, b), mapped to the nearest palette colour
+    artwork_id: int = 0             # its row in the artwork table, 0 for none
     beats: list = field(default_factory=list)
     cues: list = field(default_factory=list)
 
@@ -137,7 +138,7 @@ def track_row(t, artist, album, genre, key, shift=0, today=""):
     head = struct.pack(
         "<HHIIIIIHHIIIIIIIIIIIIHHHHHHBBHH",
         0x24, shift, TRACK_BITMASK, t.sample_rate, 0, t.file_size & 0xFFFFFFFF, 0,
-        TRACK_U7, TRACK_U8, 0, key, 0, 0, 0, t.bitrate, t.track_number, tempo,
+        TRACK_U7, TRACK_U8, t.artwork_id, key, 0, 0, 0, t.bitrate, t.track_number, tempo,
         genre, album, artist, t.id, 0, 0, t.year, 16, min(t.duration, 0xFFFF),
         TRACK_U26, color_id(t.color), rating(t.rating), TRACK_U29, TRACK_U30)
     strings = [""] * TRACK_STRINGS
@@ -166,6 +167,10 @@ def album_row(id_, artist, name, shift=0):
 
 def genre_row(id_, name):
     return struct.pack("<I", id_) + string(name)
+
+
+def artwork_row(id_, path):
+    return struct.pack("<I", id_) + string(path)
 
 
 def key_row(id_, name):
@@ -242,8 +247,10 @@ def index_page(index, kind, data_pages):
 
 
 # --------------------------------------------------------------------- file
-def build(tracks, playlists, today=None):
-    """export.pdb's bytes, for these tracks and playlists (Track and Playlist lists)."""
+def build(tracks, playlists, today=None, artwork=()):
+    """export.pdb's bytes, for these tracks and playlists (Track and Playlist lists).
+
+    `artwork` is [(id, path on the stick)], as artwork.Collector.table() gives."""
     import time
     today = today or time.strftime("%Y-%m-%d")
     ids = {"artist": {}, "album": {}, "genre": {}, "key": {}}
@@ -277,6 +284,7 @@ def build(tracks, playlists, today=None):
         ALBUMS: table("album", lambda i, n: album_row(i, album_artist.get(i, 0), n,
                                                       ((i - 1) * 0x20) & 0xFFFF)),
         KEYS: table("key", key_row),
+        ARTWORK: [artwork_row(i, p) for i, p in artwork],
         COLORS: [color_row(i + 1, name) for i, (name, _) in enumerate(PALETTE)],
         PLAYLIST_TREE: tree_rows,
         PLAYLIST_ENTRIES: entry_rows,

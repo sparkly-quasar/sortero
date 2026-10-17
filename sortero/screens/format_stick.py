@@ -8,8 +8,8 @@ from ..gig import formatting as F
 from .base import APP
 
 INSTRUCTIONS_ELSEWHERE = (
-    "Sortero can format sticks on a Mac. On Windows or Linux, use your system's disk "
-    "tool and choose:\n\n"
+    "Sortero can't format sticks on this system. Use your system's disk tool and "
+    "choose:\n\n"
     "  • partition table: MBR (also called DOS or Master Boot Record)\n"
     "  • one partition\n"
     "  • file system: FAT32\n\n"
@@ -37,7 +37,7 @@ class FormatDialog(tk.Toplevel):
                              height=4, selectmode="browse")
         f.pack(fill="x")
         for d in sticks:
-            self.tv.insert("", "end", iid=d.id, values=(d.name, f"/dev/{d.id}",
+            self.tv.insert("", "end", iid=d.id, values=(d.name, d.device,
                                                          human_size(d.size), d.media))
         self.tv.bind("<<TreeviewSelect>>", lambda e: self._update())
         hidden = "Internal disks are never listed"
@@ -47,7 +47,7 @@ class FormatDialog(tk.Toplevel):
         ui.WrapLabel(body, style="Small.TLabel", text=hidden + ".").pack(fill="x", pady=(4, 0))
         if not sticks:
             ui.WrapLabel(body, text="No stick that can be formatted is plugged in. Plug it "
-                                    "in, wait for it to appear in Finder, and open this "
+                                    "in, wait for it to appear on your computer, and open this "
                                     "again.").pack(fill="x", pady=(ui.SECTION, 0))
 
         form = ttk.Frame(body)
@@ -66,7 +66,7 @@ class FormatDialog(tk.Toplevel):
 
         self.note = ui.WrapLabel(body, style="Warn.TLabel")
         self.note.pack(fill="x", pady=(ui.SECTION, 0))
-        self.cmd = ttk.Label(body, style="Small.TLabel", font=ui.MONO)
+        self.cmd = ttk.Label(body, style="Small.TLabel", font=ui.MONO, wraplength=660)
         self.cmd.pack(anchor="w", pady=(4, 0))
 
         row = ttk.Frame(body)
@@ -96,8 +96,7 @@ class FormatDialog(tk.Toplevel):
             if d.size > F.BIG:
                 problems.append(f"{d.name} is {human_size(d.size)}, bigger than most USB "
                                 "sticks. Make sure it's the stick.")
-            self.cmd.configure(text=("Sortero will run:  " + " ".join(F.command(d, name)))
-                               if name else "")
+            self.cmd.configure(text=F.plan(d, name) if name else "")
         else:
             self.cmd.configure(text="")
         self.note.configure(text=" ".join(problems))
@@ -113,7 +112,7 @@ class FormatDialog(tk.Toplevel):
 
         def work(progress, log):
             try:
-                return True, F.erase(d, new, typed, keep)
+                return True, F.erase_stick(d, new, typed, keep)
             except F.FormatError as e:
                 return False, str(e)
 
@@ -125,7 +124,7 @@ class FormatDialog(tk.Toplevel):
                 return
             self.destroy()
             label = F.label(new)
-            messagebox.showinfo(APP, f"/dev/{d.id} is now FAT32 on one MBR partition, "
+            messagebox.showinfo(APP, f"{d.device} is now FAT32 on one MBR partition, "
                                      f"named {label}.")
             if self.on_done:
                 self.on_done(label, output)
@@ -141,7 +140,7 @@ def open_for(app, keep_paths, on_done=None):
 
     def work(progress, log):
         try:
-            return F.candidates(keep_paths), None
+            return F.find(keep_paths), None
         except F.FormatError as e:
             return None, str(e)
 

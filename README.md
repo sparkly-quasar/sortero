@@ -472,18 +472,23 @@ are just a title.
    Pioneer players read, the Device Library (`PIONEER/rekordbox/export.pdb`,
    every player since the CDJ-900) and OneLibrary (`exportLibrary.db`, which
    the CDJ-3000X, XDJ-AZ, OPUS-QUAD and OMNIS-DUO read instead), plus each
-   track's analysis file: the playlists numbered in set order, BPM, key, beat
-   grids, hot cues, memory cues and loops. Then it checks the stick. Cues come
+   track's analysis files: the playlists numbered in set order, BPM, key, beat
+   grids, hot cues (named, in the default colours), memory cues, loops and
+   waveforms, the overview and the scrolling detail, in colour and three-band
+   for the players that show them. Then it checks the stick. Cues come
    from your rekordbox library if you point Sortero at an XML export of it
    (**Use a rekordbox XML…**; Mixed In Key's `rekordbox.xml` works too), then
    from Mixxx, then from Mixed In Key's analysis in the files themselves. It
    refuses a stick that already holds a library Sortero didn't write, and
-   running it again replaces only what Sortero put there. Not yet: waveforms
-   (the players show none) and artwork. **This is new and hasn't been played
+   running it again replaces only what Sortero put there. Not yet: artwork.
+   **This is new and hasn't been played
    on a real player yet**, so bring a second stick you trust until it has.
    The writers are ports of [openboxxx](https://github.com/sparkly-quasar/openboxxx)'s
    (`export.pdb`, laid out page by page like a real rekordbox export) and
-   follow [rbxport](https://github.com/chrisle/rbxport)'s (OneLibrary).
+   follow [rbxport](https://github.com/chrisle/rbxport)'s (OneLibrary, and
+   the analysis files' layout and waveforms, which it measured against
+   rekordbox's own). The waveforms are approximations of rekordbox's: close
+   in shape and colour, not identical.
 
    **Using rekordbox or Engine DJ instead?** **Make the playlists file for it**
    writes a rekordbox XML of the same set, and the step shows how to get it

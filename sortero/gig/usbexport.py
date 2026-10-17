@@ -4,7 +4,8 @@ What rekordbox's own export writes, and what every Pioneer player since the
 CDJ-900 reads in rekordbox mode:
 
   PIONEER/rekordbox/export.pdb                    the database (devicesql.py)
-  PIONEER/USBANLZ/P001/00000001/ANLZ0000.DAT      each track's grid and cues (anlz.py)
+  PIONEER/USBANLZ/P001/00000001/ANLZ0000.DAT      each track's grid, cues and waveforms
+                     .../ANLZ0000.EXT, .2EX         (anlz.py, waveform.py)
   Contents/Artist/Album/file.mp3                  the audio
 
 The input is a rekordbox XML, the same one Gig prep writes for rekordbox to
@@ -21,14 +22,14 @@ files and anything else on the stick is left alone.
 
 OneLibrary is what the CDJ-3000X, XDJ-AZ, OPUS-QUAD and OMNIS-DUO read instead
 of export.pdb; it's written whenever Sortero has SQLCipher, which the app
-always carries. Not written yet: waveforms and artwork. Nothing here has been
+always carries. Not written yet: artwork. Nothing here has been
 played on a real player yet.
 """
 import json, os, shutil, time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 
-from . import anlz, devicesql, onelibrary
+from . import anlz, devicesql, onelibrary, waveform
 from .backup import TMP, _copy, fat_name
 from .cues import Grid, Mark, location_path, _float
 from .pdb import EXTRA, RELATIVE
@@ -59,6 +60,7 @@ class Result:
     removed: list = field(default_factory=list)
     missing: list = field(default_factory=list)
     onelibrary: bool = False
+    no_waveform: list = field(default_factory=list)  # (title, why)
 
 
 def _int(v):
@@ -230,7 +232,14 @@ def write(stick, xml_path, progress=None, log=print):
         else:
             _copy(src, dest)
             res.copied.append(rel)
-        _put(stick, t.analyze_path, anlz.dat(t.file_path, t.beats, t.cues))
+        try:
+            columns = waveform.analyse(dest)
+        except waveform.WaveformError as e:
+            columns = None
+            res.no_waveform.append((t.title, str(e)))
+        base = t.analyze_path[:-len(".DAT")]
+        for ext, data in anlz.files(t.file_path, t.beats, t.cues, columns).items():
+            _put(stick, base + ext, data)
         if progress:
             progress(i, total)
     # The databases last: until they're there, no player sees a half-written library.

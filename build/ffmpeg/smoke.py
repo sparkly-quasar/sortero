@@ -5,7 +5,9 @@
 
 Makes a 24-bit 96 kHz WAV, converts it to MP3 320 and to 16-bit AIFF at
 44.1 kHz with the same options Gig prep uses (sortero/gig/convert.py), reads
-both back with ffprobe, and runs the decode test sortero/gig/verify.py runs.
+both back with ffprobe, runs the decode test sortero/gig/verify.py runs, and
+decodes to an AIFF on a pipe the way the main stick's waveforms are made
+(sortero/gig/waveform.py).
 """
 import json, math, os, struct, subprocess, sys, tempfile, wave
 
@@ -50,7 +52,13 @@ def main(folder):
         s = json.loads(r.stdout)["streams"][0]
         assert (s["codec_name"], s["sample_rate"]) == (codec, "44100"), s
         run("-xerror", "-i", path, "-map", "0:a:0", "-f", "null", "-")
-    print(f"ok: {ffmpeg} converts, resamples with soxr, and decodes")
+    # The waveforms' decode: mono 12 kHz AIFF to stdout (there's no raw-PCM muxer).
+    r = subprocess.run([ffmpeg, "-v", "error", "-nostdin", "-i", mp3, "-vn", "-map_metadata",
+                        "-1", "-ac", "1", "-ar", "12000", "-c:a", "pcm_s16be", "-write_id3v2",
+                        "0", "-f", "aiff", "-"], capture_output=True)
+    assert r.returncode == 0 and r.stdout[:4] == b"FORM" and b"SSND" in r.stdout[:200], r.stderr
+    assert len(r.stdout) > 12000 * 2 * 1.9, len(r.stdout)        # two seconds of samples
+    print(f"ok: {ffmpeg} converts, resamples with soxr, decodes, and decodes for waveforms")
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ uses), and pyrekordbox's for the analysis files when it's installed."""
 import json, os, struct, unittest
 
 from sortero.gig import anlz, cues, devicesql as D, pdb, profiles as P, usbexport as U
+from sortero.gig import waveform as W
 from sortero.gig import onelibrary as O, rbxml, verify as V
 from tests.audio import write_wav
 from tests.test_tagio import TempDir
@@ -134,6 +135,82 @@ class Analysis(unittest.TestCase):
                          [(1, 120, 0xFFFFFFFF), (3, 90000, 91714)])
 
 
+class Waveforms(TempDir):
+    def tones(self):
+        """20 s of 60 Hz, 20 s of 1 kHz, 20 s of noise above 4 kHz."""
+        import shutil, subprocess
+        if not shutil.which("ffmpeg"):
+            self.skipTest("needs ffmpeg")
+        p = self.path("bands.wav")
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "sine=f=60:d=20",
+                        "-f", "lavfi", "-i", "sine=f=1000:d=20", "-f", "lavfi", "-i",
+                        "anoisesrc=d=20:c=white:a=0.5", "-filter_complex",
+                        "[2]highpass=f=4000[n];[0][1][n]concat=n=3:v=0:a=1", "-ac", "1", p],
+                       check=True)
+        return p
+
+    def test_bands_follow_the_sound(self):
+        from statistics import mean
+        cols = W.analyse(self.tones())
+        self.assertEqual(len(cols), 60 * W.PER_SECOND)
+        lows, mids, highs = cols[300:2700], cols[3300:5700], cols[6300:8700]
+        strongest = [max(range(3), key=lambda k: mean(c[k] for c in part))
+                     for part in (lows, mids, highs)]
+        self.assertEqual(strongest, [0, 1, 2])
+        self.assertEqual([W._pwv5_colour(part[100]).index(7) if 7 in W._pwv5_colour(part[100])
+                          else 1 for part in (lows, mids, highs)], [0, 1, 2])
+
+    def test_rekordboxs_floors_and_ceilings(self):
+        silent, loud = [(0, 0, 0, 0)] * 300, [(255, 255, 255, 255)] * 300
+        self.assertEqual(set(W.pwav(silent)), {W.PWAV_FLOOR})
+        self.assertEqual(set(W.pwv2(silent)), {W.PWV2_FLOOR})
+        self.assertEqual(max(b & 0x1F for b in W.pwav(loud)), W.PWAV_CEILING)
+        self.assertEqual(max(W.pwv2(loud)), W.PWV2_CEILING)
+        self.assertEqual(max(b & 0x1F for b in W.pwv3(loud)), W.DETAIL_CEILING)
+        self.assertEqual((len(W.pwav(loud)), len(W.pwv2(loud)), len(W.pwv4(loud)),
+                          len(W.pwv6(loud))), (400, 100, 1200 * 6, 1200 * 3))
+
+    def test_a_hot_cue_entry_matches_rekordboxs(self):
+        # rbxport's test vector, from a rekordbox export: hot cue A at 83,032 ms
+        # (the colour bytes differ: that cue had colour 46, this one the default)
+        entry = anlz.pcp2(D.Cue(83032, 0)).hex()
+        self.assertEqual(entry[:88], "50435032000000100000005800000001010003e800014458ffffffff"
+                                     "00010000000000000000000000000000")
+        self.assertEqual(entry[88:96], "2bff0017")      # A's default red
+
+    @unittest.skipUnless(AnlzFile, "needs pyrekordbox")
+    def test_the_three_files_as_rekordbox_lays_them_out(self):
+        cols = [(i % 256, 100, 50, 200) for i in range(9000)]
+        cs = [D.Cue(0, 0, None, "Intro"), D.Cue(15000, 3), D.Cue(30000), D.Cue(45000, 1, 48750)]
+        files = anlz.files("/Contents/a.wav", [], cs, cols)
+        tags = {}
+        for ext, data in files.items():
+            p = self.path("ANLZ0000" + ext)
+            with open(p, "wb") as fh:
+                fh.write(data)
+            tags[ext] = AnlzFile.parse_file(p)
+        self.assertEqual([t.type for t in tags[".DAT"].tags],
+                         ["PPTH", "PVBR", "PQTZ", "PWAV", "PWV2", "PCOB", "PCOB"])
+        self.assertEqual([t.type for t in tags[".EXT"].tags],
+                         ["PPTH", "PWV3", "PCOB", "PCOB", "PCO2", "PCO2", "PWV5", "PWV4"])
+        self.assertEqual([t.type for t in tags[".2EX"].tags], ["PPTH", "PWV7", "PWV6"])
+        dat_hot = tags[".DAT"].getall_tags("PCOB")[0].content.entries
+        self.assertEqual([e.hot_cue for e in dat_hot], [1, 2])          # A and B
+        ext_hot = tags[".EXT"].getall_tags("PCOB")[0].content.entries
+        self.assertEqual([e.hot_cue for e in ext_hot], [4])             # D
+        named = tags[".EXT"].getall_tags("PCO2")[0].content.entries
+        self.assertEqual([(e.hot_cue, e.comment) for e in named],
+                         [(1, "Intro"), (2, ""), (4, "")])
+        self.assertEqual(tags[".EXT"].get_tag("PWV3").content.len_entries, 9000)
+
+    def test_without_waveforms_the_grid_and_cues_still_go(self):
+        files = anlz.files("/Contents/a.mp3", [], [D.Cue(1000, 4)])
+        self.assertEqual(sorted(files), [".DAT", ".EXT"])
+        self.assertNotIn(b"PWAV", files[".DAT"])
+        self.assertIn(b"PVBR", files[".DAT"])
+        self.assertIn(b"PCO2", files[".EXT"])
+
+
 def gig_xml(path, tracks, sets):
     """A playlists file like Gig prep's: tracks [(id, file, title, artist, extra xml)]."""
     rows = []
@@ -186,12 +263,18 @@ class Stick(TempDir):
         main = V.check_main(self.stick, NXS2, ["01 Warmup", "02 Peak"])
         self.assertEqual(main.level, V.PASS, main.summary)
 
-    def test_every_track_gets_its_analysis_file(self):
-        U.write(self.stick, self.xml, log=lambda *a: None)
+    def test_every_track_gets_its_analysis_files(self):
+        import shutil
+        res = U.write(self.stick, self.xml, log=lambda *a: None)
+        waves = bool(shutil.which("ffmpeg"))
+        self.assertEqual(len(res.no_waveform), 0 if waves else 3)
         for tid in (1, 2, 3):
-            p = os.path.join(self.stick, *U.anlz_path(tid).strip("/").split("/"))
-            with open(p, "rb") as fh:
-                self.assertEqual(fh.read(4), b"PMAI")
+            base = os.path.join(self.stick, *U.anlz_path(tid).strip("/").split("/"))[:-4]
+            for ext in (".DAT", ".EXT") + ((".2EX",) if waves else ()):
+                with open(base + ext, "rb") as fh:
+                    self.assertEqual(fh.read(4), b"PMAI", ext)
+            with open(base + ".DAT", "rb") as fh:
+                self.assertEqual(b"PWAV" in fh.read(), waves)
 
     @unittest.skipUnless(O.available(), "needs sqlcipher3")
     def test_onelibrary_for_the_newest_players(self):

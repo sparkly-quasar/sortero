@@ -743,10 +743,10 @@ class GigScreen(Screen):
             return
         if not messagebox.askokcancel(
                 APP, "Sortero will copy tonight's tracks to the stick and write the rekordbox "
-                     "libraries Pioneer players read, with your playlists, beat grids and cue "
-                     "points. Then it checks the stick.\n\n"
-                     "Waveforms and artwork aren't written yet. And this is new: it hasn't "
-                     "been tried on a player yet, so bring a second stick you trust."):
+                     "libraries Pioneer players read, with your playlists, beat grids, cue "
+                     "points and waveforms. Then it checks the stick.\n\n"
+                     "This is new: it hasn't been tried on a player yet, so bring a second "
+                     "stick you trust."):
             return
 
         def work(progress, log):
@@ -769,6 +769,13 @@ class GigScreen(Screen):
                     APP, f"{ui.plural(len(result.missing), 'track')} in the playlists file "
                          "couldn't be found on this computer, so they're not on the stick:\n\n"
                          + "\n".join(t for t, _ in result.missing[:10]))
+            if result.no_waveform:
+                messagebox.showwarning(
+                    APP, f"{ui.plural(len(result.no_waveform), 'track')} couldn't be decoded "
+                         "for a waveform, so the players will show none for "
+                         f"{'it' if len(result.no_waveform) == 1 else 'them'} (the grid and "
+                         "cues are there):\n\n"
+                         + "\n".join(f"{t}: {why}" for t, why in result.no_waveform[:10]))
             self._verify(stick, verify.MAIN, True,
                          rbxml.playlist_names(sets) if sets else None)
 

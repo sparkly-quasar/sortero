@@ -3,7 +3,7 @@ import os, shutil
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from .. import ui, auth, settings, paths, session
+from .. import ui, auth, settings, paths, session, updates
 from ..common import human_size
 from ..organize import QUARANTINE
 from ..version import __version__
@@ -47,6 +47,10 @@ class SettingsScreen(Screen):
                         command=lambda: settings.set("check_updates_on_launch",
                                                      app.auto_update.get())
                         ).pack(side="left")
+        # Beside the other box rather than on a row of its own: see the note above.
+        self.beta = tk.BooleanVar(value=bool(settings.get("updates_beta")))
+        ttk.Checkbutton(row, text="Offer beta builds", variable=self.beta,
+                        command=self._beta_changed).pack(side="left", padx=(ui.SECTION, 0))
         ttk.Button(row, text="Check now",
                    command=lambda: app.check_updates(quiet=False)).pack(side="right")
         ttk.Label(self, text=f"You're running Sortero {__version__}.",
@@ -109,6 +113,22 @@ class SettingsScreen(Screen):
                                                                         padx=(ui.GAP, 0))
         self._refresh_conn()
         self._refresh_quarantine()
+
+    def _beta_changed(self):
+        on = self.beta.get()
+        if on and not messagebox.askyesno(
+                APP, "Beta builds have new features before they're released, for people "
+                     "happy to try them and say what goes wrong. They can have bugs.\n\n"
+                     "Sortero will offer each new beta as an update, and the final "
+                     "release when it's out. Before a gig, bring a stick you've checked "
+                     "with a release build too.\n\nOffer beta builds?", parent=self):
+            self.beta.set(False)
+            return
+        settings.set("updates_beta", on)
+        if not on and updates.is_prerelease(__version__):
+            messagebox.showinfo(APP, f"You're on a beta ({__version__}). Sortero will "
+                                     "offer the next release once it's newer than this "
+                                     "beta.", parent=self)
 
     def _section(self, title, first=False):
         ttk.Label(self, text=title, style="Heading.TLabel").pack(

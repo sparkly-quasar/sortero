@@ -7,7 +7,8 @@ Five steps, in the order a gig is prepared:
 
   set     Your set: the playlists, in play order
   tracks  Make the tracks gig-safe: check every track, copy the ones that won't play
-  main    Main stick: the playlists into rekordbox or Engine DJ, onto the stick, checked
+  main    Main stick: Sortero writes the set to it for Pioneer players (usbexport),
+          or rekordbox / Engine DJ do from the playlists file; then it's checked
   backup  Backup stick: numbered folders on a second stick, checked (recommended)
   ready   Ready to leave: GIG READY once the main stick passes
 
@@ -50,6 +51,7 @@ class State:
     playlists: list = field(default_factory=list)   # chosen, in set order
     track_count: int = 0
     apps: str = "rekordbox"     # where the main stick's library comes from, for wording
+    direct: bool = False        # Sortero writes the main stick itself (Pioneer players chosen)
     items: list = None          # convert.plan's result, once the tracks are checked
     copied: bool = False        # convert.run has finished on these items
     sets: list = None           # [(playlist, [paths])] as read when the tracks were checked
@@ -171,7 +173,7 @@ def steps(st):
         out.append(Step("tracks", title, text, DONE))
 
     # 3. Main stick
-    title = f"Main stick ({st.apps})"
+    title = "Main stick" if st.direct else f"Main stick ({st.apps})"
     main_ok = bool(st.main and st.main.ready)
     if not tracks_done:
         out.append(Step("main", title, "", WAITING))
@@ -181,6 +183,13 @@ def steps(st):
         text = st.main.verdict + (f" {st.main.first_problem}" if st.main.first_problem
                                   else "")
         out.append(Step("main", title, text, NEXT, "Check the main stick again…"))
+    elif st.direct and not st.earlier:
+        text = ("Sortero writes the set to the stick for Pioneer players: the playlists in "
+                "set order, beat grids and cue points. No rekordbox needed. Then it checks "
+                "the stick.")
+        if "Engine DJ" in st.apps:
+            text += " Denon players need Engine DJ to export it (see below)."
+        out.append(Step("main", title, text, NEXT, "Write the main stick…"))
     elif not st.xml_path and not st.earlier:
         out.append(Step("main", title, f"Make the playlists file, then put the set on the "
                         f"stick with {st.apps}. The steps show here.", NEXT,

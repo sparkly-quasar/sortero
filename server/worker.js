@@ -10,8 +10,9 @@
  *   GET  /downloads                  Download page for returning buyers: paste key.
  *   POST /downloads                  (form: key) the download buttons for a key.
  *   POST /file                       (form: key, platform) redirects to the build.
- *   POST /update                     (JSON: key, platform) newest build, for the
- *                                    app's updater.
+ *   POST /update                     (JSON: key, platform, channel?) newest build,
+ *                                    for the app's updater. channel "beta" also
+ *                                    considers pre-releases (tags like v0.34.0-beta.1).
  *   POST /check                      (JSON: key) signed "subscription paid until".
  *   POST /webhook                    Stripe's checkout.session.completed: saves the
  *                                    key on the payment, so it can be resent.
@@ -134,7 +135,7 @@ async function update(request, env) {
   if (!body) return json({ error: "Send JSON with a key and platform." }, 400);
   const ent = await entitlement(env, String(body.key || "").replace(/\s+/g, ""));
   if (!ent.ok) return json({ error: ent.why }, 403);
-  const build = await latestBuild(env, String(body.platform || ""));
+  const build = await latestBuild(env, String(body.platform || ""), body.channel === "beta");
   if (!build) return json({ error: "There's no build for this platform yet." }, 404);
   return json({
     version: build.version, notes: build.notes, name: build.asset.name, size: build.asset.size,
@@ -274,16 +275,49 @@ function githubHeaders(env, accept = "application/vnd.github+json") {
   };
 }
 
-async function latestBuild(env, platform) {
+/**
+ * The newest build for a platform. GitHub's "latest" never includes a
+ * pre-release, which is what everyone gets; `beta` looks through recent
+ * releases, pre-releases too, and takes the newest, so a beta tester still gets
+ * the final release once it's out (0.34.0 is newer than 0.34.0-beta.2).
+ */
+async function latestBuild(env, platform, beta = false) {
   const wanted = PLATFORMS[platform];
   if (!wanted) return null;
   if (!/^[\w.-]+\/[\w.-]+$/.test(String(env.BUILDS_REPO || ""))) throw new Error("BUILDS_REPO isn't set");
-  const res = await fetch(`${GITHUB}/repos/${env.BUILDS_REPO}/releases/latest`, { headers: githubHeaders(env) });
+  const url = `${GITHUB}/repos/${env.BUILDS_REPO}/releases${beta ? "?per_page=30" : "/latest"}`;
+  const res = await fetch(url, { headers: githubHeaders(env) });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`GitHub ${res.status}`);
-  const release = await res.json();
-  const asset = (release.assets || []).find((a) => a.name.endsWith(".zip") && wanted.pattern.test(a.name));
-  return asset ? { version: release.tag_name, notes: release.body || "", asset } : null;
+  const found = await res.json();
+  const releases = beta
+    ? (Array.isArray(found) ? found : []).filter((r) => !r.draft)
+        .sort((a, b) => compareVersions(b.tag_name, a.tag_name))
+    : [found];
+  for (const release of releases) {
+    const asset = (release.assets || []).find((a) => a.name.endsWith(".zip") && wanted.pattern.test(a.name));
+    if (asset) return { version: release.tag_name, notes: release.body || "", asset };
+  }
+  return null;
+}
+
+const STAGES = { a: 0, alpha: 0, b: 1, beta: 1, rc: 2 };
+
+/** v1.2.3 > v1.2.3-rc.1 > v1.2.3-beta.2 > v1.2.3-alpha (as sortero/updates.py parse()). */
+function versionKey(tag) {
+  const m = /^v?(\d+(?:\.\d+){0,2})(?:[-.]?(alpha|beta|rc|a|b)\.?(\d*))?/i.exec(String(tag || "").trim());
+  if (!m) return [-1];
+  const nums = m[1].split(".").map(Number).concat([0, 0]).slice(0, 3);
+  return m[2] ? [...nums, 0, STAGES[m[2].toLowerCase()], Number(m[3] || 0)] : [...nums, 1, 0, 0];
+}
+
+function compareVersions(a, b) {
+  const x = versionKey(a), y = versionKey(b);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    const d = (x[i] ?? -1) - (y[i] ?? -1);
+    if (d) return d;
+  }
+  return 0;
 }
 
 /** GitHub answers an asset download with a redirect to a link that expires in minutes. */

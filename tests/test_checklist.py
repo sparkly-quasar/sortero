@@ -60,6 +60,18 @@ class Steps(unittest.TestCase):
         self.assertEqual(statuses(st)["backup"], K.WAITING)
         self.assertEqual(step(st, "backup").button, "Write the backup stick…")
 
+    def test_for_pioneer_players_sortero_writes_the_main_stick(self):
+        st = K.State(["Warmup"], 2, items=[item(C.READY)], apps="rekordbox", direct=True)
+        nxt = step(st, "main")
+        self.assertEqual((nxt.status, nxt.button), (K.NEXT, "Write the main stick…"))
+        self.assertEqual(nxt.title, "Main stick")
+        self.assertIn("No rekordbox needed", nxt.text)
+        self.assertNotIn("Engine DJ", nxt.text)
+        st.apps = "rekordbox / Engine DJ"
+        self.assertIn("Denon players need Engine DJ", step(st, "main").text)
+        st.main = stick(True)
+        self.assertEqual(step(st, "main").status, K.DONE)
+
     def test_after_making_the_xml_check_the_main_stick(self):
         st = K.State(["Warmup"], 2, items=[item(C.READY)], xml_path="/lib/x.xml")
         nxt = K.next_step(K.steps(st))

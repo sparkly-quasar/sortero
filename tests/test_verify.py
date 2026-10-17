@@ -39,6 +39,21 @@ class Export(unittest.TestCase):
             pdb.read(t.name)
 
 
+def write_one_library(path, export):
+    """A OneLibrary listing what an export.pdb lists. Without SQLCipher, only the
+    file's being there can be checked, so a placeholder does."""
+    from sortero.gig import devicesql, onelibrary
+    if not onelibrary.available():
+        with open(path, "wb") as fh:
+            fh.write(b"\0" * 64)
+        return
+    ids = {t.id for t in export.tracks}
+    lists = [devicesql.Playlist(i, name, tracks=[t for t in tids if t in ids])
+             for i, (name, tids) in enumerate(export.playlists.items(), 1)]
+    onelibrary.build(path, [devicesql.Track(t.id, t.title, t.path, file_size=t.size)
+                            for t in export.tracks], lists)
+
+
 def mp3(path, size=None, seconds=1):
     """A real MP3, padded to an exact size when asked."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -61,11 +76,9 @@ class Stick(TempDir):
         self.stick = self.path("GIG")
         os.makedirs(os.path.join(self.stick, "PIONEER", "rekordbox"))
         shutil.copy(FIXTURE, os.path.join(self.stick, pdb.RELATIVE))
-        # rekordbox 7.2.11+ writes OneLibrary beside it. It's encrypted, so its
-        # contents are never read: being there is what's checked.
+        # rekordbox 7.2.11+ writes OneLibrary beside it, listing the same tracks.
         self.one_library = os.path.join(self.stick, "PIONEER", "rekordbox", "exportLibrary.db")
-        with open(self.one_library, "wb") as fh:
-            fh.write(b"\0" * 64)
+        write_one_library(self.one_library, pdb.read(FIXTURE))
         for t in pdb.read(FIXTURE).tracks:
             mp3(pdb.on_stick(self.stick, t.path), t.size)
 
@@ -186,10 +199,37 @@ class Stick(TempDir):
         c = self.check(self.run_check(), "rekordbox")
         self.assertEqual(c.level, V.FAIL)
         self.assertTrue(any("No Device Library" in d for d in c.details))
-        # a CDJ-3000X reads only OneLibrary, whose contents can't be checked
+        # a CDJ-3000X reads only OneLibrary: its tracks are checked when Sortero
+        # can open it, and only its being there otherwise
+        from sortero.gig import onelibrary
         c = self.check(self.run_check(P.get("cdj-3000x")), "rekordbox")
-        self.assertEqual(c.level, V.WARN)
-        self.assertIn("encrypted", c.summary)
+        if onelibrary.available():
+            self.assertEqual(c.level, V.PASS, c.summary)
+            self.assertIn("2 tracks in OneLibrary", c.summary)
+        else:
+            self.assertEqual(c.level, V.WARN)
+            self.assertIn("encrypted", c.summary)
+
+    @unittest.skipUnless(__import__("sortero.gig.onelibrary").gig.onelibrary.available(),
+                         "needs sqlcipher3")
+    def test_onelibrary_is_read_too(self):
+        export = pdb.read(FIXTURE)
+        # a track only OneLibrary lists, not on the stick
+        export.tracks.append(pdb.Track(99, "/Contents/Gone/Gone.mp3", "Gone", 1000))
+        write_one_library(self.one_library, export)
+        c = self.check(self.run_check(), "rekordbox")
+        self.assertEqual(c.level, V.FAIL)
+        self.assertIn("missing: Contents/Gone/Gone.mp3 (Gone)", c.details)
+        self.assertIn("list different tracks", c.summary)
+
+    @unittest.skipUnless(__import__("sortero.gig.onelibrary").gig.onelibrary.available(),
+                         "needs sqlcipher3")
+    def test_a_damaged_onelibrary(self):
+        with open(self.one_library, "wb") as fh:
+            fh.write(b"\0" * 64)
+        c = self.check(self.run_check(), "rekordbox")
+        self.assertEqual(c.level, V.FAIL)
+        self.assertIn("OneLibrary", c.summary)
 
     def test_a_track_missing_from_the_export(self):
         os.remove(os.path.join(self.stick, "Contents", "Loopmasters", "UnknownAlbum",

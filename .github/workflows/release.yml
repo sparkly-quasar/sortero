@@ -1,7 +1,10 @@
 name: Build and release
 
 # Push a tag like v0.1.0 to build all three platforms and attach them to a
-# GitHub release. Also runnable by hand from the Actions tab, either to
+# GitHub release. A tag with a suffix, like v0.34.0-beta.1, is published as a
+# pre-release in both places: GitHub's "latest" never includes one, so only
+# copies that asked for beta builds are offered it (sortero/updates.py, and the
+# licence server's channel "beta"). Also runnable by hand from the Actions tab, either to
 # rebuild a tag that exists or to cut a new one from the branch you run it on.
 on:
   push:
@@ -137,7 +140,7 @@ jobs:
           python -m venv .venv
           if [ "$RUNNER_OS" = "Windows" ]; then PY=.venv/Scripts/python.exe; else PY=.venv/bin/python; fi
           $PY -m pip install -q --upgrade pip
-          $PY -m pip install -q mutagen kaitaistruct keyring certifi pygame-ce pyinstaller
+          $PY -m pip install -q mutagen kaitaistruct keyring certifi pygame-ce sqlcipher3-wheels pyinstaller
 
       - name: Build
         shell: bash
@@ -186,6 +189,8 @@ jobs:
           name: Sortero ${{ github.event.inputs.tag || github.ref_name }}
           files: artifacts/**/*.zip
           fail_on_unmatched_files: true
+          prerelease: ${{ contains(github.event.inputs.tag || github.ref_name, '-') }}
+          make_latest: ${{ !contains(github.event.inputs.tag || github.ref_name, '-') }}
           body: Sortero ${{ github.event.inputs.tag || github.ref_name }}
 
       - name: Publish release notes publicly
@@ -194,7 +199,10 @@ jobs:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           name: Sortero ${{ github.event.inputs.tag || github.ref_name }}
           generate_release_notes: true
+          prerelease: ${{ contains(github.event.inputs.tag || github.ref_name, '-') }}
+          make_latest: ${{ !contains(github.event.inputs.tag || github.ref_name, '-') }}
           body: |
+            ${{ contains(github.event.inputs.tag || github.ref_name, '-') && '**This is a beta**, for trying new features before they are released. It can have bugs: before a gig, bring a stick checked with a release build too. Sortero offers betas only when *Offer beta builds* is ticked in Settings.' || '' }}
             ${{ (github.event.inputs.tag || github.ref_name) == env.LAST_PUBLIC && 'This is the last release with public downloads. Updating to it gives every copy the new updater; later updates install with one click for Supporter licence holders.' || '' }}
 
             **How to install:** step-by-step instructions for macOS, Windows

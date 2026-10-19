@@ -669,7 +669,26 @@ class Sortero(tk.Tk):
         if w is None:
             if self.root_dir.get() and os.path.isdir(self.root_dir.get()):
                 self.scan()
-            self._maybe_auto_update()
+            # Asked before the update check, so a yes is offered the newest beta now.
+            self._maybe_ask_beta(then=self._maybe_auto_update)
+
+    def _maybe_ask_beta(self, then):
+        """Once, on a launch after the first: offer betas too, or only releases?"""
+        if not updates.beta_undecided():
+            then()
+            return
+
+        def ask():
+            on = messagebox.askyesno(
+                APP, "Sortero can offer beta builds as well as regular updates.\n\n"
+                     + updates.BETA_ABOUT + "\n\nOffer beta builds too? You can change "
+                     "this any time in Settings.", icon="question")
+            settings.set("updates_beta", bool(on))
+            screen = self.screens.get("settings")
+            if screen is not None and hasattr(screen, "beta"):
+                screen.beta.set(bool(on))
+            then()
+        self.after(1500, ask)
 
     def run_wizard(self):
         wizard.Wizard(self, on_finish=lambda d: (self.root_dir.set(d), self.scan())

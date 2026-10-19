@@ -117,11 +117,7 @@ class SettingsScreen(Screen):
     def _beta_changed(self):
         on = self.beta.get()
         if on and not messagebox.askyesno(
-                APP, "Beta builds have new features before they're released, for people "
-                     "happy to try them and say what goes wrong. They can have bugs.\n\n"
-                     "Sortero will offer each new beta as an update, and the final "
-                     "release when it's out. Before a gig, bring a stick you've checked "
-                     "with a release build too.\n\nOffer beta builds?", parent=self):
+                APP, updates.BETA_ABOUT + "\n\nOffer beta builds?", parent=self):
             self.beta.set(False)
             return
         settings.set("updates_beta", on)

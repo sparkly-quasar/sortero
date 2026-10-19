@@ -23,7 +23,7 @@ Also runs from a terminal:
 
     python -m sortero.gig.verify /Volumes/GIG [--player cdj-2000] [--quick]
 """
-import argparse, concurrent.futures, hashlib, os, re, sys
+import argparse, concurrent.futures, hashlib, os, re, sys, unicodedata
 from dataclasses import dataclass, field
 
 from .. import headers
@@ -147,6 +147,12 @@ def walk(stick):
     return out
 
 
+def name_key(rel):
+    """How a path on the stick is compared: FAT32 ignores case, and an accented letter
+    can be stored whole (ë) or as a letter plus accent; macOS may hand back either."""
+    return unicodedata.normalize("NFC", rel).lower()
+
+
 def is_appledouble(rel):
     return os.path.basename(rel).startswith("._")
 
@@ -236,14 +242,14 @@ def check_export(stick, entries, profile=None):
         except pdb.ExportError as e:
             return Check("rekordbox", FAIL, f"export.pdb can't be read: {e}. Export the "
                                             "stick again from rekordbox.", details), set()
-        sizes = {e.rel.lower(): e.size for e in entries}
+        sizes = {name_key(e.rel): e.size for e in entries}
         missing, changed = [], []
         for t in export.tracks:
             rel = t.path.lstrip("/")
-            listed.add(rel.lower())
-            if rel.lower() not in sizes:
+            listed.add(name_key(rel))
+            if name_key(rel) not in sizes:
                 missing.append(f"missing: {rel}" + (f" ({t.title})" if t.title else ""))
-            elif t.size and sizes[rel.lower()] != t.size:
+            elif t.size and sizes[name_key(rel)] != t.size:
                 changed.append(f"changed since export: {rel}")
         n, lists = len(export.tracks), len(export.playlists)
         if missing:

@@ -1,5 +1,6 @@
 """Formatting a stick: every rule that keeps the wrong disk from being erased."""
 import plistlib, unittest
+from unittest import mock
 
 from sortero.gig import formatting as F
 
@@ -22,8 +23,11 @@ class FakeDiskutil:
     def __init__(self, disks, boot="disk1", folders=None):
         self.disks = dict(disks)            # disk id -> (info, listing)
         self.boot = boot
-        self.folders = folders or {}        # path -> disk it lives on
+        self.folders = folders or {}        # folder -> the volume it's on (disk5s2)
         self.erased = []
+
+    def device_of(self, path):
+        return self.folders.get(path)
 
     def __call__(self, *args):
         # Like the real diskutil, -plist only works straight after the verb.
@@ -44,9 +48,12 @@ class FakeDiskutil:
                 return plistlib.dumps({"ParentWholeDisk": "disk3",
                                        "APFSPhysicalStores": [
                                            {"APFSPhysicalStore": f"{self.boot}s2"}]})
-            if target in self.folders:
-                return plistlib.dumps({"ParentWholeDisk": self.folders[target]})
-            return plistlib.dumps(self.disks[target][0])
+            if target.startswith("/dev/"):
+                return plistlib.dumps({"ParentWholeDisk": F.whole_disk(target[5:])})
+            if target in self.disks:
+                return plistlib.dumps(self.disks[target][0])
+            # Like the real one: a folder isn't a disk or a mount point.
+            raise F.FormatError(f"Could not find disk: {target}")
         raise AssertionError(args)
 
 
@@ -62,10 +69,32 @@ class Candidates(unittest.TestCase):
         music = stick("disk5", "MUSIC", 2000 * GB, "WD Elements")
         fake = FakeDiskutil({"disk4": stick(), "disk5": music},
                             folders={"/Volumes/MUSIC/DJ Collection": "disk5s2"})
-        ok, refused = F.candidates(["/Volumes/MUSIC/DJ Collection"], run=fake,
-                                   exists=lambda p: True)
+        with mock.patch.object(F, "device_of", fake.device_of):
+            ok, refused = F.candidates(["/Volumes/MUSIC/DJ Collection"], run=fake,
+                                       exists=lambda p: True)
         self.assertEqual([d.id for d in ok], ["disk4"])
         self.assertIn("collection", refused[0][1])
+
+    def test_a_collection_in_a_folder_on_the_startup_disk(self):
+        # Dropbox, iCloud or just ~/Music: diskutil can't take the folder itself, so
+        # it's found by the volume it's on, which here is the startup disk.
+        home = "/Users/dj/Library/CloudStorage/Dropbox/Music/DJ Collection"
+        fake = FakeDiskutil({"disk4": stick()}, folders={home: "disk1s5"})
+        with mock.patch.object(F, "device_of", fake.device_of):
+            ok, refused = F.candidates([home], run=fake, exists=lambda p: True)
+            self.assertEqual(F.physical_disks_of(home, run=fake), {"disk1"})
+        self.assertEqual([d.id for d in ok], ["disk4"])
+
+    def test_a_folder_on_a_network_share_holds_no_disk_here(self):
+        fake = FakeDiskutil({"disk4": stick()})
+        with mock.patch.object(F, "device_of", lambda p: None):
+            ok, _ = F.candidates(["/Volumes/NAS/Music"], run=fake, exists=lambda p: True)
+        self.assertEqual([d.id for d in ok], ["disk4"])
+
+    def test_diskutils_plist_error_is_shown_as_its_message(self):
+        out = plistlib.dumps({"Error": True, "ErrorMessage": "Could not find disk: /x"})
+        self.assertEqual(F._why(out), "Could not find disk: /x")
+        self.assertEqual(F._why(b"Usage: diskutil info\n"), "Usage: diskutil info")
 
     def test_an_ejected_music_drive_still_plugged_in_is_never_offered(self):
         # Ejected in Finder, cable still in: the folder isn't there, but the
@@ -133,7 +162,8 @@ class Erase(unittest.TestCase):
     def test_rules_are_checked_again_at_the_last_moment(self):
         # the collection was moved onto the stick after the list was drawn
         self.fake.folders["/Volumes/GIG/DJ Collection"] = "disk4s1"
-        with self.assertRaises(F.FormatError):
+        with self.assertRaises(F.FormatError), \
+                mock.patch.object(F, "device_of", self.fake.device_of):
             F.erase(self.disk, "GIG", "GIG", ["/Volumes/GIG/DJ Collection"], run=self.fake,
                     exists=lambda p: True)
         self.assertEqual(self.fake.erased, [])

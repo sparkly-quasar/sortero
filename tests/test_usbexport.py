@@ -271,10 +271,12 @@ class Artwork(TempDir):
 
 
 def gig_xml(path, tracks, sets):
-    """A playlists file like Gig prep's: tracks [(id, file, title, artist, extra xml)]."""
+    """A playlists file like Gig prep's: tracks [(id, file, title, artist, extra xml)],
+    each optionally followed by its album (Promo otherwise)."""
     rows = []
-    for tid, f, title, artist, extra in tracks:
-        rows.append(f'<TRACK TrackID="{tid}" Name="{title}" Artist="{artist}" Album="Promo" '
+    for tid, f, title, artist, extra, *album in tracks:
+        album = album[0] if album else "Promo"
+        rows.append(f'<TRACK TrackID="{tid}" Name="{title}" Artist="{artist}" Album="{album}" '
                     f'Genre="Techno" Tonality="8A" TotalTime="30" BitRate="1411" '
                     f'SampleRate="44100" AverageBpm="128.00" '
                     f'Location="{rbxml.location(f)}">{extra}</TRACK>')
@@ -321,6 +323,34 @@ class Stick(TempDir):
         self.assertEqual(len(listed), 3)
         main = V.check_main(self.stick, NXS2, ["01 Warmup", "02 Peak"])
         self.assertEqual(main.level, V.PASS, main.summary)
+
+    def test_slashes_in_tags_and_accents_either_way_still_find_the_file(self):
+        # "OFF / GRID" as an album made a folder "OFF " that FAT32 stores as "OFF", and
+        # a file name with its accent decomposed (as macOS can hand it over) didn't
+        # match the library's. Both left tracks "missing" from a stick just written.
+        import unicodedata
+        music = self.path("music")
+        nfd = write_wav(os.path.join(music, unicodedata.normalize("NFD", "Holldën - Parable.wav")),
+                        seconds=0.5)
+        xml = gig_xml(self.path("odd.xml"), [
+            (1, self.files[0], "Inner Circle", "OFF / GRID", "", "Downtown Dubs / 2 "),
+            (2, nfd, "Parable", "Holldën", "", "Parable")], [("01 Odd", [1, 2])])
+        U.write(self.stick, xml, log=lambda *a: None)
+        paths = [t.path for t in pdb.read(os.path.join(self.stick, pdb.RELATIVE)).tracks]
+        self.assertEqual(paths, ["/Contents/OFF - GRID/Downtown Dubs - 2/Opener.wav",
+                                 "/Contents/Holldën/Parable/Holldën - Parable.wav"])
+        self.assertEqual(paths[1], unicodedata.normalize("NFC", paths[1]))
+        for p in paths:
+            self.assertEqual(V.name_problems(p.lstrip("/")), [])
+        check, _ = V.check_export(self.stick, V.walk(self.stick), NXS2)
+        self.assertEqual(check.level, V.PASS, check.summary)
+
+    def test_the_check_matches_accents_either_way(self):
+        import unicodedata
+        U.write(self.stick, self.xml, log=lambda *a: None)
+        e = V.walk(self.stick)[0]
+        self.assertEqual(V.name_key(unicodedata.normalize("NFD", "Ë/x")), "ë/x")
+        self.assertEqual(V.name_key(e.rel), e.rel.lower())
 
     def test_every_track_gets_its_analysis_files(self):
         import shutil

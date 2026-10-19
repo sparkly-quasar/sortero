@@ -18,7 +18,7 @@ file with the original it came from.
 Files are copied without macOS metadata, so no "._" files are made, and any
 already there are cleared (sweep_appledouble).
 """
-import json, os, shutil, time
+import json, os, shutil, time, unicodedata
 from dataclasses import dataclass, field
 
 from .verify import FAT32_MAX, FAT_ILLEGAL, RESERVED
@@ -52,7 +52,12 @@ class Result:
 
 # ------------------------------------------------------------------- names
 def fat_name(name):
-    """A name a FAT32 stick can hold: illegal characters swapped, no trailing dots."""
+    """A name a FAT32 stick can hold: illegal characters swapped, no trailing dots.
+
+    A "/" becomes "-" too: in a tag ("OFF / GRID") it would otherwise make a folder.
+    Accents are stored whole (NFC), as Windows and rekordbox write them, so the name
+    in the library matches the name on the stick whichever way the source file had it."""
+    name = unicodedata.normalize("NFC", name).replace("/", "-")
     stem, ext = os.path.splitext(name)
     stem = FAT_ILLEGAL.sub("-", stem).rstrip(" .") or "Untitled"
     if stem.upper() in RESERVED:

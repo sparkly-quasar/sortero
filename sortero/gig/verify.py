@@ -24,7 +24,7 @@ Also runs from a terminal:
 
     python -m sortero.gig.verify /Volumes/GIG [--player cdj-2000] [--quick]
 """
-import argparse, concurrent.futures, hashlib, os, re, sys
+import argparse, concurrent.futures, hashlib, os, re, sys, unicodedata
 from dataclasses import dataclass, field
 
 from .. import headers
@@ -148,6 +148,12 @@ def walk(stick):
     return out
 
 
+def name_key(rel):
+    """How a path on the stick is compared: FAT32 ignores case, and an accented letter
+    can be stored whole (ë) or as a letter plus accent; macOS may hand back either."""
+    return unicodedata.normalize("NFC", rel).lower()
+
+
 def is_appledouble(rel):
     return os.path.basename(rel).startswith("._")
 
@@ -233,17 +239,17 @@ def check_export(stick, entries, profile=None):
         details.append(f"No {lib} ({LIBRARY_FILES[lib]}), which {WHO_READS[lib]} need to "
                        "list these playlists. Write the main stick again: Sortero writes "
                        "both (so does rekordbox 7.2.11 or later).")
-    sizes = {e.rel.lower(): e.size for e in entries}
+    sizes = {name_key(e.rel): e.size for e in entries}
 
     def on_stick(tracks):
         """(missing, changed) for [(path on the stick, title, size)]."""
         missing, changed = [], []
         for path, title, size in tracks:
             rel = path.lstrip("/")
-            listed.add(rel.lower())
-            if rel.lower() not in sizes:
+            listed.add(name_key(rel))
+            if name_key(rel) not in sizes:
                 missing.append(f"missing: {rel}" + (f" ({title})" if title else ""))
-            elif size and sizes[rel.lower()] != size:
+            elif size and sizes[name_key(rel)] != size:
                 changed.append(f"changed since export: {rel}")
         return missing, changed
 

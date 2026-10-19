@@ -74,8 +74,10 @@ def _diskutil(*args):
     return r.stdout
 
 
-def plist(*args, run=_diskutil):
-    return plistlib.loads(run(*args, "-plist"))
+def plist(verb, *args, run=_diskutil):
+    """diskutil <verb> -plist <args>: -plist must come straight after the verb, or
+    diskutil prints its usage instead."""
+    return plistlib.loads(run(verb, "-plist", *args))
 
 
 @dataclass

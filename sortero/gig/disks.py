@@ -79,8 +79,9 @@ def parse_diskutil(volume_info, disk_info, disk_list, mount):
 
 
 def _mac(mount):
-    def plist(*args):
-        r = ffmpeg.run(["diskutil", *args, "-plist"])
+    def plist(verb, *args):
+        # -plist straight after the verb: anywhere else, diskutil prints its usage.
+        r = ffmpeg.run(["diskutil", verb, "-plist", *args])
         return plistlib.loads(r.stdout) if r.returncode == 0 and r.stdout else {}
     info = plist("info", mount)
     disk = info.get("ParentWholeDisk")

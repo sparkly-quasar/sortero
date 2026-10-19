@@ -23,6 +23,13 @@ class Versions(unittest.TestCase):
         self.assertFalse(U.is_prerelease("v0.34.0"))
 
 
+class BetaQuestion(unittest.TestCase):
+    def test_asked_only_until_answered(self):
+        for saved, undecided in ((None, True), (True, False), (False, False)):
+            with mock.patch.object(U.settings, "get", lambda k, d=None, v=saved: v):
+                self.assertEqual(U.beta_undecided(), undecided, saved)
+
+
 class Response:
     def __init__(self, body):
         self.body = body

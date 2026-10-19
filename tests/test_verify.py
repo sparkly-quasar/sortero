@@ -393,6 +393,17 @@ class DiskTools(unittest.TestCase):
         v = disks.parse_diskutil(dict(vol, FilesystemName="ExFAT"), guid, two, "/Volumes/GIG")
         self.assertEqual((v.file_system, v.scheme, v.partitions), (P.EXFAT, disks.GPT, 2))
 
+    def test_diskutil_is_asked_the_way_it_answers(self):
+        # -plist straight after the verb; at the end diskutil prints its usage and
+        # the stick check silently learned nothing about the disk.
+        seen = []
+        def run(argv):
+            seen.append(argv[1:])
+            return subprocess.CompletedProcess(argv, 0, b"", b"")
+        with mock.patch.object(disks.ffmpeg, "run", run):
+            disks._mac("/Volumes/GIG")
+        self.assertEqual(seen, [["info", "-plist", "/Volumes/GIG"]])
+
     def test_windows(self):
         v = disks.parse_windows({"FileSystem": "FAT32", "Label": "GIG", "PartitionStyle": "MBR",
                                  "Partitions": 1, "BusType": "USB", "Size": 32010928128,

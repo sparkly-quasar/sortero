@@ -23,6 +23,16 @@ class Names(unittest.TestCase):
         self.assertEqual(B.fat_name("Ends in a dot..mp3"), "Ends in a dot.mp3")
         self.assertEqual(B.fat_name("CON.mp3"), "CON_.mp3")
         self.assertEqual(len(B.fat_name("x" * 300 + ".mp3")), 255)
+
+    def test_a_slash_never_makes_a_folder(self):
+        # a playlist "House / Techno" made "01 House " (FAT32 drops the space) and "Techno"
+        self.assertEqual(B.fat_name("01 House / Techno"), "01 House - Techno")
+        self.assertEqual([p.split("/")[0] for p in B.layout([("House / Techno", ["/a.mp3"])])],
+                         ["01 House - Techno"])
+
+    def test_accents_are_stored_whole(self):
+        import unicodedata
+        self.assertEqual(B.fat_name(unicodedata.normalize("NFD", "Holldën.mp3")), "Holldën.mp3")
         for rel in B.layout([("Peak: Hour?", ['/m/What? "Edit".mp3'])]):
             self.assertEqual(V.name_problems(rel), [])
 

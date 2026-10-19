@@ -168,6 +168,45 @@ def _autocorr(env, max_lag):
     return ac
 
 
+FOURIER_WINDOW = 20.0           # seconds: resolves ~3 BPM, enough to keep x3/2 apart
+
+
+def _hann(n, cache={}):
+    if n not in cache:
+        cache[n] = [0.5 - 0.5 * math.cos(2 * math.pi * i / n) for i in range(n)]
+    return cache[n]
+
+
+def _line(env, bpm):
+    """How strong a spectral line the onset envelope has at this tempo.
+
+    The autocorrelation can't tell a tempo from a wrong one at x2/3: a period of
+    one and a half beats lands kick, hat, kick, hat, and correlates. But the
+    pulse train then has no Fourier component at that rate at all. Averaged
+    over 20-second Hann windows, so a tempo a fraction of a BPM off still adds
+    up. The idea, and the window length, come from rbxport's tempo detector
+    (crates/rbl-analysis/src/tempo.rs, GPL-2.0-or-later).
+    """
+    n = len(env)
+    w = max(64, min(int(FOURIER_WINDOW * FPS), n))
+    mean = sum(env) / n
+    hann = _hann(w)
+    step = 2 * math.pi * bpm / 60.0 / FPS
+    cs, sn = math.cos(step), math.sin(step)
+    total = count = 0
+    for s in range(0, n - w + 1, w // 2):
+        re = im = 0.0
+        c, d = 1.0, 0.0             # a rotating phasor: no sin/cos per sample
+        for v, h in zip(env[s:s + w], hann):
+            v = (v - mean) * h
+            re += v * c
+            im += v * d
+            c, d = c * cs - d * sn, c * sn + d * cs
+        total += math.hypot(re, im) / w
+        count += 1
+    return total / count if count else 0.0
+
+
 def _at(ac, lag):
     i = int(lag)
     if i + 1 >= len(ac):
@@ -199,6 +238,24 @@ class Profile:
         """The strongest tempo in [lo, hi]."""
         n = int((hi - lo) / step)
         return max((lo + i * step for i in range(n + 1)), key=self.score)
+
+    def line(self, bpm):
+        """The envelope's spectral line at this tempo (see _line)."""
+        return _line(self.env, bpm)
+
+    def thirds(self, lo, hi):
+        """[(strongest tempo, how strong)] in each third of the window.
+
+        A DJ edit can jump tempo mid-track, and a single BPM is then wrong for
+        part of it whichever is chosen.
+        """
+        n = len(self.env) // 3
+        out = []
+        for i in range(3):
+            part = Profile(self.env[i * n:(i + 1) * n], slowest=lo)
+            b = part.best(lo, hi)
+            out.append((b, part.score(b)))
+        return out
 
     def on_beat(self, t, bpm):
         """How much onset energy lands on a grid of this tempo through time t (seconds).

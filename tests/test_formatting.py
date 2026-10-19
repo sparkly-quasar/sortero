@@ -26,6 +26,9 @@ class FakeDiskutil:
         self.erased = []
 
     def __call__(self, *args):
+        # Like the real diskutil, -plist only works straight after the verb.
+        if "-plist" in args[2:]:
+            raise F.FormatError("Usage:  diskutil " + args[0])
         args = [a for a in args if a != "-plist"]
         if args[0] == "eraseDisk":
             self.erased.append(args)
@@ -91,7 +94,7 @@ class Candidates(unittest.TestCase):
 
     def test_if_the_startup_disk_cant_be_found_nothing_is_offered(self):
         def broken(*args):
-            if args[0] == "info" and args[1] == "/":
+            if args[0] == "info" and args[-1] == "/":
                 return plistlib.dumps({})
             return FakeDiskutil({"disk4": stick()})(*args)
         with self.assertRaises(F.FormatError):
@@ -153,6 +156,17 @@ class Lookups(unittest.TestCase):
             return plistlib.dumps({"ParentWholeDisk": "disk9",
                                    "APFSPhysicalStores": [{"APFSPhysicalStore": "disk5s2"}]})
         self.assertEqual(F.physical_disks_of("/Volumes/X", run=run), {"disk5"})
+
+    def test_plist_comes_straight_after_the_verb(self):
+        # diskutil info / -plist prints its usage; diskutil info -plist / works.
+        seen = []
+        def run(*args):
+            seen.append(list(args))
+            return plistlib.dumps({})
+        F.plist("info", "/", run=run)
+        F.plist("list", "external", "physical", run=run)
+        self.assertEqual(seen, [["info", "-plist", "/"],
+                                ["list", "-plist", "external", "physical"]])
 
 
 if __name__ == "__main__":

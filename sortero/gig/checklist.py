@@ -56,8 +56,8 @@ class State:
     copied: bool = False        # convert.run has finished on these items
     sets: list = None           # [(playlist, [paths])] as read when the tracks were checked
     xml_path: str = ""          # the rekordbox XML, once made
-    xml_cues: dict = field(default_factory=dict)    # source -> tracks it gave marks to
-    xml_tracks: int = 0         # tracks in the playlists file
+    xml_cues: dict = field(default_factory=dict)    # cues.tally: {"cues"/"grids": {source: n}}
+    xml_tracks: int = 0         # tracks those counts are out of
     main: StickCheck = None     # the main stick's last check
     backup: object = None       # the last backup.Result, if a backup stick was written
     backup_check: StickCheck = None
@@ -253,7 +253,7 @@ def current(all_steps):
 
 
 # --------------------------------------------------------------- cue points
-CUE_ORDER = ("rekordbox", "Mixxx", "Mixed In Key")
+CUE_ORDER = ("rekordbox", "Mixed In Key", "Mixxx")     # cues.Finder's order
 
 
 def cue_sources(rekordbox_file=None, mixxx_found=True):
@@ -261,29 +261,30 @@ def cue_sources(rekordbox_file=None, mixxx_found=True):
     where = []
     if rekordbox_file:
         where.append(f"your rekordbox collection ({rekordbox_file})")
+    where.append("Mixed In Key's tags in each file")
     if mixxx_found:
         where.append("Mixxx")
-    where.append("Mixed In Key's tags in each file")
     text = "Cue points and beat grids come from " + ", then ".join(where) + "."
     if not mixxx_found:
         text += " Mixxx's library isn't on this computer."
     return text
 
 
+def _from(what, by_source, total):
+    n = sum(by_source.values())
+    if not n:
+        return f"No {what} found for {'any of the ' if total > 1 else ''}" \
+               f"{_plural(total, 'track') if total > 1 else 'the track'}."
+    names = sorted(by_source, key=lambda s: (CUE_ORDER.index(s) if s in CUE_ORDER else 9, s))
+    parts = ", ".join(f"{by_source[s]} from {s}" for s in names)
+    have = ("the track" if total == 1 else f"all {_plural(total, 'track')}" if n == total
+            else f"{n} of {_plural(total, 'track')}")
+    return f"{what[0].upper()}{what[1:]} for {have}: {parts}."
+
+
 def cue_summary(counts, total):
-    """What the playlists file got: '7 of 9 tracks have cue points: 5 from Mixxx, ...'."""
-    cued = sum(counts.values())
+    """'Cue points for 7 of 9: 5 from Mixed In Key, 2 from Mixxx. Beat grids for ...'"""
     if not total:
         return ""
-    if not cued:
-        which = f"any of the {_plural(total, 'track')}" if total > 1 else "the track"
-        return f"No cue points found for {which}, so the players will show none."
-    names = sorted(counts, key=lambda s: (CUE_ORDER.index(s) if s in CUE_ORDER else 9, s))
-    parts = ", ".join(f"{counts[s]} from {s}" for s in names)
-    have = (f"All {_plural(total, 'track')} have" if cued == total else
-            f"{cued} of {_plural(total, 'track')} {'has' if cued == 1 else 'have'}")
-    text = f"{have} cue points: {parts}."
-    if cued < total:
-        n = total - cued
-        text += f" {n} {'has' if n == 1 else 'have'} none."
-    return text
+    return (_from("cue points", counts.get("cues", {}), total) + " "
+            + _from("beat grids", counts.get("grids", {}), total))

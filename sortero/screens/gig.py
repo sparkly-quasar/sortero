@@ -204,6 +204,8 @@ class GigScreen(Screen):
             self.cue_row.pack(fill="x", pady=(2, 0))
             self.cue_label = _label(self.cue_row)       # wraps: it can be long
             self.cue_label.pack(fill="x")
+            self.cue_count = _label(self.cue_row)       # what those gave these tracks
+            self.cue_count.pack(fill="x")
             cue_links = _links(self.cue_row)
             cue_links.pack(fill="x")
             self.cue_change = _link(cue_links, "", self.choose_cue_xml)
@@ -448,12 +450,9 @@ class GigScreen(Screen):
         report = self.reports.get(which)
         if which == "main":
             have_xml = bool(st.xml_path)
-            if have_xml:
-                summary = checklist.cue_summary(st.xml_cues, st.xml_tracks)
-                self.xml_label.configure(text=summary if st.direct else
-                                         f"Playlists file ready. {summary}".strip())
-            else:
-                self.xml_label.configure(text="")
+            self.xml_label.configure(text="Playlists file ready."
+                                     if have_xml and not st.direct else "")
+            self.cue_count.configure(text=checklist.cue_summary(st.xml_cues, st.xml_tracks))
             src = settings.get("gig_rekordbox_xml")
             src = src if src and os.path.isfile(src) else None
             self.cue_label.configure(text=checklist.cue_sources(
@@ -593,6 +592,7 @@ class GigScreen(Screen):
             return
         chosen = self.picker.chosen_sources()
         profile, target = self.profile, self.target
+        survey = self._cue_survey()
         from ..gig import sources
 
         def work(progress, log):
@@ -602,11 +602,11 @@ class GigScreen(Screen):
             sets = sources.resolve(chosen, root, log=unreadable.append)
             items = convert.plan(root, convert.playlist_paths(sets), lib, profile, target,
                                  progress)
-            return sets, items, unreadable
+            return sets, items, unreadable, survey(items, log)
 
         def done(res):
-            sets, items, self.unreadable = res
             st = self.state
+            sets, items, self.unreadable, (st.xml_cues, st.xml_tracks) = res
             st.items, st.copied, st.sets, st.earlier = items, False, sets, None
             self._advance(keep_notice=True)     # this check ran by itself; say why
 
@@ -660,12 +660,39 @@ class GigScreen(Screen):
 
         self.app.task.run(work, done, "Making the playlists file")
 
-    def _xml_work(self, path, items, sets):
-        """A task that writes the playlists file: (path, cue sources, tracks in it)."""
+    @staticmethod
+    def _cue_places():
+        """(the chosen rekordbox XML if it's still there, Mixxx's library if found)."""
         source_xml = settings.get("gig_rekordbox_xml") or None
         if source_xml and not os.path.isfile(source_xml):
             source_xml = None
-        db = mixxx.find_db()
+        return source_xml, mixxx.find_db()
+
+    def _cue_survey(self):
+        """A function for a task: (cues.survey counts, tracks) for these items."""
+        source_xml, db = self._cue_places()
+
+        def survey(items, log):
+            originals = [it.src for it in items if it.status != convert.FAILED]
+            finder = cues.Finder(source_xml, db, log=log)
+            return cues.survey(originals, finder), len({cues.key(p) for p in originals})
+        return survey
+
+    def _recount_cues(self):
+        items = self.state.items
+        if not items:
+            return
+        survey = self._cue_survey()
+
+        def done(res):
+            self.state.xml_cues, self.state.xml_tracks = res
+            self.refresh()
+        self.app.task.run(lambda progress, log: survey(items, log), done,
+                          "Looking for cue points")
+
+    def _xml_work(self, path, items, sets):
+        """A task that writes the playlists file: (path, cue sources, tracks in it)."""
+        source_xml, db = self._cue_places()
         shift = bool(settings.get("gig_mp3_cue_shift"))
 
         def work(progress, log):
@@ -697,6 +724,7 @@ class GigScreen(Screen):
         if self.state.xml_path:
             self.state.xml_path = ""        # make it again with these cues
         self.refresh()
+        self._recount_cues()
 
     def cue_timing(self):
         on = bool(settings.get("gig_mp3_cue_shift"))

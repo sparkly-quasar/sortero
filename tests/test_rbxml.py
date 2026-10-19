@@ -115,11 +115,15 @@ class Mixxx(TempDir):
 
 
 class Priority(TempDir):
-    def test_rekordbox_then_mixxx_then_mik(self):
+    def test_rekordbox_then_mik_then_mixxx(self):
+        bare = tagged_mp3(self.path("bare.mp3"))
+        self.assertEqual(cues.Finder(mixxx_db=Mixxx.db(self, bare)).find(bare).source,
+                         "Mixxx")
+        os.remove(self.path("mixxxdb.sqlite"))
         track = tagged_mp3(self.path("t.mp3"), mik_cues=MIK_CUES)
         self.assertEqual(cues.Finder().find(track).source, "Mixed In Key")
         f = cues.Finder(mixxx_db=Mixxx.db(self, track))
-        self.assertEqual(f.find(track).source, "Mixxx")
+        self.assertEqual(f.find(track).source, "Mixed In Key")
         xml = self.path("c.xml")
         with open(xml, "w") as fh:
             fh.write(f'<DJ_PLAYLISTS><COLLECTION><TRACK Location="{rbxml.location(track)}">'
@@ -127,6 +131,16 @@ class Priority(TempDir):
                      '</DJ_PLAYLISTS>')
         f = cues.Finder(rekordbox_xml=xml, mixxx_db=self.path("mixxxdb.sqlite"))
         self.assertEqual(f.find(track).source, "rekordbox")
+
+    def test_cues_and_grid_each_from_the_first_source_that_has_them(self):
+        # Mixed In Key has cues but no grid for this track; Mixxx has both.
+        track = tagged_mp3(self.path("t.mp3"), mik_cues=MIK_CUES)
+        m = cues.Finder(mixxx_db=Mixxx.db(self, track)).find(track)
+        self.assertEqual((m.source, m.grid_from), ("Mixed In Key", "Mixxx"))
+        self.assertEqual(m.marks[0].name, "Energy 1")
+        self.assertEqual(m.grids[0].bpm, 126.0)
+        counts = cues.survey([track, track], cues.Finder(mixxx_db=self.path("mixxxdb.sqlite")))
+        self.assertEqual(counts, {"cues": {"Mixed In Key": 1}, "grids": {"Mixxx": 1}})
 
     def test_unreadable_sources_are_logged_not_fatal(self):
         bad = self.path("bad.xml")
@@ -182,7 +196,7 @@ class Build(TempDir):
         self.assertEqual(len(marks), 18)                    # 10 memory + 8 hot
         self.assertEqual(marks[0].attrib, {"Name": "Energy 1", "Type": "0",
                                            "Start": "1.000", "Num": "-1"})
-        self.assertEqual(counts, {"Mixed In Key": 2})
+        self.assertEqual(counts["cues"], {"Mixed In Key": 2})
 
         folder = root.find("PLAYLISTS/NODE")
         self.assertEqual((folder.get("Name"), folder.get("Type")), ("ROOT", "0"))

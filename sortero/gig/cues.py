@@ -1,12 +1,15 @@
 """Cue points and beat grids for the tracks in a gig, from wherever they already are.
 
-Three places can hold them, and a track takes them from the first that has
-any, rather than a mix of all three:
+Three places can hold them, tried in this order:
 
-  1. a rekordbox XML of your collection (rekordbox: File > Export Collection
-     in xml format, or the rekordbox.xml Mixed In Key keeps up to date)
-  2. Mixxx's library
-  3. Mixed In Key's own analysis, in the file's tags
+  1. a rekordbox XML of your collection, if one was chosen (rekordbox: File >
+     Export Collection in xml format, or the rekordbox.xml Mixed In Key keeps)
+  2. Mixed In Key's own analysis, in the file's tags
+  3. Mixxx's library
+
+A track's cue points all come from the first source that has cue points for
+it, and its beat grid from the first that has a grid, so Mixed In Key's cues
+can sit on Mixxx's grid when Mixed In Key has no grid for the track.
 
 Times are seconds from the start of the audio. Sources:
 
@@ -52,9 +55,14 @@ class Grid:
 
 @dataclass
 class Marks:
-    source: str
+    source: str                 # where the cue points came from
     marks: list = field(default_factory=list)
     grids: list = field(default_factory=list)
+    grid_source: str = ""       # where the grid came from, when it isn't `source`
+
+    @property
+    def grid_from(self):
+        return self.grid_source or self.source
 
     def shifted(self, seconds):
         """The same marks, moved later by `seconds` (see rbxml.MP3_COPY_DELAY)."""
@@ -63,7 +71,8 @@ class Marks:
         return Marks(self.source,
                      [Mark(m.start + seconds, m.name, m.num, m.type,
                            None if m.end is None else m.end + seconds) for m in self.marks],
-                     [Grid(g.start + seconds, g.bpm, g.meter, g.beat) for g in self.grids])
+                     [Grid(g.start + seconds, g.bpm, g.meter, g.beat) for g in self.grids],
+                     self.grid_source)
 
 
 def key(path):
@@ -194,7 +203,7 @@ def from_mixxx(db):
 
 # ---------------------------------------------------------------- choose
 class Finder:
-    """Looks up a track's marks in each source, in order, the first that has any."""
+    """Looks up a track's cue points and grid in each source, in order (see the top)."""
 
     def __init__(self, rekordbox_xml=None, mixxx_db=None, log=print):
         self.rekordbox, self.mixxx = {}, {}
@@ -211,4 +220,29 @@ class Finder:
 
     def find(self, original):
         k = key(original)
-        return self.rekordbox.get(k) or self.mixxx.get(k) or from_mik(original)
+        found = [m for m in (self.rekordbox.get(k), from_mik(original), self.mixxx.get(k))
+                 if m]
+        cue = next((m for m in found if m.marks), None)
+        grid = next((m for m in found if m.grids), None)
+        if not cue and not grid:
+            return None
+        return Marks(cue.source if cue else grid.source, cue.marks if cue else [],
+                     grid.grids if grid else [],
+                     grid.source if grid and cue and grid.source != cue.source else "")
+
+
+def tally(counts, marks):
+    """Count one track's marks into {"cues": {source: tracks}, "grids": {...}}."""
+    if marks and marks.marks:
+        counts["cues"][marks.source] = counts["cues"].get(marks.source, 0) + 1
+    if marks and marks.grids:
+        counts["grids"][marks.grid_from] = counts["grids"].get(marks.grid_from, 0) + 1
+    return counts
+
+
+def survey(originals, finder):
+    """Before anything is written: how many of these tracks get cues and grids from where."""
+    counts = {"cues": {}, "grids": {}}
+    for path in {key(p): p for p in originals}.values():
+        tally(counts, finder.find(path))
+    return counts

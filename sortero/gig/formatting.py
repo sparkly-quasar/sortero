@@ -69,9 +69,19 @@ def plan(disk, new_label):
 def _diskutil(*args):
     r = subprocess.run(["diskutil", *args], capture_output=True)
     if r.returncode != 0:
-        raise FormatError((r.stderr or r.stdout).decode("utf-8", "replace").strip()
-                          or "diskutil failed")
+        raise FormatError(_why(r.stderr or r.stdout) or "diskutil failed")
     return r.stdout
+
+
+def _why(output):
+    """diskutil's error: with -plist it comes as a plist, so take its message out."""
+    try:
+        message = plistlib.loads(output).get("ErrorMessage")
+        if message:
+            return str(message)
+    except Exception:
+        pass
+    return output.decode("utf-8", "replace").strip()
 
 
 def plist(verb, *args, run=_diskutil):
@@ -141,9 +151,35 @@ def whole_disk(identifier):
     return m.group(1) if m else None
 
 
+def device_of(path):
+    """The /dev node of the volume a file or folder is on (disk3s5), or None when it
+    isn't on a local disk (a network share). diskutil info only takes disks and mount
+    points, so a music folder inside a volume is found by the volume's device number."""
+    try:
+        dev = os.stat(path).st_dev
+        names = os.listdir("/dev")
+    except OSError:
+        return None
+    for name in names:
+        if re.match(r"^disk\d+(s\d+)*$", name):
+            try:
+                if os.stat(f"/dev/{name}").st_rdev == dev:
+                    return name
+            except OSError:
+                continue
+    return None
+
+
 def physical_disks_of(path, run=_diskutil):
-    """The physical whole disks a folder lives on: through APFS, to the disk itself."""
-    info = plist("info", path, run=run)
+    """The physical whole disks a folder lives on: through APFS, to the disk itself.
+    Empty for a folder that isn't on a local disk, which nothing here could erase."""
+    try:
+        info = plist("info", path, run=run)         # a mount point: /, /Volumes/Music
+    except FormatError:
+        node = device_of(path)                      # a folder inside one
+        if node is None and path != "/":
+            return set()
+        info = plist("info", f"/dev/{node}", run=run) if node else {}
     stores = [s.get("APFSPhysicalStore") for s in info.get("APFSPhysicalStores") or []]
     disks = {whole_disk(s) for s in stores if s} or {whole_disk(info.get("ParentWholeDisk"))}
     disks.discard(None)

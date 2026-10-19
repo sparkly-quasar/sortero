@@ -51,8 +51,20 @@ def is_newer(remote, local=__version__):
     return parse(remote) > parse(local)
 
 
+BETA_ABOUT = ("Beta builds have new features before they're released, for people happy "
+              "to try them and say what goes wrong. They can have bugs.\n\n"
+              "Sortero will offer each new beta as an update, and the final release "
+              "when it's out. Before a gig, bring a stick you've checked with a release "
+              "build too.")
+
+
 def beta():
     return bool(settings.get("updates_beta"))
+
+
+def beta_undecided():
+    """Never asked about betas: Sortero asks once, on a launch after updating."""
+    return settings.get("updates_beta") is None
 
 
 def _newest(releases):

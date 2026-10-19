@@ -622,7 +622,7 @@ It can also check automatically on launch (at most once a day) — toggle that i
 Settings.
 ## What's new since v0.18.0
 
-v0.18.0 is the free download. The current version, **v0.33.0**, is what
+v0.18.0 is the free download. The current version, **v0.33.1**, is what
 [Supporter licence](#supporting-sortero) holders get, and what you get by
 [building from source](#building-from-source). It adds:
 
@@ -762,8 +762,9 @@ one step. Without one, it tells you where to get one, or you can
 [build the latest from source](#building-from-source). Details are under
 [First run](#first-run).
 
-**Beta builds.** Tick **Offer beta builds** in Settings to be offered new
-features before they're released, as betas (`v0.34.0-beta.1`). They can have
+**Beta builds.** Sortero asks once whether you'd like betas too, and you can
+change your answer any time with **Offer beta builds** in Settings. Betas
+(`v0.34.0-beta.1`) bring new features before they're released. They can have
 bugs, so before a gig bring a stick you've checked with a release build too.
 A beta tester is still offered the final release once it's out, and unticking
 the box goes back to releases only, from the next release newer than the beta

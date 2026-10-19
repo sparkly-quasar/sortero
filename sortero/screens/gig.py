@@ -202,11 +202,13 @@ class GigScreen(Screen):
                   self.make_xml).pack(side="left", padx=(ui.GAP, 0))
             self.cue_row = _links(body)
             self.cue_row.pack(fill="x", pady=(2, 0))
-            self.cue_label = _label(self.cue_row)
-            self.cue_label.pack(side="left")
-            self.cue_change = _link(self.cue_row, "", self.choose_cue_xml)
-            self.cue_change.pack(side="left", padx=(ui.GAP, 0))
-            self.cue_timing_link = _link(self.cue_row, "Cue timing on MP3 copies…",
+            self.cue_label = _label(self.cue_row)       # wraps: it can be long
+            self.cue_label.pack(fill="x")
+            cue_links = _links(self.cue_row)
+            cue_links.pack(fill="x")
+            self.cue_change = _link(cue_links, "", self.choose_cue_xml)
+            self.cue_change.pack(side="left")
+            self.cue_timing_link = _link(cue_links, "Cue timing on MP3 copies…",
                                          self.cue_timing)
             how = tk.Frame(body)
             ui.paint(how, bg="card")
@@ -285,6 +287,7 @@ class GigScreen(Screen):
     def _reset(self):
         st = self.state
         st.items, st.copied, st.sets, st.xml_path, st.xml_cues = None, False, None, "", {}
+        st.xml_tracks = 0
         st.main, st.backup, st.backup_check, st.earlier = None, None, None, None
         self.reports = {}
 
@@ -446,20 +449,17 @@ class GigScreen(Screen):
         if which == "main":
             have_xml = bool(st.xml_path)
             if have_xml:
-                cued = sum(st.xml_cues.values())
-                self.xml_label.configure(text=f"Playlists file ready, with cue points for "
-                                              f"{ui.plural(cued, 'track')}." if cued else
-                                              "Playlists file ready.")
+                summary = checklist.cue_summary(st.xml_cues, st.xml_tracks)
+                self.xml_label.configure(text=summary if st.direct else
+                                         f"Playlists file ready. {summary}".strip())
             else:
                 self.xml_label.configure(text="")
             src = settings.get("gig_rekordbox_xml")
-            if src and os.path.isfile(src):
-                self.cue_label.configure(text=f"Cue points from {os.path.basename(src)} first, "
-                                              "then Mixxx and Mixed In Key.")
-                self.cue_change.configure(text="Change…")
-            else:
-                self.cue_label.configure(text="Cue points from Mixxx and Mixed In Key.")
-                self.cue_change.configure(text="Use a rekordbox XML…")
+            src = src if src and os.path.isfile(src) else None
+            self.cue_label.configure(text=checklist.cue_sources(
+                os.path.basename(src) if src else None, mixxx.find_db() is not None))
+            self.cue_change.configure(text="Change rekordbox file…" if src else
+                                      "Add cues from rekordbox…")
             if self.target == convert.MP3:
                 self.cue_timing_link.pack(side="left", padx=(ui.SECTION, 0))
             else:
@@ -652,7 +652,7 @@ class GigScreen(Screen):
         work = self._xml_work(self._xml_path(), st.items, list(st.sets or []))
 
         def done(res):
-            st.xml_path, st.xml_cues = res
+            st.xml_path, st.xml_cues, st.xml_tracks = res
             self.how_open = True
             self.open_key = "main"
             self.notice_text = ""
@@ -661,7 +661,7 @@ class GigScreen(Screen):
         self.app.task.run(work, done, "Making the playlists file")
 
     def _xml_work(self, path, items, sets):
-        """A task that writes the playlists file: (path, cue sources)."""
+        """A task that writes the playlists file: (path, cue sources, tracks in it)."""
         source_xml = settings.get("gig_rekordbox_xml") or None
         if source_xml and not os.path.isfile(source_xml):
             source_xml = None
@@ -672,11 +672,21 @@ class GigScreen(Screen):
             finder = cues.Finder(source_xml, db, log=log)
             tree, counts = rbxml.build(items, sets, rbxml.gig_name(), finder, shift)
             os.makedirs(os.path.dirname(path), exist_ok=True)
-            return rbxml.write(path, tree), counts
+            total = int(tree.getroot().find("COLLECTION").get("Entries"))
+            return rbxml.write(path, tree), counts, total
         return work
 
     def choose_cue_xml(self):
         current = settings.get("gig_rekordbox_xml") or ""
+        if not messagebox.askokcancel(
+                APP, "Set cue points or beat grids in rekordbox? Sortero can use them too.\n\n"
+                     "rekordbox keeps them in its own database, which Sortero can't read, "
+                     "so export them to a file first: in rekordbox, choose File > Export "
+                     "Collection in xml format. Then choose that file here.\n\n"
+                     "For a track that has cue points there, Sortero uses those instead of "
+                     "Mixxx's or Mixed In Key's. Mixed In Key's own rekordbox.xml export "
+                     "works too.\n\nExport again whenever you change cues in rekordbox."):
+            return
         path = filedialog.askopenfilename(
             title="Choose your rekordbox collection XML",
             initialdir=os.path.dirname(current) or os.path.expanduser("~"),
@@ -684,11 +694,6 @@ class GigScreen(Screen):
         if not path:
             return
         settings.set("gig_rekordbox_xml", path)
-        messagebox.showinfo(APP, "Cue points and beat grids in that XML come first, then "
-                                 "Mixxx's, then Mixed In Key's in the files.\n\nIn "
-                                 "rekordbox, File > Export Collection in xml format "
-                                 "writes a fresh one. Mixed In Key's rekordbox.xml works "
-                                 "too.")
         if self.state.xml_path:
             self.state.xml_path = ""        # make it again with these cues
         self.refresh()
@@ -759,7 +764,7 @@ class GigScreen(Screen):
         def done(res):
             made, result, error = res
             if made:
-                st.xml_path, st.xml_cues = made
+                st.xml_path, st.xml_cues, st.xml_tracks = made
             if error:
                 messagebox.showerror(APP, error)
                 self.refresh()

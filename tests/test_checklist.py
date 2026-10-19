@@ -159,5 +159,31 @@ class Estimates(unittest.TestCase):
         self.assertIn("1 needs a copy, about 11.4 MB", text)
 
 
+class CuePoints(unittest.TestCase):
+    def test_says_where_cues_will_come_from(self):
+        self.assertEqual(K.cue_sources(None, True), "Cue points and beat grids come from "
+                         "Mixxx, then Mixed In Key's tags in each file.")
+        text = K.cue_sources("collection.xml", False)
+        self.assertTrue(text.startswith("Cue points and beat grids come from your rekordbox "
+                                        "collection (collection.xml), then Mixed In Key's"))
+        self.assertIn("Mixxx's library isn't on this computer", text)
+
+    def test_says_how_many_tracks_got_cues_from_each_source(self):
+        self.assertEqual(K.cue_summary({"Mixed In Key": 2, "Mixxx": 5}, 9),
+                         "7 of 9 tracks have cue points: 5 from Mixxx, 2 from Mixed In Key. "
+                         "2 have none.")
+        self.assertEqual(K.cue_summary({"Mixxx": 3}, 3),
+                         "All 3 tracks have cue points: 3 from Mixxx.")
+        self.assertEqual(K.cue_summary({"rekordbox": 1}, 2),
+                         "1 of 2 tracks has cue points: 1 from rekordbox. 1 has none.")
+
+    def test_says_plainly_when_no_track_got_cues(self):
+        self.assertEqual(K.cue_summary({}, 9), "No cue points found for any of the 9 "
+                         "tracks, so the players will show none.")
+        self.assertEqual(K.cue_summary({}, 1), "No cue points found for the track, so the "
+                         "players will show none.")
+        self.assertEqual(K.cue_summary({}, 0), "")
+
+
 if __name__ == "__main__":
     unittest.main()

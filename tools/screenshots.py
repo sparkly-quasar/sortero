@@ -227,6 +227,16 @@ def main():
         app.after(800, lambda: (shot("library"), go()))
 
     @step
+    def your_playlists():
+        app.show("playlists")       # reads every playlist again by itself
+        idle(lambda: (shot("your-playlists"), go()))
+
+    @step
+    def streaming():
+        app.show("streaming")
+        app.after(800, lambda: (shot("streaming-playlists"), go()))
+
+    @step
     def tidy():
         app.show("tidy")
         app.after(800, lambda: (shot("tidy-up"), go()))

@@ -143,7 +143,7 @@ class SetPicker(tk.Frame):
                       + ". If it's on a drive, plug it in, and its playlists come back.")
         elif not self.sources:
             self._say("No playlists yet. Add the ones you already have with Add "
-                      "playlists…, make them on the Playlists screen, or let Tidy up → "
+                      "playlists…, rebuild them from Streaming playlists, or let Tidy up → "
                       "Reorganise turn your folders into playlists.")
 
     def chosen_sources(self):

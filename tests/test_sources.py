@@ -301,6 +301,51 @@ class Watching(TempDir):
         self.assertEqual([s.kind for s in S.listed(root)], [S.SORTERO, S.M3U])
 
 
+class YourPlaylists(TempDir):
+    """Every playlist Sortero can see, with how many tracks are missing."""
+
+    def setUp(self):
+        super().setUp()
+        for key, empty in (("gig_sources", []), ("gig_watch_folders", []),
+                           ("gig_search_collection", None)):
+            settings.set(key, empty)
+            self.addCleanup(settings.set, key, empty)
+        self.root = self.path("Music")
+        a = touch(os.path.join(self.root, "Techno", "a.mp3"))
+        playlists.write(self.root, "Warmup", [a, os.path.join(self.root, "gone.mp3")])
+        self.peak = touch(os.path.join(self.root, "Sets", "Peak.m3u8"))
+        with open(self.peak, "w") as fh:
+            fh.write("../Techno/a.mp3\n")
+
+    def test_counts_tracks_and_missing_files(self):
+        got = [(s.kind, s.name, n, missing) for s, n, missing in S.survey(self.root)]
+        self.assertEqual(got, [(S.SORTERO, "Warmup", 2, 1), (S.COLLECTION, "Peak", 1, 0)])
+
+    def test_the_collection_is_searched_even_when_gig_prep_isnt_looking(self):
+        settings.set("gig_search_collection", False)
+        self.assertEqual([s.kind for s in S.listed(self.root)], [S.SORTERO])
+        self.assertEqual([s.kind for s in S.everywhere(self.root)],
+                         [S.SORTERO, S.COLLECTION])
+
+    def test_added_ones_and_unreadable_ones(self):
+        S.remember([S.folder_source(self.path("gone"))])
+        got = S.survey(self.root)
+        self.assertEqual([(s.kind, n) for s, n, _ in got][-1], (S.FOLDER, None))
+
+    def test_not_listed_twice(self):
+        S.remember(S.m3u_sources([self.peak]))
+        S.watch(os.path.join(self.root, "Sets"))
+        settings.set("gig_search_collection", False)
+        self.assertEqual(sorted(s.kind for s in S.everywhere(self.root)),
+                         sorted([S.SORTERO, S.M3U]))
+
+    def test_the_file_to_show(self):
+        own, found = [s for s, _, _ in S.survey(self.root)]
+        self.assertEqual(S.file_of(own), os.path.join(self.root, "_Playlists", "Warmup.m3u8"))
+        self.assertTrue(os.path.isfile(S.file_of(own)))
+        self.assertEqual(S.file_of(found), self.peak)
+
+
 class InTheCollection(TempDir):
     def setUp(self):
         super().setUp()

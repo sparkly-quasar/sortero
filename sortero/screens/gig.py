@@ -10,7 +10,8 @@ from tkinter import ttk, filedialog, messagebox
 
 from .. import mixxx, ui, paths, settings
 from ..common import human_size
-from ..gig import backup, checklist, convert, cues, ffmpeg, profiles, rbxml, usbexport, verify
+from ..gig import (backup, checklist, convert, cues, disks, ffmpeg, profiles, rbxml,
+                   usbexport, verify)
 from ..gig.checklist import DONE, NEXT, WAITING
 from .base import Screen, APP
 from .gig_set import SetPicker, short
@@ -233,6 +234,12 @@ class GigScreen(Screen):
         else:
             self.backup_label = _label(top)
             self.backup_label.pack(side="left")
+            # One USB port, or a hub that's full: the main stick has to come out first.
+            self.eject_row = _links(body)
+            self.eject_label = _label(self.eject_row)
+            self.eject_label.pack(side="left")
+            _button(self.eject_row, "Eject the main stick", self.eject_main).pack(
+                side="left", padx=(ui.GAP, 0))
         tools = _links(body)
         tools.pack(side="bottom", fill="x", pady=(6, 0))
         widgets["format"] = ttk.Button(tools, text="Format a stick as FAT32…",
@@ -254,9 +261,13 @@ class GigScreen(Screen):
         self.ready_lines.pack(fill="x", pady=(4, 0))
         links = _links(body)
         links.pack(fill="x", pady=(ui.GAP, 0))
-        _link(links, "Check the main stick again…", self.check_main).pack(side="left")
-        _link(links, "Clear the set for the next gig", self.picker.clear).pack(
-            side="left", padx=(ui.SECTION, 0))
+        self.backup_open = _button(links, "Make a backup stick…",
+                                   lambda: self.open("backup"))
+        self.backup_open.pack(side="left")
+        self.ready_check = _button(links, "Check the main stick again…", self.check_main)
+        self.ready_check.pack(side="left", padx=(ui.GAP, 0))
+        _button(links, "Clear the set for the next gig", self.picker.clear).pack(
+            side="left", padx=(ui.GAP, 0))
 
     # ------------------------------------------------------------ the set
     def shown(self):
@@ -497,6 +508,14 @@ class GigScreen(Screen):
             else:
                 self.how.pack_forget()
         else:
+            mount = self._main_mount()
+            if mount:
+                name = os.path.basename(os.path.normpath(mount)) or mount
+                self.eject_label.configure(text=f"The main stick “{name}” is still plugged "
+                                                "in. Only one USB port?")
+                self.eject_row.pack(fill="x", pady=(6, 0), after=w["top"])
+            else:
+                self.eject_row.pack_forget()
             b = st.backup
             self.backup_label.configure(text=(
                 f"Written to {st.backup_check.name if st.backup_check else 'the stick'}: "
@@ -559,6 +578,31 @@ class GigScreen(Screen):
     def _draw_ready(self, step):
         lines = step.text.split("\n")
         self.ready_lines.configure(text="\n".join(lines[1:]))
+        b = self.state.backup_check
+        if b and b.ready:
+            self.backup_open.pack_forget()
+        else:
+            self.backup_open.pack(side="left", before=self.ready_check)
+
+    def _main_mount(self):
+        """Where the main stick is mounted right now, or None."""
+        st, report = self.state, self.reports.get("main")
+        path = report.stick if report else (os.path.join("/Volumes", st.main.name)
+                                            if paths.IS_MAC and st.main else None)
+        return path if path and os.path.ismount(path) else None
+
+    def eject_main(self):
+        mount = self._main_mount()
+        if not mount:
+            self.refresh()
+            return
+        name = os.path.basename(os.path.normpath(mount)) or mount
+        why = disks.eject(mount)
+        if why:
+            messagebox.showwarning(APP, f"Couldn't eject “{name}”: {why}")
+        else:
+            self.app.set_status(f"Ejected “{name}”. Unplug it and plug in the backup stick.")
+        self.refresh()
 
     def _maybe_auto_check(self):
         """Opening the tracks step checks them straight away; nothing to decide there."""

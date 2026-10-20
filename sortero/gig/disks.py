@@ -183,3 +183,35 @@ def volume(mount):
         return _linux(mount)
     except Exception as e:
         return Volume(mount, error=str(e))
+
+
+WIN_EJECT = ("(New-Object -ComObject Shell.Application).Namespace(17).ParseName('{letter}:')"
+             ".InvokeVerb('Eject')")
+
+
+def eject(mount):
+    """Eject the stick mounted here, as the file manager would. Returns "" when it's
+    gone, otherwise why it isn't (usually: something still has a file open on it)."""
+    if sys.platform == "darwin":
+        cmd = ["diskutil", "eject", mount]
+    elif os.name == "nt":
+        letter = os.path.splitdrive(mount)[0].rstrip(":")
+        cmd = ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+               WIN_EJECT.format(letter=letter)]
+    else:
+        cmd = ["gio", "mount", "-e", mount]
+    try:
+        r = ffmpeg.run(cmd)
+    except OSError as e:
+        return str(e)
+    if os.name == "nt":
+        import time
+        for _ in range(20):             # the shell ejects in the background
+            if not os.path.exists(mount):
+                return ""
+            time.sleep(0.25)
+        return "Windows didn't eject it. Close anything using it and try again."
+    if r.returncode != 0 or os.path.ismount(mount):
+        why = (r.stderr or r.stdout or b"").decode("utf-8", "replace").strip()
+        return why or "it's still in use. Close anything using it and try again."
+    return ""

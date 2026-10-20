@@ -86,7 +86,7 @@ class Steps(unittest.TestCase):
         self.assertEqual(statuses(st)["ready"], K.WAITING)
         self.assertNotIn("NOT", main.text)
 
-    def test_main_stick_passes_so_gig_ready_and_backup_is_next(self):
+    def test_main_stick_passes_so_gig_ready_opens_and_the_backup_is_optional(self):
         st = K.State(["Warmup"], 2, items=[item(C.READY)], xml_path="/x", main=stick(True))
         self.assertEqual(statuses(st)["main"], K.DONE)
         self.assertEqual(statuses(st)["ready"], K.DONE)
@@ -94,9 +94,10 @@ class Steps(unittest.TestCase):
         ready = step(st, "ready").text
         self.assertTrue(ready.startswith("GIG READY."))
         self.assertIn("“MAIN” checked", ready)
-        self.assertIn("No backup stick yet", ready)
+        self.assertIn("A backup stick is optional: step 5.", ready)
         self.assertEqual(K.next_step(K.steps(st)).key, "backup")
-        self.assertEqual(K.current(K.steps(st)), "backup")
+        self.assertEqual(K.current(K.steps(st)), "ready")
+        self.assertEqual(step(st, "backup").title, "Backup stick (optional)")
 
     def test_both_sticks_checked(self):
         st = K.State(["Warmup"], 2, items=[item(C.READY)], xml_path="/x", main=stick(True),

@@ -9,11 +9,12 @@ Five steps, in the order a gig is prepared:
   tracks  Make the tracks gig-safe: check every track, copy the ones that won't play
   main    Main stick: Sortero writes the set to it for Pioneer players (usbexport),
           or rekordbox / Engine DJ do from the playlists file; then it's checked
-  backup  Backup stick: numbered folders on a second stick, checked (recommended)
   ready   Ready to leave: GIG READY once the main stick passes
+  backup  Backup stick (optional): numbered folders on a second stick, checked
 
-A step is DONE, NEXT (the one to do now) or WAITING (not yet). The backup can
-be done any time after the tracks; it becomes NEXT once the main stick passes.
+A step is DONE, NEXT (the one to do now) or WAITING (not yet). The backup is
+optional, so it comes last: it can be done any time after the tracks, and is
+NEXT once the main stick passes, but Ready to leave is what opens then.
 """
 import time
 from dataclasses import dataclass, field
@@ -22,7 +23,7 @@ from . import convert
 
 DONE, NEXT, WAITING = "done", "next", "waiting"
 MARKS = {DONE: "✓", NEXT: "→", WAITING: "○"}
-KEYS = ("set", "tracks", "main", "backup", "ready")
+KEYS = ("set", "tracks", "main", "ready", "backup")
 
 # Bytes per second of audio, for the space a copy will take.
 RATE_BYTES = {convert.MP3: 320_000 // 8, convert.AIFF: 44_100 * 2 * 2}
@@ -200,9 +201,22 @@ def steps(st):
                         "following the steps below, then check it.", NEXT,
                         "Check the main stick…"))
 
-    # 4. Backup stick
-    title = "Backup stick"
+    # 4. Ready to leave
     b = st.backup_check
+    if not main_ok:
+        out.append(Step("ready", "Ready to leave", "", WAITING))
+    else:
+        lines = ["GIG READY.", _stick_line("Main stick", st.main) + "."]
+        if b and b.ready:
+            lines.append(_stick_line("Backup", b) + ".")
+            lines.append("Eject both sticks before you unplug them.")
+        else:
+            lines.append("Eject the stick before you unplug it. A backup stick is "
+                         "optional: step 5.")
+        out.append(Step("ready", "Ready to leave", "\n".join(lines), DONE))
+
+    # 5. Backup stick, optional
+    title = "Backup stick (optional)"
     if not tracks_done:
         out.append(Step("backup", title, "", WAITING))
     elif b and b.ready:
@@ -212,21 +226,10 @@ def steps(st):
                                                      if b.first_problem else ""),
                         NEXT, "Write the backup again…"))
     else:
-        out.append(Step("backup", title, "Recommended: the set as numbered folders on a "
+        out.append(Step("backup", title, "The set as numbered folders on a "
                         "second stick, to browse if the main stick fails.",
                         NEXT if main_ok else WAITING, "Write the backup stick…"))
 
-    # 5. Ready to leave
-    if not main_ok:
-        out.append(Step("ready", "Ready to leave", "", WAITING))
-    else:
-        lines = ["GIG READY.", _stick_line("Main stick", st.main) + "."]
-        if b and b.ready:
-            lines.append(_stick_line("Backup", b) + ".")
-        else:
-            lines.append("No backup stick yet. One is recommended, not required.")
-        lines.append("Eject both sticks before you unplug them.")
-        out.append(Step("ready", "Ready to leave", "\n".join(lines), DONE))
     return out
 
 
@@ -243,8 +246,11 @@ def ready(st):
 
 
 def current(all_steps):
-    """The step that should be open: the next one to do, or, with everything
-    done, the last done one (Ready to leave)."""
+    """The step that should be open: the next one to do, or, once Ready to leave is
+    done, that (the backup after it is optional, opened by choice)."""
+    by_key = {s.key: s for s in all_steps}
+    if by_key.get("ready") and by_key["ready"].status == DONE:
+        return "ready"
     nxt = next((s for s in all_steps if s.status == NEXT), None)
     if nxt:
         return nxt.key

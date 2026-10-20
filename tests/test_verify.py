@@ -404,6 +404,17 @@ class ReportText(unittest.TestCase):
 
 
 class DiskTools(unittest.TestCase):
+    def test_names_the_app_that_wont_let_go_of_the_stick(self):
+        out = ("Unmount of disk6 failed: at least one volume could not be unmounted\n"
+               "Unmount was dissented by PID 15703 (/Applications/rekordbox 7/"
+               "rekordbox.app/Contents/MacOS/rekordbox)\nDissenter parent PPID 1 "
+               "(/sbin/launchd)")
+        self.assertTrue(disks.in_use_by(out).startswith("rekordbox has it open. Eject it "
+                                                        "in rekordbox"))
+        self.assertEqual(disks.in_use_by("dissented by PID 9 (/usr/bin/Music Thing)"),
+                         "Music Thing has it open. Quit Music Thing, then try again.")
+        self.assertEqual(disks.in_use_by("Volume GIG on disk6 failed to unmount"), "")
+
     """Parsing each platform's tool. lsblk's layout is taken from real output;
     the macOS and Windows samples follow the tools' documented keys."""
 

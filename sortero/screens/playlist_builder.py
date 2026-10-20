@@ -1,14 +1,15 @@
-"""Playlists: rebuild a streaming playlist from the files you already own."""
+"""Streaming playlists: rebuild a Spotify or TIDAL playlist from the files you
+already own. Your playlists (your_playlists.py) is where they're all listed."""
 import collections, os
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-from .. import ui, auth, playlists, organize
+from .. import ui, auth, playlists
 from .base import Screen, APP
 
 
-class PlaylistsScreen(Screen):
-    title = "Playlists"
+class StreamingPlaylistsScreen(Screen):
+    title = "Streaming playlists"
     summary = "Rebuild a Spotify or TIDAL playlist from the files you already have."
     details = ("Paste a playlist link, or a tracklist with one track per line. Sortero "
                "matches each track to a file in your collection and saves the result in "
@@ -55,10 +56,6 @@ class PlaylistsScreen(Screen):
         self.name = tk.StringVar()
         ttk.Entry(self.bar.left, textvariable=self.name, width=30).pack(side="left",
                                                                        padx=(ui.GAP, 0))
-        self.bar.set_more([
-            ("Fix broken playlist links…", self.app.repair_playlists),
-            ("Rebuild playlists from folders…", self.rebuild),
-        ])
         self.results = None
         self._reset()
 
@@ -171,24 +168,3 @@ class PlaylistsScreen(Screen):
         fp = playlists.write(self.app.root_dir.get(), name, found)
         messagebox.showinfo(APP, f"Saved {os.path.basename(fp)} in _Playlists.")
         self.app.log(f"playlist: {fp} ({len(found)} tracks, {missing} missing)")
-
-    def rebuild(self):
-        """Regenerate the folder-derived playlists against the library as it stands."""
-        if self.need_scan():
-            return
-        if not messagebox.askyesno(
-                APP, "Rebuild a playlist for each folder in your collection?\n\n"
-                     "Playlists with the same names in _Playlists are overwritten."):
-            return
-        root = self.app.root_dir.get()
-        recs = self.app.recs
-
-        def work(progress, log):
-            pls = organize.playlists_from_current(root, recs)
-            return organize.write_playlists(root, pls)
-
-        def done(written):
-            messagebox.showinfo(APP, f"Saved {ui.plural(len(written), 'playlist')} in "
-                                     "_Playlists.")
-
-        self.app.task.run(work, done, "Rebuilding playlists")

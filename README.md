@@ -46,6 +46,16 @@ Taken on Linux with a sample collection of made-up artists.
 
 ![Library](docs/screenshots/library.png)
 
+**Your playlists** lists every playlist Sortero can see, with what's in the
+one you select and which of its tracks are missing.
+
+![Your playlists](docs/screenshots/your-playlists.png)
+
+**Streaming playlists** rebuilds a Spotify or TIDAL playlist from the files you
+already have.
+
+![Streaming playlists](docs/screenshots/streaming-playlists.png)
+
 **Tidy up** gathers the tools for fixing the collection you already have.
 
 ![Tidy up](docs/screenshots/tidy-up.png)
@@ -114,13 +124,14 @@ open.
 | **To do** | Home. Cards for the jobs worth doing, most useful first, each with one button: AIFF or WAV files whose header an older Sortero damaged (see [below](#aiff-and-wav-files-with-a-damaged-header)), analysed tracks waiting in `Processed`, tracks in `Unsorted`, tracks with no genre, tracks not analysed yet, tracks whose artist and title are the wrong way round, tags full of download-site spam. The number beside it in the sidebar is how many jobs there are. |
 | **Add music** | Choose a folder or files. Analysed tracks go to the folder that already means their genre — yours if you have one. Anything missing a key lands in `To Be Processed`. Tracks with no genre to go on are **held back for you to place** instead of being dropped in `Unsorted`. Tracks already in the library are pointed out, not added twice. |
 | **Library** | Every track in one list. **Show** filters to what needs work (no genre, not analysed, no energy, no artist, artist and title swapped, no BPM, low bitrate, lossless files); **Search** narrows it; click a column heading to sort. Select tracks and set a genre, swap artist and title, re-read both from the filename, send them to analysis, place them one by one, copy genres from folder names, look them up on Discogs, or [shrink lossless tracks to MP3](#shrinking-lossless-tracks-to-mp3). Your own set recordings are hidden unless you ask. |
-| **Playlists** | Rebuild a Spotify or TIDAL playlist against your local files from a link, a pasted tracklist or a CSV — all three offered together above the list. **More** rebuilds the folder playlists or repairs broken links. |
+| **Your playlists** | Every playlist Sortero can see in one list: its own in `_Playlists`, any `.m3u` or `.m3u8` inside your collection, and the ones added in Gig prep from other apps or watched folders. Each shows its track count and how many files are missing; select one to see its tracks, missing ones marked. **Add to gig set** puts it at the end of Gig prep's set. Sortero's own can be **renamed** or **deleted** (set aside in `_Quarantine`, and History brings it back); ones from other apps are only read, but one you added can be **taken off the list**. **More** also shows a playlist in Finder or Explorer, repairs broken links in Sortero's own, or rebuilds a playlist for each folder. |
+| **Streaming playlists** | Rebuild a Spotify or TIDAL playlist against your local files from a link, a pasted tracklist or a CSV — all three offered together above the list. |
 | **Gig prep** | Get a USB stick that plays on any Pioneer or Denon player, and check it before you leave. Tick the playlists you're playing, in set order; Sortero makes gig-safe copies of any track that won't play everywhere, then checks the main and backup sticks and ends with **GIG READY**. See [Gig prep](#gig-prep). |
 | **Tidy up** | Tools for an existing collection: **Clean tags** (including which way round filenames read), **Fix wrong BPMs**, **Find duplicates**, **Place a folder's tracks by hand**, **Flatten release folders**, **Fix playlist links**, and **Reorganise the whole collection**. Every tool previews before it changes anything. |
 | **History** | Every operation, with undo, and the **safety net**. **Show log** reveals the detailed log. |
 | **Settings** | Collection folder, update checks, Discogs token, Spotify and TIDAL accounts, and the setup guide. |
 
-`Cmd-1`…`Cmd-7` (`Ctrl` on Windows and Linux) jump between screens, `Cmd-,`
+`Cmd-1`…`Cmd-8` (`Ctrl` on Windows and Linux) jump between screens, `Cmd-,`
 opens Settings and `Cmd-R` reads the collection again. Sortero follows your
 system's light or dark appearance.
 
@@ -391,7 +402,7 @@ wrong one. Tags and Mixxx changes both undo from History.
 
 ## Streaming playlists
 
-Paste a Spotify or TIDAL playlist link on the **Playlists** screen and Sortero
+Paste a Spotify or TIDAL playlist link on the **Streaming playlists** screen and Sortero
 matches each track against files you already own, then writes an `.m3u8`.
 
 Connect an account (**Settings → Spotify and TIDAL**) to read playlists of any length. It
@@ -629,7 +640,7 @@ It can also check automatically on launch (at most once a day) — toggle that i
 Settings.
 ## What's new since v0.18.0
 
-v0.18.0 is the free download. The current version, **v0.34.1**, is what
+v0.18.0 is the free download. The current version, **v0.35.0**, is what
 [Supporter licence](#supporting-sortero) holders get, and what you get by
 [building from source](#building-from-source). It adds:
 

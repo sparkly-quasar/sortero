@@ -167,9 +167,10 @@ def searching_collection():
     return settings.get("gig_search_collection") is not False
 
 
-def collection_sources(root, skip=()):
-    """Every playlist file inside the collection, found afresh."""
-    if not root or not os.path.isdir(root) or not searching_collection():
+def collection_sources(root, skip=(), force=False):
+    """Every playlist file inside the collection, found afresh. Only when Gig
+    prep is set to look for them there, unless `force`."""
+    if not root or not os.path.isdir(root) or not (force or searching_collection()):
         return []
     seen = set(skip)
     out = []
@@ -228,6 +229,62 @@ def listed(root):
     watch = watched_sources(skip)
     found = collection_sources(root, skip | {s.path for s in watch})
     return own + _tell_apart(found + watch) + extra
+
+
+def everywhere(root):
+    """Every playlist Sortero can see, for Your playlists: what Gig prep lists,
+    plus the collection's own playlist files even when Gig prep isn't looking
+    for them there."""
+    found = listed(root)
+    if searching_collection():
+        return found
+    have = {s.path for s in found if s.kind != SORTERO}
+    if root:
+        have |= {os.path.join(playlists.playlist_dir(root), n + ".m3u8")
+                 for n in playlists.existing(root)}
+    return found + _tell_apart(collection_sources(root, have, force=True))
+
+
+def survey(root, progress=None):
+    """[(Source, tracks or None if it can't be read, how many of those are missing)]
+    for every playlist Sortero can see."""
+    out = []
+    found = everywhere(root)
+    for i, src in enumerate(found, 1):
+        try:
+            paths = tracks(src, root)
+            out.append((src, len(paths), sum(not os.path.exists(p) for p in paths)))
+        except SourceError:
+            out.append((src, None, 0))
+        if progress:
+            progress(i, len(found))
+    return out
+
+
+def for_gig(src, root):
+    """The Source Gig prep lists for this playlist, remembering it first if Gig
+    prep wouldn't otherwise see it: a playlist file in the collection while
+    Gig prep isn't looking there is added as a playlist file."""
+    if src.key in {s.key for s in listed(root)}:
+        return src
+    if src.kind == COLLECTION:
+        src = m3u_sources([src.path])[0]
+    remember([src])
+    return src
+
+
+def removable(src):
+    """Can this be taken off the list? Only what was added to it: Sortero's own
+    and the collection's are found by themselves, and a watched folder's go
+    when the folder stops being watched."""
+    return src.kind not in (SORTERO, COLLECTION, WATCHED)
+
+
+def file_of(src):
+    """The file to show in Finder or Explorer for this playlist."""
+    if src.kind == SORTERO:
+        return os.path.join(src.path, src.name + ".m3u8")
+    return src.path
 
 
 # ------------------------------------------------------------------ tracks

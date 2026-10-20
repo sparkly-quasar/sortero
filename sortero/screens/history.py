@@ -21,6 +21,8 @@ KINDS = {
     "choose-folder": "Placed tracks by hand",
     "resolve-duplicates": "Sorted duplicates from Processed",
     "save-playlist": "Saved a folder as a playlist",
+    "rename-playlist": "Renamed a playlist",
+    "delete-playlist": "Deleted a playlist",
 }
 
 

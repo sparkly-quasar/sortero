@@ -10,7 +10,8 @@ from .screens.base import APP, RESCAN, changes
 from .screens.todo import TodoScreen
 from .screens.add_music import AddMusicScreen
 from .screens.tracks import LibraryScreen
-from .screens.playlist_builder import PlaylistsScreen
+from .screens.playlist_builder import StreamingPlaylistsScreen
+from .screens.your_playlists import YourPlaylistsScreen
 from .screens.gig import GigScreen
 from .screens.tidy import (TidyUpScreen, CleanTagsScreen, FixBpmScreen, DuplicatesScreen,
                            ReorganiseScreen)
@@ -21,10 +22,12 @@ from .screens.pro_screen import ProScreen
 from .version import __version__
 
 NAV = [("todo", "To do"), ("add", "Add music"), ("library", "Library"),
-       ("playlists", "Playlists"), ("gig", "Gig prep"), ("tidy", "Tidy up"),
+       ("playlists", "Your playlists"), ("streaming", "Streaming playlists"),
+       ("gig", "Gig prep"), ("tidy", "Tidy up"),
        ("history", "History")]
 SCREENS = {"todo": TodoScreen, "add": AddMusicScreen, "library": LibraryScreen,
-           "playlists": PlaylistsScreen, "gig": GigScreen, "tidy": TidyUpScreen,
+           "playlists": YourPlaylistsScreen, "streaming": StreamingPlaylistsScreen,
+           "gig": GigScreen, "tidy": TidyUpScreen,
            "tags": CleanTagsScreen, "bpm": FixBpmScreen, "dupes": DuplicatesScreen, "reorganise": ReorganiseScreen,
            "history": HistoryScreen, "settings": SettingsScreen, "pro": ProScreen,
            "shrink": ShrinkScreen}
@@ -369,6 +372,31 @@ class Sortero(tk.Tk):
                 self.task.run(work2, done2, "Repairing playlists")
 
         self.task.run(work, done, "Checking playlists")
+
+    def rebuild_folder_playlists(self):
+        """Regenerate the folder-derived playlists against the library as it stands."""
+        root = self.require_root()
+        if not root:
+            return
+        if not self.recs:
+            messagebox.showinfo(APP, f"Sortero hasn't read your collection yet. Press "
+                                     f"{RESCAN} to read it.")
+            return
+        if not messagebox.askyesno(
+                APP, "Rebuild a playlist for each folder in your collection?\n\n"
+                     "Playlists with the same names in _Playlists are overwritten."):
+            return
+        recs = self.recs
+
+        def work(progress, log):
+            pls = organize.playlists_from_current(root, recs)
+            return organize.write_playlists(root, pls)
+
+        def done(written):
+            messagebox.showinfo(APP, f"Saved {ui.plural(len(written), 'playlist')} in "
+                                     "_Playlists.")
+
+        self.task.run(work, done, "Rebuilding playlists")
 
     def repair_playlists(self):
         """Re-link playlist entries whose file moved or was re-encoded."""

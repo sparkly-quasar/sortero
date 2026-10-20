@@ -157,6 +157,9 @@ def build_collection():
             fh.write("#EXTM3U\n")
             for k in tracks:
                 fh.write(os.path.relpath(where[k], pl) + "\n")
+    # one entry whose file has gone, for Your playlists to point out
+    with open(os.path.join(pl, "Closing.m3u8"), "a", encoding="utf-8") as fh:
+        fh.write(os.path.join("..", "Downloads 2024", "Rue Okafor - Last Light.mp3") + "\n")
     os.makedirs(os.path.dirname(EXPORT))
     with open(EXPORT, "w", encoding="utf-8") as fh:
         fh.write("#EXTM3U\n")
@@ -225,6 +228,29 @@ def main():
     def library():
         app.show("library")
         app.after(800, lambda: (shot("library"), go()))
+
+    @step
+    def your_playlists():
+        app.show("playlists")       # reads every playlist again by itself
+        yp = app.screens["playlists"]
+
+        def pick():
+            key = next(k for k, s in yp.rows.items() if s.name == "Closing")
+            yp.tv.selection_set(key)
+            app.after(400, lambda: (shot("your-playlists"), go()))
+        idle(pick)
+
+    @step
+    def streaming():
+        app.show("streaming")
+        sp = app.screens["streaming"]
+        sp.toggle_paste()
+        sp.paste.insert("1.0", "Ana Lusk - Saltmarsh\nHalden Voss - Subgrid\n"
+                               "Ines Calder - Microfiche\nKepler Vale - Ninth Hour\n"
+                               "Somebody Else - A Track You Don't Have\n")
+        sp.name.set("Late Night Techno")
+        sp.match()
+        idle(lambda: (shot("streaming-playlists"), go()))
 
     @step
     def tidy():

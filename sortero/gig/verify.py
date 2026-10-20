@@ -178,6 +178,26 @@ def name_problems(rel):
     return out
 
 
+def slash_split(rel):
+    """For a track rekordbox exported to Contents/<Artist>/<Album>/: the tag whose "/"
+    rekordbox made into folders, as (the folders it made, "artist" or "album", the tag),
+    or None. "OFF / GRID" arrives as the folders "OFF " and " GRID"."""
+    parts = rel.split("/")
+    if len(parts) < 3 or parts[0] != "Contents":
+        return None
+    groups, at = [], 1
+    for part in parts[1:-1]:
+        if groups and groups[-1][-1].endswith(" "):
+            groups[-1].append(part)
+        else:
+            groups.append([part])
+    for tag, g in zip(("artist", "album"), groups):
+        at += len(g)
+        if len(g) > 1:
+            return "/".join(parts[:at]), tag, "/".join(g)
+    return None
+
+
 # ------------------------------------------------------------------ checks
 def check_stick(profile, vol):
     if vol.error or not vol.file_system:
@@ -457,7 +477,7 @@ def check_audio(stick, entries, profile, decode=True, progress=None, workers=Non
 def check_names(entries, profile):
     fails, warns = [], []
     depth = profile.folder_depth    # None: the maker states no limit
-    per_folder = {}
+    per_folder, splits = {}, {}
     for e in entries:
         if is_appledouble(e.rel):
             continue
@@ -467,7 +487,17 @@ def check_names(entries, profile):
             fails.append(f"{e.rel}: over 4 GB, which FAT32 can't hold")
         if depth and is_audio(e) and e.rel.count("/") > depth:
             fails.append(f"{e.rel}: more than {depth} folders deep, so players won't play it")
-        fails += name_problems(e.rel)
+        problems = name_problems(e.rel)
+        split = slash_split(e.rel)
+        if split:
+            # One line per tag, saying what to change, not one per file it split.
+            where, tag, value = split
+            splits[where] = (f"{where}/: the {tag} “{value}” has a “/”, which rekordbox "
+                             f"makes into folders. Change the {tag} to "
+                             f"“{value.replace('/', '-')}” in rekordbox, then export again")
+            problems = [p for p in problems if "ends in a space" not in p]
+        fails += problems
+    fails += splits.values()
     for folder, n in per_folder.items():
         if n > FOLDER_DISPLAY_MAX and profiles.reads_rekordbox(profile):
             warns.append(f"{folder or 'top level'}: {n:,} files; players show the first "

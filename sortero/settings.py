@@ -26,6 +26,9 @@ DEFAULTS = {
     "shrink_archive": "",
     # a rekordbox collection XML to take cue points from ("" = none)
     "gig_rekordbox_xml": "",
+    # the iTunes or Music library XML Gig prep last read playlists from ("" = look
+    # where iTunes and Music keep it)
+    "gig_itunes_xml": "",
     # move cues on MP3 copies 25 ms later, for a rekordbox that ignores the
     # LAME gapless header (see gig/rbxml.py)
     "gig_mp3_cue_shift": False,

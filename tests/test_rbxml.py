@@ -203,6 +203,15 @@ class Build(TempDir):
         self.assertEqual(copy.find("POSITION_MARK").get("Start"), "2.025")
         self.assertEqual(original.find("POSITION_MARK").get("Start"), "1.000")
 
+    def test_slash_in_artist_or_album_becomes_a_dash(self):
+        from mutagen.id3 import TALB
+        path = tagged_mp3(self.path("Collection/Inner Circle.mp3"), artist="OFF / GRID")
+        t = ID3(path)
+        t.add(TALB(encoding=3, text=["Division / Taris"]))
+        t.save(path, v2_version=3)
+        attrs = rbxml._track_attrs(1, path, None)
+        self.assertEqual((attrs["Artist"], attrs["Album"]), ("OFF - GRID", "Division - Taris"))
+
     def test_how_to_names_the_file(self):
         steps = "\n".join(rbxml.how_to("/Gig Library/Sortero gig.xml"))
         self.assertIn("/Gig Library/Sortero gig.xml", steps)

@@ -56,12 +56,19 @@ def _bpm(value):
     return bpm if 20 <= bpm <= 400 else None
 
 
+def _no_slash(value):
+    """rekordbox names the stick's folders Contents/<Artist>/<Album>, so a "/" in
+    either ("OFF / GRID") would make two folders, the first ending in a space that
+    FAT32 drops. It becomes "-", as on the backup stick."""
+    return value.replace("/", "-")
+
+
 def _track_attrs(track_id, path, info):
     t = Track(path)
     get = (lambda f: (t.get(f) or "").strip()) if t.ok else (lambda f: "")
     attrs = {"TrackID": str(track_id), "Name": get("title") or os.path.splitext(
                  os.path.basename(path))[0],
-             "Artist": get("artist"), "Album": get("album"), "Genre": get("genre"),
+             "Artist": _no_slash(get("artist")), "Album": _no_slash(get("album")), "Genre": get("genre"),
              "Grouping": get("grouping"), "Comments": get("comment"),
              "Tonality": get("key"), "Location": location(path)}
     try:

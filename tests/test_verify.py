@@ -323,6 +323,18 @@ class Names(unittest.TestCase):
         self.assertTrue(V.name_problems("CON.mp3"))
         self.assertTrue(V.name_problems("x" * 256 + ".mp3"))
 
+    def test_slash_in_a_tag_names_the_tag_once(self):
+        entries = [V.Entry(f"Contents/OFF / GRID/Downtown Dubs/{n}.mp3", "/nowhere", 1)
+                   for n in ("01", "02")]
+        entries.append(V.Entry("Contents/ogtrues/hide & seek / devils romance/01.mp3",
+                               "/nowhere", 1))
+        c = V.check_names(entries, P.UNIVERSAL)
+        self.assertEqual((c.level, c.summary), (V.FAIL, "2 problems."))
+        self.assertIn("the artist “OFF / GRID” has a “/”", c.details[0])
+        self.assertIn("Change the artist to “OFF - GRID”", c.details[0])
+        self.assertIn("Change the album to “hide & seek - devils romance”", c.details[1])
+        self.assertIsNone(V.slash_split("Contents/Artist/Album/01.mp3"))
+
     def test_over_4_gb(self):
         big = V.Entry("Mixes/set.wav", "/nowhere", 5 * 1024 ** 3)
         c = V.check_names([big], P.UNIVERSAL)

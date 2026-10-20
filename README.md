@@ -432,13 +432,14 @@ original is set aside in `_Quarantine/damaged headers`, and History undoes it.
 > they prepare their music somewhere else. Gig prep writes that stick itself:
 > the same libraries rekordbox writes for Pioneer players, with your
 > playlists, beat grids, cues, waveforms and artwork, on macOS, Windows and
-> Linux. It's built from published research into the format and checked
-> against real rekordbox exports, but it **hasn't been played on enough real
-> players yet** to be trusted on its own. Until it has, bring a second stick
-> you trust: one exported by rekordbox, or Gig prep's plain-folder backup
-> stick. If a stick Sortero wrote misbehaves on a player, please
-> [open an issue](https://github.com/sparkly-quasar/sortero/issues) naming the
-> player and its firmware.
+> Linux. It's built from published research into the format, checked against
+> real rekordbox exports, and has been tested and is fairly stable. **It hasn't
+> been played on Pioneer hardware yet**, though, and that test is still to
+> come. Until it has, bring a second stick you trust: one exported by
+> rekordbox, or Gig prep's plain-folder backup stick. If you have a Pioneer
+> player and can try a stick Sortero wrote, please
+> [open an issue](https://github.com/sparkly-quasar/sortero/issues) saying how
+> it went, with the player and its firmware.
 
 A gig stick has to play on whatever players the venue has, and the time to find
 out it doesn't is before you leave. **Gig prep** is one checklist of five steps.
@@ -500,8 +501,9 @@ are just a title.
    from Mixxx, then from Mixed In Key's analysis in the files themselves. It
    refuses a stick that already holds a library Sortero didn't write, and
    running it again replaces only what Sortero put there. **This is the beta
-   part of Gig prep and hasn't been played on enough real players yet**, so
-   bring a second stick you trust until it has.
+   part of Gig prep: it's been tested and is fairly stable, but hasn't been
+   played on Pioneer hardware yet**, so bring a second stick you trust until
+   it has.
    The writers are ports of [openboxxx](https://github.com/sparkly-quasar/openboxxx)'s
    (`export.pdb`, laid out page by page like a real rekordbox export) and
    follow [rbxport](https://github.com/chrisle/rbxport)'s (OneLibrary, and
@@ -650,8 +652,9 @@ stick you can trust at the venue, without needing rekordbox to write it.
 - Profiles for Pioneer and Denon players: what each one reads off a stick.
 - Playable copies of only the tracks a player can't play. A small ffmpeg comes
   with the app, so this works out of the box.
-- The main stick written by Sortero itself, no rekordbox needed (beta: bring
-  a second stick you trust until it's been tested on more players): both
+- The main stick written by Sortero itself, no rekordbox needed (beta: fairly
+  stable, but bring a second stick you trust until it's been played on
+  Pioneer hardware): both
   libraries Pioneer players read, with your playlists, beat grids, cue
   points, waveforms and artwork. Writing it again only redoes what changed.
   Or a rekordbox XML of the set.

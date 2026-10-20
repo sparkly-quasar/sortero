@@ -3,7 +3,7 @@ import datetime, os
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from .. import ui, journal, session, paths
+from .. import common, ui, journal, session, paths
 from .base import Screen, APP, changes
 
 KINDS = {
@@ -33,7 +33,7 @@ def when(ts):
         return "—"
     dt = datetime.datetime.fromtimestamp(ts)
     today = datetime.date.today()
-    clock = dt.strftime("%H:%M")
+    clock = common.clock(dt.hour, dt.minute)
     if dt.date() == today:
         return f"Today, {clock}"
     if dt.date() == today - datetime.timedelta(days=1):

@@ -4,6 +4,11 @@ import os, re, json
 AUDIO_EXTS = {".mp3", ".wav", ".aiff", ".aif", ".flac", ".m4a", ".ogg"}
 
 
+def clock(hour, minute):
+    """A time of day as people here read it: "9:05 PM", "12:30 AM"."""
+    return f"{hour % 12 or 12}:{minute:02d} {'AM' if hour < 12 else 'PM'}"
+
+
 def human_size(n):
     n = float(n or 0)
     for unit in ("B", "KB", "MB", "GB", "TB"):

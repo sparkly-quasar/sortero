@@ -20,6 +20,7 @@ import time
 from dataclasses import dataclass, field
 
 from . import convert
+from .. import common
 
 DONE, NEXT, WAITING = "done", "next", "waiting"
 MARKS = {DONE: "✓", NEXT: "→", WAITING: "○"}
@@ -96,7 +97,7 @@ def when(t, now=None):
     """"21:14" today, "yesterday 21:14", or "14 Oct 21:14"."""
     now = time.localtime(now if now is not None else time.time())
     then = time.localtime(t)
-    clock = time.strftime("%H:%M", then)
+    clock = common.clock(then.tm_hour, then.tm_min)
     days = (time.mktime(now[:3] + (0, 0, 0, 0, 0, -1))
             - time.mktime(then[:3] + (0, 0, 0, 0, 0, -1))) / 86400
     if round(days) == 0:

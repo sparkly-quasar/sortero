@@ -5,7 +5,7 @@ from tkinter import ttk, filedialog, messagebox
 
 from . import (library, organize, journal, playlists, paths, settings, updates, wizard,
                session, updater, review, flatten, processed, importer, ui, licence,
-               supporter, tagcache)
+               supporter, tagcache, common)
 from .screens.base import APP, RESCAN, changes
 from .screens.todo import TodoScreen
 from .screens.add_music import AddMusicScreen
@@ -637,7 +637,11 @@ class Sortero(tk.Tk):
             return
         d = session.describe(data)
         import time as _t
-        when = _t.strftime("%Y-%m-%d %H:%M", _t.localtime(d["started"])) if d["started"] else "unknown"
+        if d["started"]:
+            t = _t.localtime(d["started"])
+            when = _t.strftime("%Y-%m-%d ", t) + common.clock(t.tm_hour, t.tm_min)
+        else:
+            when = "unknown"
         if not messagebox.askyesno(
                 APP, f"Undo everything in this backup?\n\n"
                      f"Recorded: {when}\nCollection: {d['root']}\n"

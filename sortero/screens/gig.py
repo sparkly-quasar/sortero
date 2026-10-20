@@ -580,9 +580,15 @@ class GigScreen(Screen):
         self.open_key = "tracks"
         self.refresh()
 
-    def check_tracks(self):
+    def check_tracks(self, then=None):
+        """Check tonight's tracks; `then` runs once they're checked (write_main uses it)."""
         root = self.app.require_root()
-        if not root or not self.picker.chosen:
+        if not root:
+            return
+        if not self.picker.chosen:
+            if then:
+                messagebox.showinfo(APP, "Choose tonight's playlists in step 1 first.")
+                self.open("set")
             return
         try:
             lib = convert.library_dir(root, settings.get("gig_library"))
@@ -609,10 +615,12 @@ class GigScreen(Screen):
             sets, items, self.unreadable, (st.xml_cues, st.xml_tracks) = res
             st.items, st.copied, st.sets, st.earlier = items, False, sets, None
             self._advance(keep_notice=True)     # this check ran by itself; say why
+            if then:
+                then()
 
         self.app.task.run(work, done, "Checking tracks")
 
-    def make_copies(self):
+    def make_copies(self, then=None):
         items = self.state.items
         if not items:
             return
@@ -633,6 +641,8 @@ class GigScreen(Screen):
         def done(result):
             self.state.copied = True
             self._advance()
+            if then and not convert.counts(items)[convert.CONVERT]:
+                then()
 
         self.app.task.run(work, done, "Making gig-safe copies")
 
@@ -647,7 +657,14 @@ class GigScreen(Screen):
     def make_xml(self):
         root = self.app.require_root()
         st = self.state
-        if not root or not st.items:
+        if not root:
+            return
+        if st.items is None:                    # after a restart: check them first
+            self.check_tracks(then=self.make_xml)
+            return
+        if not st.items:
+            messagebox.showinfo(APP, "Tonight's playlists have no tracks Sortero can use. "
+                                     "Check them in step 1.")
             return
         work = self._xml_work(self._xml_path(), st.items, list(st.sets or []))
 
@@ -761,9 +778,23 @@ class GigScreen(Screen):
         The libraries are written from the playlists file, so it's made first if it
         isn't there yet."""
         st = self.state
-        sets = st.sets
-        if not self.app.require_root() or not st.items:
+        if not self.app.require_root():
             return
+        if st.items is None:
+            # After a restart only a summary of the last gig is kept, so check the
+            # tracks again first, then carry on from here.
+            self.check_tracks(then=self.write_main)
+            return
+        if not st.items:
+            messagebox.showinfo(APP, "Tonight's playlists have no tracks Sortero can use. "
+                                     "Check them in step 1.")
+            return
+        if convert.counts(st.items)[convert.CONVERT]:
+            # After a restart the copies are usually made already: this finds and
+            # reuses them in a moment (convert.run's cache), then carries on.
+            self.make_copies(then=self.write_main)
+            return
+        sets = st.sets
         path = st.xml_path or self._xml_path()
         make_xml = None if st.xml_path else self._xml_work(path, st.items, sets or [])
         stick = self._choose_stick("main")

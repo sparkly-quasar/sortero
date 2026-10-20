@@ -60,6 +60,18 @@ class Steps(unittest.TestCase):
         self.assertEqual(statuses(st)["backup"], K.WAITING)
         self.assertEqual(step(st, "backup").button, "Write the backup stick…")
 
+    def test_for_pioneer_players_sortero_writes_the_main_stick(self):
+        st = K.State(["Warmup"], 2, items=[item(C.READY)], apps="rekordbox", direct=True)
+        nxt = step(st, "main")
+        self.assertEqual((nxt.status, nxt.button), (K.NEXT, "Write the main stick…"))
+        self.assertEqual(nxt.title, "Main stick")
+        self.assertIn("No rekordbox needed", nxt.text)
+        self.assertNotIn("Engine DJ", nxt.text)
+        st.apps = "rekordbox / Engine DJ"
+        self.assertIn("Denon players need Engine DJ", step(st, "main").text)
+        st.main = stick(True)
+        self.assertEqual(step(st, "main").status, K.DONE)
+
     def test_after_making_the_xml_check_the_main_stick(self):
         st = K.State(["Warmup"], 2, items=[item(C.READY)], xml_path="/lib/x.xml")
         nxt = K.next_step(K.steps(st))
@@ -74,7 +86,7 @@ class Steps(unittest.TestCase):
         self.assertEqual(statuses(st)["ready"], K.WAITING)
         self.assertNotIn("NOT", main.text)
 
-    def test_main_stick_passes_so_gig_ready_and_backup_is_next(self):
+    def test_main_stick_passes_so_gig_ready_opens_and_the_backup_is_optional(self):
         st = K.State(["Warmup"], 2, items=[item(C.READY)], xml_path="/x", main=stick(True))
         self.assertEqual(statuses(st)["main"], K.DONE)
         self.assertEqual(statuses(st)["ready"], K.DONE)
@@ -82,9 +94,10 @@ class Steps(unittest.TestCase):
         ready = step(st, "ready").text
         self.assertTrue(ready.startswith("GIG READY."))
         self.assertIn("“MAIN” checked", ready)
-        self.assertIn("No backup stick yet", ready)
+        self.assertIn("A backup stick is optional: step 5.", ready)
         self.assertEqual(K.next_step(K.steps(st)).key, "backup")
-        self.assertEqual(K.current(K.steps(st)), "backup")
+        self.assertEqual(K.current(K.steps(st)), "ready")
+        self.assertEqual(step(st, "backup").title, "Backup stick (optional)")
 
     def test_both_sticks_checked(self):
         st = K.State(["Warmup"], 2, items=[item(C.READY)], xml_path="/x", main=stick(True),
@@ -145,6 +158,31 @@ class Estimates(unittest.TestCase):
         text = K.check_text([item(C.READY), item(C.CONVERT, seconds=300), item(C.FAILED)])
         self.assertTrue(text.startswith("1 track already plays as it is."), text)
         self.assertIn("1 needs a copy, about 11.4 MB", text)
+
+
+class CuePoints(unittest.TestCase):
+    def test_says_where_cues_will_come_from(self):
+        self.assertEqual(K.cue_sources(None, True), "Cue points and beat grids come from "
+                         "Mixed In Key's tags in each file, then Mixxx.")
+        text = K.cue_sources("collection.xml", False)
+        self.assertTrue(text.startswith("Cue points and beat grids come from your rekordbox "
+                                        "collection (collection.xml), then Mixed In Key's"))
+        self.assertIn("Mixxx's library isn't on this computer", text)
+
+    def test_says_how_many_tracks_got_cues_and_grids_from_each_source(self):
+        counts = {"cues": {"Mixxx": 2, "Mixed In Key": 5}, "grids": {"Mixed In Key": 9}}
+        self.assertEqual(K.cue_summary(counts, 9),
+                         "Cue points for 7 of 9 tracks: 5 from Mixed In Key, 2 from Mixxx. "
+                         "Beat grids for all 9 tracks: 9 from Mixed In Key.")
+        self.assertEqual(K.cue_summary({"cues": {"rekordbox": 1}, "grids": {}}, 1),
+                         "Cue points for the track: 1 from rekordbox. "
+                         "No beat grids found for the track.")
+
+    def test_says_plainly_when_no_track_got_any(self):
+        self.assertEqual(K.cue_summary({"cues": {}, "grids": {}}, 9),
+                         "No cue points found for any of the 9 tracks. "
+                         "No beat grids found for any of the 9 tracks.")
+        self.assertEqual(K.cue_summary({}, 0), "")
 
 
 if __name__ == "__main__":

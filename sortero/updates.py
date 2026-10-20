@@ -47,8 +47,9 @@ def is_prerelease(v):
     return len(p) == 6 and p[3] == 0
 
 
-def is_newer(remote, local=__version__):
-    return parse(remote) > parse(local)
+def is_newer(remote, local=None):
+    # Looked up when called, not when defined, so the tests can stand in a version.
+    return parse(remote) > parse(local or __version__)
 
 
 BETA_ABOUT = ("Beta builds have new features before they're released, for people happy "

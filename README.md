@@ -466,17 +466,38 @@ are just a title.
    Key's cue points and beat grid; artwork too big for older players is shrunk.
    A file that is already lossy is decoded to AIFF rather than encoded lossy a
    second time. Copies are remembered, so the next gig only converts what's new.
-3. **Main stick.** **Make the playlists file** writes a rekordbox XML: the
-   playlists, numbered in set order, pointing at the gig-safe files, with BPM,
-   key, cue points and beat grids. Cues come from your rekordbox library if you
-   point Sortero at an XML export of it (**Use a rekordbox XML…**; Mixed In
-   Key's `rekordbox.xml` works too), then from Mixxx, then from Mixed In Key's
-   analysis in the files themselves. The step then shows how to get it onto the
-   stick, for the players you chose: into rekordbox and onto the stick with
-   rekordbox 7.2.11 or later, which writes both the Device Library older
-   players read and the OneLibrary the newest (CDJ-3000X, OPUS-QUAD) read; for
-   Denon players, Engine DJ imports the same XML, cues included, and its Sync
-   Manager exports it. Then **Check the main stick…**: the file system and
+3. **Main stick.** **Write the main stick…** puts the set on the stick
+   itself, no rekordbox needed (it works on Linux too, where rekordbox doesn't
+   run): it copies tonight's tracks to the stick and writes both libraries
+   Pioneer players read, the Device Library (`PIONEER/rekordbox/export.pdb`,
+   every player since the CDJ-900) and OneLibrary (`exportLibrary.db`, which
+   the CDJ-3000X, XDJ-AZ, OPUS-QUAD and OMNIS-DUO read instead), plus each
+   track's analysis files: the playlists numbered in set order, BPM, key, beat
+   grids, hot cues (named, in the default colours), memory cues, loops,
+   waveforms (the overview and the scrolling detail, in colour and three-band
+   for the players that show them) and each track's embedded artwork. Then it
+   checks the stick. Cues come
+   from your rekordbox library if you point Sortero at an XML export of it
+   (**Use a rekordbox XML…**; Mixed In Key's `rekordbox.xml` works too), then
+   from Mixxx, then from Mixed In Key's analysis in the files themselves. It
+   refuses a stick that already holds a library Sortero didn't write, and
+   running it again replaces only what Sortero put there. **This is new and hasn't been played
+   on a real player yet**, so bring a second stick you trust until it has.
+   The writers are ports of [openboxxx](https://github.com/sparkly-quasar/openboxxx)'s
+   (`export.pdb`, laid out page by page like a real rekordbox export) and
+   follow [rbxport](https://github.com/chrisle/rbxport)'s (OneLibrary, and
+   the analysis files' layout and waveforms, which it measured against
+   rekordbox's own). The waveforms are approximations of rekordbox's: close
+   in shape and colour, not identical.
+
+   **Using rekordbox or Engine DJ instead?** **Make the playlists file for it**
+   writes a rekordbox XML of the same set, and the step shows how to get it
+   onto the stick: into rekordbox 7.2.11 or later, which writes both
+   libraries; for Denon players, Engine DJ imports the same XML, cues
+   included, and its Sync Manager exports it. Sortero can't write Engine DJ's
+   library itself yet.
+
+   Then **Check the main stick…**: the file system and
    partitions (FAT32 on one MBR partition is what every player reads), that a
    library the players read is on it (either rekordbox's or Engine DJ's will
    do; the missing one is a warning) and that tonight's playlists are in the
@@ -601,7 +622,7 @@ It can also check automatically on launch (at most once a day) — toggle that i
 Settings.
 ## What's new since v0.18.0
 
-v0.18.0 is the free download. The current version, **v0.33.4**, is what
+v0.18.0 is the free download. The current version, **v0.34.0**, is what
 [Supporter licence](#supporting-sortero) holders get, and what you get by
 [building from source](#building-from-source). It adds:
 
@@ -610,7 +631,12 @@ can trust at the venue.
 - Profiles for Pioneer and Denon players: what each one reads off a stick.
 - Playable copies of only the tracks a player can't play. A small ffmpeg comes
   with the app, so this works out of the box.
-- A rekordbox XML with your cue points, and a plain-folder backup stick.
+- The main stick written by Sortero itself, no rekordbox needed: both
+  libraries Pioneer players read, with your playlists, beat grids, cue
+  points, waveforms and artwork. Writing it again only redoes what changed.
+  Or a rekordbox XML of the set.
+- An optional plain-folder backup stick, with a button to eject the main
+  stick first when there's only one USB port.
 - Safe formatting of a stick on macOS, Windows and Linux, at any size, and a
   **GIG READY / NOT READY** check before you leave.
 - Playlists from anywhere: Sortero's own, playlist files, watched folders, any

@@ -90,7 +90,7 @@ def _track_attrs(track_id, path, info):
 
 
 def build(items, sets, gig_name, finder=None, shift_mp3_copies=False):
-    """The XML tree, and how many tracks got marks from which source.
+    """The XML tree, and how many tracks got cues and grids from where (cues.tally).
 
     `sets` is [(playlist name, [original paths in order])]; `items` the
     checked tracks, which say what file plays for each original.
@@ -99,7 +99,7 @@ def build(items, sets, gig_name, finder=None, shift_mp3_copies=False):
     root = ET.Element("DJ_PLAYLISTS", Version="1.0.0")
     ET.SubElement(root, "PRODUCT", Name="Sortero", Version=__version__, Company="Sortero")
     collection = ET.SubElement(root, "COLLECTION")
-    ids, counts = {}, {}
+    ids, counts = {}, {"cues": {}, "grids": {}}
 
     def track_id(it):
         k = cues.key(it.playable)
@@ -114,7 +114,7 @@ def build(items, sets, gig_name, finder=None, shift_mp3_copies=False):
                            and it.target == convert.MP3)
             if is_mp3_copy and shift_mp3_copies:
                 marks = marks.shifted(MP3_COPY_DELAY)
-            counts[marks.source] = counts.get(marks.source, 0) + 1
+            cues.tally(counts, marks)
             if marks.grids and "AverageBpm" not in el.attrib:
                 el.set("AverageBpm", _num(marks.grids[0].bpm))
             for g in marks.grids:

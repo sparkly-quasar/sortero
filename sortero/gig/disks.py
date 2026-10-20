@@ -10,7 +10,7 @@ function, so the parsing can be tested without the platform:
 Anything the tool doesn't say is left as None, and the checks treat None as
 "couldn't tell", never as "fine".
 """
-import json, os, plistlib, sys
+import json, os, plistlib, re, sys
 from dataclasses import dataclass
 
 from . import ffmpeg
@@ -183,3 +183,57 @@ def volume(mount):
         return _linux(mount)
     except Exception as e:
         return Volume(mount, error=str(e))
+
+
+WIN_EJECT = ("(New-Object -ComObject Shell.Application).Namespace(17).ParseName('{letter}:')"
+             ".InvokeVerb('Eject')")
+
+
+DISSENTER = re.compile(r"dissented by PID \d+ \((?:[^)]*/)?([^/)]+?)(?:\.app/[^)]*)?\)")
+
+
+def in_use_by(text):
+    """Why macOS wouldn't unmount, in words: diskutil names the app holding it open
+    ("Unmount was dissented by PID 15703 (/Applications/rekordbox 7/rekordbox.app/
+    Contents/MacOS/rekordbox)"). rekordbox holds a stick it shows under Devices."""
+    m = DISSENTER.search(text or "")
+    if not m:
+        return ""
+    app = m.group(1)
+    if app.lower().startswith("rekordbox"):
+        return ("rekordbox has it open. Eject it in rekordbox (the ⏏ next to it under "
+                "Devices) or quit rekordbox, then try again.")
+    return f"{app} has it open. Quit {app}, then try again."
+
+
+def eject(mount):
+    """Eject the stick mounted here, as the file manager would. Returns "" when it's
+    gone, otherwise why it isn't (usually: something still has a file open on it)."""
+    if sys.platform == "darwin":
+        cmd = ["diskutil", "eject", mount]
+    elif os.name == "nt":
+        letter = os.path.splitdrive(mount)[0].rstrip(":")
+        cmd = ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+               WIN_EJECT.format(letter=letter)]
+    else:
+        cmd = ["gio", "mount", "-e", mount]
+    try:
+        r = ffmpeg.run(cmd)
+    except OSError as e:
+        return str(e)
+    if os.name == "nt":
+        import time
+        for _ in range(20):             # the shell ejects in the background
+            if not os.path.exists(mount):
+                return ""
+            time.sleep(0.25)
+        return "Windows didn't eject it. Close anything using it and try again."
+    if r.returncode != 0 or os.path.ismount(mount):
+        out = (r.stderr or b"").decode("utf-8", "replace") + \
+            (r.stdout or b"").decode("utf-8", "replace")
+        if in_use_by(out):
+            return in_use_by(out)
+        if out.strip():
+            return out.strip().splitlines()[0]
+        return "it's still in use. Close anything using it and try again."
+    return ""

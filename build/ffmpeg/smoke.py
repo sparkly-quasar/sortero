@@ -5,7 +5,10 @@
 
 Makes a 24-bit 96 kHz WAV, converts it to MP3 320 and to 16-bit AIFF at
 44.1 kHz with the same options Gig prep uses (sortero/gig/convert.py), reads
-both back with ffprobe, and runs the decode test sortero/gig/verify.py runs.
+both back with ffprobe, runs the decode test sortero/gig/verify.py runs, and
+decodes to an AIFF on a pipe the way the main stick's waveforms are made
+(sortero/gig/waveform.py), and scales a cover the way its artwork is
+(sortero/gig/artwork.py).
 """
 import json, math, os, struct, subprocess, sys, tempfile, wave
 
@@ -50,7 +53,31 @@ def main(folder):
         s = json.loads(r.stdout)["streams"][0]
         assert (s["codec_name"], s["sample_rate"]) == (codec, "44100"), s
         run("-xerror", "-i", path, "-map", "0:a:0", "-f", "null", "-")
-    print(f"ok: {ffmpeg} converts, resamples with soxr, and decodes")
+    # The waveforms' decode: mono 12 kHz AIFF to stdout (there's no raw-PCM muxer).
+    r = subprocess.run([ffmpeg, "-v", "error", "-nostdin", "-i", mp3, "-vn", "-map_metadata",
+                        "-1", "-ac", "1", "-ar", "12000", "-c:a", "pcm_s16be", "-write_id3v2",
+                        "0", "-f", "aiff", "-"], capture_output=True)
+    assert r.returncode == 0 and r.stdout[:4] == b"FORM" and b"SSND" in r.stdout[:200], r.stderr
+    assert len(r.stdout) > 12000 * 2 * 1.9, len(r.stdout)        # two seconds of samples
+    # The main stick's artwork: a cover scaled to 80 x 80 JPEG (sortero/gig/artwork.py).
+    cover, small = os.path.join(d, "cover.jpg"), os.path.join(d, "a1.jpg")
+    with open(cover, "wb") as fh:           # a 2 x 2 baseline JPEG, made here, no lavfi needed
+        fh.write(bytes.fromhex(
+            "ffd8ffe000104a46494600010100000100010000ffdb004300080606070605080707070909080a0c140d"
+            "0c0b0b0c1912130f141d1a1f1e1d1a1c1c20242e2720222c231c1c2837292c30313434341f27393d3832"
+            "3c2e333432ffc0000b080002000201011100ffc4001f0000010501010101010100000000000000000102"
+            "030405060708090a0bffc400b5100002010303020403050504040000017d010203000411051221314106"
+            "13516107227114328191a1082342b1c11552d1f02433627282090a161718191a25262728292a34353637"
+            "38393a434445464748494a535455565758595a636465666768696a737475767778797a83848586878889"
+            "8a92939495969798999aa2a3a4a5a6a7a8a9aab2b3b4b5b6b7b8b9bac2c3c4c5c6c7c8c9cad2d3d4d5d6"
+            "d7d8d9dae1e2e3e4e5e6e7e8e9eaf1f2f3f4f5f6f7f8f9faffda0008010100003f00fbd3ffd9"))
+    run("-i", cover, "-vf", "scale=80:80", "-pix_fmt", "yuvj420p", "-q:v", "3", "-frames:v", "1",
+        "-c:v", "mjpeg", "-f", "image2", small)
+    with open(small, "rb") as fh:
+        head = fh.read()
+    assert head[:2] == b"\xff\xd8" and b"\x00\x50\x00\x50" in head[:400], "not an 80 x 80 JPEG"
+    print(f"ok: {ffmpeg} converts, resamples with soxr, decodes, decodes for waveforms, "
+          "and scales artwork")
 
 
 if __name__ == "__main__":

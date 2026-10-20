@@ -151,7 +151,7 @@ class Waveforms(TempDir):
 
     def test_bands_follow_the_sound(self):
         from statistics import mean
-        cols = W.analyse(self.tones())
+        cols = W.columns(self.tones())
         self.assertEqual(len(cols), 60 * W.PER_SECOND)
         lows, mids, highs = cols[300:2700], cols[3300:5700], cols[6300:8700]
         strongest = [max(range(3), key=lambda k: mean(c[k] for c in part))
@@ -364,6 +364,35 @@ class Stick(TempDir):
                     self.assertEqual(fh.read(4), b"PMAI", ext)
             with open(base + ".DAT", "rb") as fh:
                 self.assertEqual(b"PWAV" in fh.read(), waves)
+
+    def test_writing_again_reuses_waveforms_made_from_this_computers_copy(self):
+        import shutil
+        from unittest import mock
+        if not shutil.which("ffmpeg"):
+            self.skipTest("needs ffmpeg")
+        cache = W.Cache(self.path("waves"))
+        decoded = []
+        real = W.ffmpeg.run
+
+        def run(args, *a, **k):
+            decoded.append(args[args.index("-i") + 1])
+            return real(args, *a, **k)
+        with mock.patch.object(W.ffmpeg, "run", run):
+            U.write(self.stick, self.xml, log=lambda *a: None, cache=cache)
+            self.assertEqual(sorted(decoded), sorted(self.files))   # never the stick's
+            decoded.clear()
+            res = U.write(self.stick, self.xml, log=lambda *a: None, cache=cache)
+            self.assertEqual((decoded, res.no_waveform), ([], []))
+            write_wav(self.files[1], seconds=0.7)                   # a changed file
+            U.write(self.stick, self.xml, log=lambda *a: None, cache=cache)
+            self.assertEqual(decoded, [self.files[1]])
+
+    def test_a_remembered_waveform_reads_back_as_it_was_made(self):
+        cache = W.Cache(self.path("waves"))
+        waves = W.encode([(1, 2, 3, 4), (255, 0, 128, 7)])
+        cache.put(self.files[0], waves)
+        self.assertEqual(cache.get(self.files[0]), waves)
+        self.assertIsNone(cache.get(self.files[1]))
 
     @unittest.skipUnless(O.available(), "needs sqlcipher3")
     def test_onelibrary_for_the_newest_players(self):

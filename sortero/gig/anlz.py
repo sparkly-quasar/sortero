@@ -116,23 +116,26 @@ def scroll(fourcc, stride, data, trailer=0x00960000):
 def files(file_path, beats, cues, columns=None):
     """{".DAT": bytes, ".EXT": bytes, ".2EX": bytes or absent} for one track.
 
-    `columns` are waveform.analyse's; None writes no waveforms (and no .2EX)."""
+    `columns` are waveform.from_pcm's, or already encoded (waveform.analyse's);
+    None writes no waveforms (and no .2EX)."""
+    w = None if columns is None else columns if isinstance(columns, dict) \
+        else W.encode(columns)
     hot = sorted((c for c in cues if c.hot >= 0), key=lambda c: c.hot)
     memory = sorted((c for c in cues if c.hot < 0), key=lambda c: c.ms)
     dat = [ppth(file_path), pvbr(), pqtz(beats)]
     ext = [ppth(file_path)]
     if columns is not None:
-        dat += [preview(b"PWAV", W.pwav(columns)), preview(b"PWV2", W.pwv2(columns))]
-        ext.append(scroll(b"PWV3", 1, W.pwv3(columns)))
+        dat += [preview(b"PWAV", w["PWAV"]), preview(b"PWV2", w["PWV2"])]
+        ext.append(scroll(b"PWV3", 1, w["PWV3"]))
     dat += [pcob([c for c in hot if c.hot < DAT_HOT_CUES], True), pcob(memory, False)]
     ext += [pcob([c for c in hot if c.hot >= DAT_HOT_CUES], True), pcob([], False),
             pco2(hot, True), pco2(memory, False)]
     out = {".DAT": anlz_file(dat)}
     if columns is not None:
-        ext += [scroll(b"PWV5", 2, W.pwv5(columns), 0x00960305),
-                scroll(b"PWV4", 6, W.pwv4(columns), 0)]
-        out[".2EX"] = anlz_file([ppth(file_path), scroll(b"PWV7", 3, W.pwv7(columns)),
-                                 scroll(b"PWV6", 3, W.pwv6(columns))])
+        ext += [scroll(b"PWV5", 2, w["PWV5"], 0x00960305),
+                scroll(b"PWV4", 6, w["PWV4"], 0)]
+        out[".2EX"] = anlz_file([ppth(file_path), scroll(b"PWV7", 3, w["PWV7"]),
+                                 scroll(b"PWV6", 3, w["PWV6"])])
     out[".EXT"] = anlz_file(ext)
     return out
 

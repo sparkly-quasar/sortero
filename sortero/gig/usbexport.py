@@ -26,7 +26,7 @@ of export.pdb; it's written whenever Sortero has SQLCipher, which the app
 always carries. Nothing here has been
 played on a real player yet.
 """
-import json, os, shutil, time
+import concurrent.futures, json, os, shutil, time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 
@@ -200,8 +200,19 @@ def needed_space(p, stick):
     return total
 
 
-def write(stick, xml_path, progress=None, log=print):
-    """Write the playlists file's gig to `stick` as a Device Library. Returns a Result."""
+def _waveform(src, cache):
+    try:
+        return waveform.analyse(src, cache), None
+    except waveform.WaveformError as e:
+        return None, str(e)
+
+
+def write(stick, xml_path, progress=None, log=print, workers=None, cache=None):
+    """Write the playlists file's gig to `stick` as a Device Library. Returns a Result.
+
+    Waveforms come from the copy on this computer, not the stick (no reading every
+    track back over USB), a few tracks ahead of the copying, and are remembered
+    (waveform.Cache), so writing the stick again only analyses what changed."""
     if not os.path.isdir(stick):
         raise StickError(f"{stick} isn't there")
     why = foreign(stick)
@@ -228,25 +239,39 @@ def write(stick, xml_path, progress=None, log=print):
         shutil.rmtree(os.path.join(stick, "PIONEER", old), ignore_errors=True)
     art = artwork.Collector()
     total = len(p.tracks)
-    for i, t in enumerate(p.tracks, 1):
-        rel, src = t.file_path.strip("/"), p.sources[t.id]
-        dest = os.path.join(stick, *rel.split("/"))
-        if os.path.isfile(dest) and os.path.getsize(dest) == os.path.getsize(src):
-            res.unchanged.append(rel)
-        else:
-            _copy(src, dest)
-            res.copied.append(rel)
-        t.artwork_id = art.add(src)
-        try:
-            columns = waveform.analyse(dest)
-        except waveform.WaveformError as e:
-            columns = None
-            res.no_waveform.append((t.title, str(e)))
-        base = t.analyze_path[:-len(".DAT")]
-        for ext, data in anlz.files(t.file_path, t.beats, t.cues, columns).items():
-            _put(stick, base + ext, data)
-        if progress:
-            progress(i, total)
+    cache = cache or waveform.Cache()
+    workers = workers or max(1, min(4, os.cpu_count() or 1))
+    ahead = 2 * workers             # bounded: a waveform is megabytes until it's written
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=workers)
+    waves, queued = {}, 0
+
+    def queue(upto):
+        nonlocal queued
+        for t in p.tracks[queued:upto]:
+            waves[t.id] = pool.submit(_waveform, p.sources[t.id], cache)
+        queued = max(queued, min(upto, total))
+    try:
+        for i, t in enumerate(p.tracks, 1):
+            queue(i + ahead)
+            rel, src = t.file_path.strip("/"), p.sources[t.id]
+            dest = os.path.join(stick, *rel.split("/"))
+            if os.path.isfile(dest) and os.path.getsize(dest) == os.path.getsize(src):
+                res.unchanged.append(rel)
+            else:
+                _copy(src, dest)
+                res.copied.append(rel)
+            t.artwork_id = art.add(src)
+            columns, why = waves.pop(t.id).result()
+            if why:
+                res.no_waveform.append((t.title, why))
+            base = t.analyze_path[:-len(".DAT")]
+            for ext, data in anlz.files(t.file_path, t.beats, t.cues, columns).items():
+                _put(stick, base + ext, data)
+            if progress:
+                progress(i, total)
+    finally:
+        pool.shutdown(wait=True, cancel_futures=True)
+    cache.prune()
     # The databases last: until they're there, no player sees a half-written library.
     for rel, data in art.files.items():
         _put(stick, rel, data)

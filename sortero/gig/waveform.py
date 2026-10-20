@@ -20,7 +20,10 @@ files:
   PWV6  1,200 columns of low, mid and high out of 127 (CDJ-3000's three-band)
   PWV7  150 a second of the same
 """
+import hashlib, os, time
+
 from . import ffmpeg
+from .. import paths
 from ..tempo import audioop
 
 RATE = 12000
@@ -30,8 +33,70 @@ LOW_BOX = 64                            # a 64-sample average twice over: lows b
 HIGH_BOX = 4                            # a 4-sample average: what's left is above ~2-3 kHz
 
 
+ANALYSIS = 1                            # bump when from_pcm changes: remembered ones go stale
+KEEP_DAYS = 60                          # a remembered waveform not used for this long goes
+
+
 class WaveformError(Exception):
     pass
+
+
+class Cache:
+    """Waveforms made before, so writing the stick again doesn't decode every track.
+
+    One small file per source holding its encoded sections (encode()), named for
+    the file's path, size and modification time, so a changed file is analysed
+    again. Encoding is kept too: in Python it costs about what the decode does."""
+
+    def __init__(self, folder=None):
+        self.folder = folder or os.path.join(paths.data_dir(), "waveforms")
+
+    def _file(self, path):
+        st = os.stat(path)
+        key = f"{ANALYSIS}|{os.path.abspath(path)}|{st.st_size}|{st.st_mtime_ns}"
+        return os.path.join(self.folder, hashlib.sha1(key.encode()).hexdigest() + ".bin")
+
+    def get(self, path):
+        try:
+            f = self._file(path)
+            with open(f, "rb") as fh:
+                data = fh.read()
+            os.utime(f)                 # still in use: keep it
+        except OSError:
+            return None
+        out, at = {}, 0
+        for name in SECTIONS:
+            n = int.from_bytes(data[at:at + 4], "big")
+            out[name], at = data[at + 4:at + 4 + n], at + 4 + n
+            if len(out[name]) != n:
+                return None             # cut short: analyse it again
+        return out
+
+    def put(self, path, waves):
+        try:
+            f = self._file(path)
+            os.makedirs(self.folder, exist_ok=True)
+            tmp = f + ".tmp"
+            with open(tmp, "wb") as fh:
+                for name in SECTIONS:
+                    fh.write(len(waves[name]).to_bytes(4, "big") + waves[name])
+            os.replace(tmp, f)
+        except OSError:
+            pass                        # only a cache: the stick still gets its waveform
+
+    def prune(self, days=KEEP_DAYS):
+        cutoff = time.time() - days * 86400
+        try:
+            names = os.listdir(self.folder)
+        except OSError:
+            return
+        for name in names:
+            f = os.path.join(self.folder, name)
+            try:
+                if os.path.getmtime(f) < cutoff:
+                    os.remove(f)
+            except OSError:
+                pass
 
 
 # --------------------------------------------------------------- analysis
@@ -76,8 +141,8 @@ def _ssnd(aiff):
     return audioop.byteswap(data[:len(data) - len(data) % 2], 2)
 
 
-def analyse(path):
-    """The columns of an audio file. Raises WaveformError if it can't be decoded.
+def columns(path):
+    """from_pcm's columns for an audio file. Raises WaveformError if it can't be decoded.
 
     Decoded to AIFF on a pipe: the ffmpeg Sortero carries has the aiff muxer
     and pcm_s16be (build/ffmpeg/build.sh) but no raw-PCM one."""
@@ -91,6 +156,18 @@ def analyse(path):
     if r.returncode != 0 or not r.stdout:
         raise WaveformError("ffmpeg couldn't decode it")
     return from_pcm(_ssnd(r.stdout))
+
+
+def analyse(path, cache=None):
+    """An audio file's encoded waveforms (encode()), remembered in `cache` if given.
+    Raises WaveformError if it can't be decoded."""
+    waves = cache.get(path) if cache else None
+    if waves:
+        return waves
+    waves = encode(columns(path))
+    if cache:
+        cache.put(path, waves)
+    return waves
 
 
 # --------------------------------------------------------------- encodings
@@ -187,3 +264,12 @@ def pwv6(cols):
 
 def pwv7(cols):
     return b"".join(bytes((c[0] >> 1, c[1] >> 1, c[2] >> 1)) for c in cols)
+
+
+SECTIONS = ("PWAV", "PWV2", "PWV3", "PWV4", "PWV5", "PWV6", "PWV7")
+
+
+def encode(cols):
+    """Every section a player draws, from from_pcm's columns: {"PWAV": bytes, ...}."""
+    return {"PWAV": pwav(cols), "PWV2": pwv2(cols), "PWV3": pwv3(cols), "PWV4": pwv4(cols),
+            "PWV5": pwv5(cols), "PWV6": pwv6(cols), "PWV7": pwv7(cols)}

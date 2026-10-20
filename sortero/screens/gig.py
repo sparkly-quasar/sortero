@@ -94,6 +94,11 @@ def _link(parent, text, command):
     return lk
 
 
+def _button(parent, text, command):
+    """An action: a real button, so it can't be mistaken for a highlighted line."""
+    return ttk.Button(parent, text=text, command=command)
+
+
 def _label(parent, text="", tone="muted", font=None):
     lab = tk.Label(parent, text=text, font=font or ui.BODY, anchor="w", justify="left")
     ui.paint(lab, bg="card", fg=tone)
@@ -192,14 +197,14 @@ class GigScreen(Screen):
         if which == "main":
             self.xml_label = _label(top)
             self.xml_label.pack(side="left", fill="x", expand=True)
-            self.copy_link = _link(top, "Copy the file's location", self._copy_xml)
+            self.copy_link = _button(top, "Copy the file's location", self._copy_xml)
             self.again_row = _links(body)
-            _link(self.again_row, "Write the main stick again…",
-                  self.write_main).pack(side="left")
+            _button(self.again_row, "Write the main stick again…",
+                    self.write_main).pack(side="left")
             self.alt_row = _links(body)
             _label(self.alt_row, "Using rekordbox or Engine DJ instead?").pack(side="left")
-            _link(self.alt_row, "Make the playlists file for it",
-                  self.make_xml).pack(side="left", padx=(ui.GAP, 0))
+            _button(self.alt_row, "Make the playlists file for it",
+                    self.make_xml).pack(side="left", padx=(ui.GAP, 0))
             self.cue_row = _links(body)
             self.cue_row.pack(fill="x", pady=(2, 0))
             self.cue_label = _label(self.cue_row)       # wraps: it can be long
@@ -207,11 +212,11 @@ class GigScreen(Screen):
             self.cue_count = _label(self.cue_row)       # what those gave these tracks
 
             cue_links = _links(self.cue_row)
-            cue_links.pack(fill="x")
-            self.cue_change = _link(cue_links, "", self.choose_cue_xml)
+            cue_links.pack(fill="x", pady=(4, 0))
+            self.cue_change = _button(cue_links, "", self.choose_cue_xml)
             self.cue_change.pack(side="left")
-            self.cue_timing_link = _link(cue_links, "Cue timing on MP3 copies…",
-                                         self.cue_timing)
+            self.cue_timing_link = _button(cue_links, "Cue timing on MP3 copies…",
+                                           self.cue_timing)
             how = tk.Frame(body)
             ui.paint(how, bg="card")
             self.how_txt = tk.Text(how, height=5, font=ui.BODY, wrap="word", relief="flat",
@@ -232,11 +237,11 @@ class GigScreen(Screen):
         tools.pack(side="bottom", fill="x", pady=(6, 0))
         widgets["format"] = ttk.Button(tools, text="Format a stick as FAT32…",
                                        command=self.format_stick)
-        widgets["format_link"] = _link(tools, "New stick? Format it as FAT32…",
-                                       self.format_stick)
-        widgets["quick"] = _link(tools, "Quick check (skip the decode test)",
-                                 lambda: self.check_main(decode=False) if which == "main"
-                                 else self.check_backup(decode=False))
+        widgets["format_link"] = _button(tools, "New stick? Format it as FAT32…",
+                                         self.format_stick)
+        widgets["quick"] = _button(tools, "Quick check (skip the decode test)",
+                                   lambda: self.check_main(decode=False) if which == "main"
+                                   else self.check_backup(decode=False))
         widgets["findings"] = Findings(body)
         widgets["tools"] = tools
         setattr(self, f"{which}_w", widgets)
@@ -479,11 +484,11 @@ class GigScreen(Screen):
                 self.how_toggle.pack_forget()
                 self.copy_link.pack_forget()
             if st.direct and (st.main or st.earlier):
-                self.again_row.pack(fill="x", pady=(2, 0), before=self.cue_row)
+                self.again_row.pack(fill="x", pady=(6, 0), before=self.cue_row)
             else:
                 self.again_row.pack_forget()
             if st.direct and not have_xml:
-                self.alt_row.pack(fill="x", pady=(2, 0), before=self.cue_row)
+                self.alt_row.pack(fill="x", pady=(6, 0), before=self.cue_row)
             else:
                 self.alt_row.pack_forget()
             if show_how:

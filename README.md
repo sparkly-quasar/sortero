@@ -6,6 +6,10 @@ A cross-platform desktop app for getting a DJ collection under control: one
 canonical copy of every track, playlists that preserve your curation, clean
 tags, and an intake lane for new music. Runs on macOS, Windows and Linux.
 
+New, in beta: [Gig prep](#gig-prep) takes your set to a checked USB stick that
+plays on Pioneer and Denon players, and writes the stick itself, so you don't
+need rekordbox just to export a USB.
+
 > **Sortero is free and open source.** If it's been useful to you, please
 > consider [buying a Supporter licence](#supporting-sortero). Sortero is an
 > independent project: I pay to build and release it, with the help of Claude

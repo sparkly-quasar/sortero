@@ -251,6 +251,48 @@ def install(new_path, target=None):
     return script
 
 
+# --------------------------------------------------- an update left half done
+# Sortero before 0.35.2 couldn't move its own folder aside on Windows (see
+# WIN_SCRIPT), so an update put the new copy inside the old one, at
+# <old>\Sortero\Sortero.exe, and reopened the old one. That updater lives in
+# every copy already out there, so it can't be fixed there; instead the new
+# copy, once started, finishes the job with the helper above.
+def stuck_inside(exe_dir=None):
+    """The older copy this one was left inside by a failed update, or None."""
+    if not paths.IS_WIN:
+        return None
+    if exe_dir is None:
+        if not running_frozen():
+            return None
+        exe_dir = os.path.dirname(os.path.realpath(sys.executable))
+    exe_dir = os.path.normpath(exe_dir)
+    parent = os.path.dirname(exe_dir)
+    if parent == exe_dir or not os.path.isfile(os.path.join(parent, "Sortero.exe")):
+        return None
+    return parent
+
+
+def finish_stuck(exe_dir=None, parent=None):
+    """Put this copy in place of the one it's inside, and reopen. The caller must quit.
+
+    The helper can't move the old folder while this copy is still inside it, so
+    this copy goes next to it first, as <old>.new, and the helper moves that
+    into place once Sortero has quit."""
+    exe_dir = os.path.normpath(exe_dir or os.path.dirname(os.path.realpath(sys.executable)))
+    parent = parent or stuck_inside(exe_dir)
+    if not parent:
+        raise UpdateError("This copy of Sortero isn't inside an older one.")
+    check(parent)
+    staged = parent + ".new"
+    shutil.rmtree(staged, ignore_errors=True)
+    try:
+        shutil.copytree(exe_dir, staged)
+    except OSError as e:
+        shutil.rmtree(staged, ignore_errors=True)
+        raise UpdateError(f"Couldn't copy the new version next to the old one: {e}")
+    return install(staged, target=parent)
+
+
 def prepare(asset, progress=None):
     """Download and unpack; returns the path to the new application."""
     tmp = tempfile.mkdtemp(prefix="sortero-dl-")

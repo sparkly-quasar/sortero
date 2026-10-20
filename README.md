@@ -11,7 +11,7 @@ tags, and an intake lane for new music. Runs on macOS, Windows and Linux.
 > independent project: I pay to build and release it, with the help of Claude
 > Code, and supporters are what keep it improving.
 
-### ⬇️ [Try Sortero free (v0.18.0)](https://github.com/sparkly-quasar/sortero/releases/tag/v0.18.0) · [How to install](#install--update) · [What's new since v0.18.0](#whats-new-since-v0180)
+### ⬇️ [Try Sortero free (v0.35.3)](https://github.com/sparkly-quasar/sortero/releases/tag/v0.35.3) · [How to install](#install--update) · [What's new in v0.35.3](#whats-new-in-v0353)
 
 Ready-to-run for macOS, Windows and Linux. The app isn't code-signed, so your
 computer warns you once on first launch; [the install steps](#install--update)
@@ -638,11 +638,10 @@ Management**, or keep Sortero somewhere in your home folder.
 
 It can also check automatically on launch (at most once a day) — toggle that in
 Settings.
-## What's new since v0.18.0
+## What's new in v0.35.3
 
-v0.18.0 is the free download. The current version, **v0.35.2**, is what
-[Supporter licence](#supporting-sortero) holders get, and what you get by
-[building from source](#building-from-source). It adds:
+v0.35.3 is the free download, and the current version. Compared with v0.18.0,
+the free download before it, it adds:
 
 **Gig prep**, a new screen: one checklist from your playlists to a USB stick you
 can trust at the venue.
@@ -697,19 +696,23 @@ run of tracks in any list.
 name starts with "._". On Windows, a one-click update now replaces the old copy
 instead of leaving the new one in a subfolder and reopening the old one, and no
 blank command window opens over Sortero while it updates. Copies from before
-v0.35.2 still have the old updater, so update those by hand once.
+v0.35.2 still have the old updater, which leaves the new version in a
+**Sortero** folder inside the old one: double-click **Sortero.exe** in there
+once, and it finishes the update itself (see
+[Install & update](#an-update-that-didnt-finish-on-windows)).
 
 ## Install & update
 
 There are three ways to run Sortero. All of them have every feature.
 
 - **Try it free:** download the ready-to-run app from
-  **[v0.18.0](https://github.com/sparkly-quasar/sortero/releases/tag/v0.18.0)**,
-  the last release with public downloads. It's a few versions behind (see
-  [what's new since](#whats-new-since-v0180)), but it's the quickest way to see
-  whether Sortero suits you.
-- **Supporter licence:** the latest app for macOS, Windows and Linux, with
-  one-click updates. See [Supporting Sortero](#supporting-sortero).
+  **[v0.35.3](https://github.com/sparkly-quasar/sortero/releases/tag/v0.35.3)**,
+  the free download. Later releases come to supporters first, so it can fall a
+  few versions behind, but it's the quickest way to see whether Sortero suits
+  you.
+- **Supporter licence:** each new version of the app for macOS, Windows and
+  Linux as it's released, with one-click updates. See
+  [Supporting Sortero](#supporting-sortero).
 - **From source, free and always current:** see
   [Building from source](#building-from-source).
 
@@ -761,6 +764,22 @@ xattr -dr com.apple.quarantine /Applications/Sortero.app
    **Send to → Desktop (create shortcut)**.
 
 Keep `Sortero.exe` inside its folder. It needs the files next to it.
+
+#### An update that didn't finish on Windows
+
+Before v0.35.2, Sortero's updater on Windows couldn't move its own folder out
+of the way. It downloaded the new version, put it in a **Sortero** folder
+inside your old one, and reopened the old version. To finish:
+
+1. Open the folder Sortero is in, then the **Sortero** folder inside it.
+2. Double-click **Sortero.exe** there.
+3. Say yes when it offers to finish the update. It puts itself in place of the
+   old copy, closes, and opens again. Your shortcuts keep working, and your
+   music, playlists and settings aren't touched.
+
+If it doesn't offer, the copy in there is v0.35.2, from before this repair.
+Choose **Help → Check for Updates…** in it and update: that update works, and
+the new version then offers to finish.
 
 ### Linux
 
@@ -879,8 +898,8 @@ can build it from this repository. If Sortero is useful to you, please buy a
 **Supporter licence** to fund ongoing fixes and improvements.
 
 It's a single payment and you choose the amount. There's no subscription. As a
-thank-you, supporters get the ready-to-run app for macOS, Windows and Linux, and
-one-click updates for good.
+thank-you, supporters get each new version of the ready-to-run app for macOS,
+Windows and Linux as it's released, and one-click updates for good.
 
 Buy it from **Support Sortero** in the app, through Stripe. After paying you land
 on a page with your licence key and download buttons. Paste the key into Sortero

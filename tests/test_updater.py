@@ -98,5 +98,51 @@ class WindowsHelper(unittest.TestCase):
         self.assertEqual(U._beside(new, os.path.join(tmp, "elsewhere")), new)
 
 
+class StuckUpdate(unittest.TestCase):
+    """Before 0.35.2, a Windows update left the new copy at <old>\\Sortero."""
+
+    def setUp(self):
+        tmp = tempfile.mkdtemp()
+        self.old = os.path.join(tmp, "Sortero")
+        self.nested = os.path.join(self.old, "Sortero")
+        for folder, version in ((self.old, "old"), (self.nested, "new")):
+            os.makedirs(folder, exist_ok=True)
+            open(os.path.join(folder, "Sortero.exe"), "w").close()
+            with open(os.path.join(folder, "VERSION"), "w") as fh:
+                fh.write(version)
+        self.alone = os.path.join(tmp, "Apps", "Sortero")
+        os.makedirs(self.alone)
+        open(os.path.join(self.alone, "Sortero.exe"), "w").close()
+
+    def test_a_copy_inside_an_older_one_is_spotted(self):
+        with mock.patch.object(U.paths, "IS_WIN", True):
+            self.assertEqual(U.stuck_inside(self.nested), self.old)
+            self.assertIsNone(U.stuck_inside(self.old))
+            self.assertIsNone(U.stuck_inside(self.alone))
+
+    def test_only_on_windows(self):
+        with mock.patch.object(U.paths, "IS_WIN", False):
+            self.assertIsNone(U.stuck_inside(self.nested))
+
+    def test_it_goes_next_to_the_old_copy_and_the_helper_swaps_that_in(self):
+        with mock.patch.object(U.paths, "IS_WIN", True), \
+                mock.patch.object(U.subprocess, "Popen") as popen:
+            U.finish_stuck(self.nested)
+        args = popen.call_args.args[0]
+        staged = self.old + ".new"
+        # the helper is given the old folder and a copy outside it, never the
+        # copy inside it, which goes when the old folder is moved aside
+        self.assertEqual(args[3:5], [self.old, staged])
+        with open(os.path.join(staged, "VERSION")) as fh:
+            self.assertEqual(fh.read(), "new")
+
+    def test_a_copy_that_isnt_stuck_is_left_alone(self):
+        with mock.patch.object(U.paths, "IS_WIN", True), \
+                mock.patch.object(U.subprocess, "Popen") as popen:
+            with self.assertRaises(U.UpdateError):
+                U.finish_stuck(self.alone)
+        popen.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

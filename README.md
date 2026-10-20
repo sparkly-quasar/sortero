@@ -63,8 +63,9 @@ folders as playlists.
 
 ![Reorganise](docs/screenshots/reorganise.png)
 
-**Gig prep** takes a set from playlists to a checked USB stick, one step at a
-time, and ends with GIG READY.
+**Gig prep** (beta) takes a set from playlists to a checked USB stick, one
+step at a time, and ends with GIG READY. It writes the stick Pioneer players
+read itself, so you no longer need rekordbox just to export a USB.
 
 ![Gig prep](docs/screenshots/gig-prep.png)
 
@@ -115,7 +116,7 @@ open.
 | **Add music** | Choose a folder or files. Analysed tracks go to the folder that already means their genre — yours if you have one. Anything missing a key lands in `To Be Processed`. Tracks with no genre to go on are **held back for you to place** instead of being dropped in `Unsorted`. Tracks already in the library are pointed out, not added twice. |
 | **Library** | Every track in one list. **Show** filters to what needs work (no genre, not analysed, no energy, no artist, artist and title swapped, no BPM, low bitrate, lossless files); **Search** narrows it; click a column heading to sort. Select tracks and set a genre, swap artist and title, re-read both from the filename, send them to analysis, place them one by one, copy genres from folder names, look them up on Discogs, or [shrink lossless tracks to MP3](#shrinking-lossless-tracks-to-mp3). Your own set recordings are hidden unless you ask. |
 | **Playlists** | Rebuild a Spotify or TIDAL playlist against your local files from a link, a pasted tracklist or a CSV — all three offered together above the list. **More** rebuilds the folder playlists or repairs broken links. |
-| **Gig prep** | Get a USB stick that plays on any Pioneer or Denon player, and check it before you leave. Tick the playlists you're playing, in set order; Sortero makes gig-safe copies of any track that won't play everywhere, then checks the main and backup sticks and ends with **GIG READY**. See [Gig prep](#gig-prep). |
+| **Gig prep** (beta) | Get a USB stick that plays on any Pioneer or Denon player, and check it before you leave, without opening rekordbox. Tick the playlists you're playing, in set order; Sortero makes gig-safe copies of any track that won't play everywhere, then checks the main and backup sticks and ends with **GIG READY**. See [Gig prep](#gig-prep). |
 | **Tidy up** | Tools for an existing collection: **Clean tags** (including which way round filenames read), **Fix wrong BPMs**, **Find duplicates**, **Place a folder's tracks by hand**, **Flatten release folders**, **Fix playlist links**, and **Reorganise the whole collection**. Every tool previews before it changes anything. |
 | **History** | Every operation, with undo, and the **safety net**. **Show log** reveals the detailed log. |
 | **Settings** | Collection folder, update checks, Discogs token, Spotify and TIDAL accounts, and the setup guide. |
@@ -422,6 +423,19 @@ original is set aside in `_Quarantine/damaged headers`, and History undoes it.
 
 ## Gig prep
 
+> **Beta.** Gig prep's aim is to take rekordbox out of getting ready for a gig.
+> Today most DJs keep rekordbox installed only to export a USB stick, even if
+> they prepare their music somewhere else. Gig prep writes that stick itself:
+> the same libraries rekordbox writes for Pioneer players, with your
+> playlists, beat grids, cues, waveforms and artwork, on macOS, Windows and
+> Linux. It's built from published research into the format and checked
+> against real rekordbox exports, but it **hasn't been played on enough real
+> players yet** to be trusted on its own. Until it has, bring a second stick
+> you trust: one exported by rekordbox, or Gig prep's plain-folder backup
+> stick. If a stick Sortero wrote misbehaves on a player, please
+> [open an issue](https://github.com/sparkly-quasar/sortero/issues) naming the
+> player and its firmware.
+
 A gig stick has to play on whatever players the venue has, and the time to find
 out it doesn't is before you leave. **Gig prep** is one checklist of five steps.
 Only the step you're on is open, with its one button; finished steps shrink to a
@@ -481,8 +495,9 @@ are just a title.
    (**Use a rekordbox XML…**; Mixed In Key's `rekordbox.xml` works too), then
    from Mixxx, then from Mixed In Key's analysis in the files themselves. It
    refuses a stick that already holds a library Sortero didn't write, and
-   running it again replaces only what Sortero put there. **This is new and hasn't been played
-   on a real player yet**, so bring a second stick you trust until it has.
+   running it again replaces only what Sortero put there. **This is the beta
+   part of Gig prep and hasn't been played on enough real players yet**, so
+   bring a second stick you trust until it has.
    The writers are ports of [openboxxx](https://github.com/sparkly-quasar/openboxxx)'s
    (`export.pdb`, laid out page by page like a real rekordbox export) and
    follow [rbxport](https://github.com/chrisle/rbxport)'s (OneLibrary, and
@@ -626,12 +641,13 @@ v0.18.0 is the free download. The current version, **v0.34.1**, is what
 [Supporter licence](#supporting-sortero) holders get, and what you get by
 [building from source](#building-from-source). It adds:
 
-**Gig prep**, a new screen: one checklist from your playlists to a USB stick you
-can trust at the venue.
+**Gig prep** (beta), a new screen: one checklist from your playlists to a USB
+stick you can trust at the venue, without needing rekordbox to write it.
 - Profiles for Pioneer and Denon players: what each one reads off a stick.
 - Playable copies of only the tracks a player can't play. A small ffmpeg comes
   with the app, so this works out of the box.
-- The main stick written by Sortero itself, no rekordbox needed: both
+- The main stick written by Sortero itself, no rekordbox needed (beta: bring
+  a second stick you trust until it's been tested on more players): both
   libraries Pioneer players read, with your playlists, beat grids, cue
   points, waveforms and artwork. Writing it again only redoes what changed.
   Or a rekordbox XML of the set.

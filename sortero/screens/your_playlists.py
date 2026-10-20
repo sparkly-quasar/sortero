@@ -45,6 +45,28 @@ def where_label(src, root):
     return short(src.where, root)
 
 
+COLUMNS = [("name", "Playlist", 260), ("n", "Tracks", 70), ("missing", "Missing", 70),
+           ("kind", "From", 140), ("where", "Where", 300)]
+
+
+def sort_rows(rows, col, desc, root):
+    """Survey rows [(Source, tracks, missing)] ordered by a column, ties by name.
+    One that can't be read has no track count, so it goes last either way."""
+    if not col:
+        return list(rows)
+    name = lambda r: sources.natural(r[0].name)
+    key = {"name": name,
+           "n": lambda r: r[1],
+           "missing": lambda r: r[2],
+           "kind": lambda r: kind_label(r[0]).casefold(),
+           "where": lambda r: where_label(r[0], root).casefold()}[col]
+    readable = [r for r in rows if col != "n" or r[1] is not None]
+    unreadable = [r for r in rows if col == "n" and r[1] is None]
+    readable.sort(key=name)
+    readable.sort(key=key, reverse=desc)        # stable, so ties stay by name
+    return readable + sorted(unreadable, key=name)
+
+
 class YourPlaylistsScreen(Screen):
     title = "Your playlists"
     summary = "Every playlist Sortero can see, what's in it, and whether its tracks are there."
@@ -52,7 +74,8 @@ class YourPlaylistsScreen(Screen):
                "file inside your collection, and the playlists you've added in Gig prep "
                "from other apps, such as rekordbox or Mixxx, or from watched folders. "
                "Add more from Gig prep with Add playlists….\n\n"
-               "Select one to see its tracks; missing ones are files that aren't where "
+               "Click a column heading to sort by it, and again to reverse. "
+               "Select a playlist to see its tracks; missing ones are files that aren't where "
                "the playlist says. Add to gig set puts it at the end of Gig prep's set.\n\n"
                "Sortero's own playlists can be renamed or deleted. A deleted one is set "
                "aside in _Quarantine, and History can bring it back. Playlists from other "
@@ -63,11 +86,12 @@ class YourPlaylistsScreen(Screen):
     def build(self):
         self.result = ui.WrapLabel(self, style="Muted.TLabel")
         self.result.pack(fill="x", pady=(0, 4))
-        f, self.tv = ui.tree(self, [("name", "Playlist", 260), ("n", "Tracks", 70),
-                                    ("missing", "Missing", 70), ("kind", "From", 140),
-                                    ("where", "Where", 300)], height=8,
-                             selectmode="browse")
+        f, self.tv = ui.tree(self, COLUMNS, height=8, selectmode="browse")
         f.pack(fill="both", expand=True)
+        # Click a heading to sort by it, again to reverse; until then they're
+        # in the order they were found, Sortero's own first.
+        for cid, _, _ in COLUMNS:
+            self.tv.heading(cid, command=lambda c=cid: self.sort_by(c))
         self.tv.tag_configure("unreadable", foreground=ui.c("faint"))
         self.tv.tag_configure("broken", foreground=ui.c("warn"))
         self.tv.bind("<<TreeviewSelect>>", lambda e: self._sync())
@@ -100,6 +124,8 @@ class YourPlaylistsScreen(Screen):
             ("Refresh", self.refresh),
         ])
         self.rows, self.counts = {}, {}
+        self.sort_col, self.sort_desc = None, False
+        self._found = ([], None)        # the last survey and its collection
         self._by_path = None
         self._sync()
 
@@ -129,10 +155,22 @@ class YourPlaylistsScreen(Screen):
         self.result.configure(text="Looking for playlists…")
         self.app.task.run(work, done, "Looking for playlists")
 
+    def sort_by(self, col):
+        if self.sort_col == col:
+            self.sort_desc = not self.sort_desc
+        else:
+            self.sort_col, self.sort_desc = col, False
+        rows, root = self._found
+        self._fill(rows, root, self._selected_key())
+
     def _fill(self, rows, root, select=None):
+        self._found = (rows, root)
         self.tv.delete(*self.tv.get_children())
         self.rows, self.counts = {}, {}
-        for src, n, missing in rows:
+        for cid, heading, _ in COLUMNS:
+            arrow = (" ▼" if self.sort_desc else " ▲") if cid == self.sort_col else ""
+            self.tv.heading(cid, text=heading + arrow)
+        for src, n, missing in sort_rows(rows, self.sort_col, self.sort_desc, root):
             self.rows[src.key] = src
             self.counts[src.key] = n
             tags = (("unreadable",) if n is None else ("broken",) if missing else ())

@@ -22,7 +22,7 @@ from .base import Screen, APP
 KINDS = {sources.SORTERO: "Sortero", sources.COLLECTION: "In your collection",
          sources.WATCHED: "Watched folder", sources.M3U: "Playlist file",
          sources.FOLDER: "Folder of tracks", sources.REKORDBOX: "rekordbox",
-         sources.MIXXX: "Mixxx"}
+         sources.MIXXX: "Mixxx", sources.ITUNES: "iTunes or Music"}
 SHOW, RENAME, DELETE, REMOVE = ("Show in folder", "Rename…", "Delete…",
                                 "Take off the list…")
 

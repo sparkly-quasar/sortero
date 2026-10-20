@@ -205,7 +205,7 @@ class GigScreen(Screen):
             self.cue_label = _label(self.cue_row)       # wraps: it can be long
             self.cue_label.pack(fill="x")
             self.cue_count = _label(self.cue_row)       # what those gave these tracks
-            self.cue_count.pack(fill="x")
+
             cue_links = _links(self.cue_row)
             cue_links.pack(fill="x")
             self.cue_change = _link(cue_links, "", self.choose_cue_xml)
@@ -452,7 +452,12 @@ class GigScreen(Screen):
             have_xml = bool(st.xml_path)
             self.xml_label.configure(text="Playlists file ready."
                                      if have_xml and not st.direct else "")
-            self.cue_count.configure(text=checklist.cue_summary(st.xml_cues, st.xml_tracks))
+            counted = checklist.cue_summary(st.xml_cues, st.xml_tracks)
+            self.cue_count.configure(text=counted)
+            if counted:                         # none until the tracks are checked
+                self.cue_count.pack(fill="x", after=self.cue_label)
+            else:
+                self.cue_count.pack_forget()
             src = settings.get("gig_rekordbox_xml")
             src = src if src and os.path.isfile(src) else None
             self.cue_label.configure(text=checklist.cue_sources(

@@ -2,7 +2,7 @@
 import os, traceback
 from tkinter import ttk, messagebox
 
-from .. import ui, importer, paths, review, settings, headers, fixtags
+from .. import ui, importer, paths, review, settings, headers, fixtags, organize
 from ..common import human_size, NAME_ORDERS, NAME_ORDER_LABELS, ARTIST_TITLE
 from .base import Screen, APP, needs_genre, is_mix, in_unsorted
 from .spellings import SpellingsDialog
@@ -134,7 +134,8 @@ class TodoScreen(Screen):
         if key:
             self._job(f"{ui.plural(len(key), 'track')} not analysed yet",
                       "They have no key. Choose the ones you want and send them to your "
-                      "analysis tool.", "Show them", lambda: app.show_library("key"))
+                      "analysis tool.", "Show them", lambda: app.show_library("key"),
+                      link_text="Which analysis tool?", link_command=self._analysis_help)
 
         swapped = [r for r in h.get("swapped", []) if not is_mix(r)]
         if swapped:
@@ -205,7 +206,11 @@ class TodoScreen(Screen):
                        "Run them through your analysis tool, then save or move the "
                        "results into Processed. A Sort them… button appears here once "
                        "they're there.",
-                       "Show folder", lambda: paths.reveal(folder))
+                       "Show folder", lambda: paths.reveal(folder),
+                       link_text="Which analysis tool?", link_command=self._analysis_help)
+
+    def _analysis_help(self):
+        messagebox.showinfo("Which analysis tool?", organize.ANALYSIS_HELP)
 
     def _job(self, *a, **kw):
         self.jobs += 1

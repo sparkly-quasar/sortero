@@ -789,12 +789,18 @@ class Sortero(tk.Tk):
                 messagebox.showwarning(APP, out[1])
                 return
             try:
+                updater.check()
+            except updater.UpdateError as e:
+                messagebox.showerror(APP, str(e))
+                return
+            # Said before the helper starts, so nothing it opens covers this
+            messagebox.showinfo(APP, "Update ready. Sortero will close and reopen "
+                                     "on the new version in a moment.")
+            try:
                 updater.install(out[1])
             except updater.UpdateError as e:
                 messagebox.showerror(APP, str(e))
                 return
-            messagebox.showinfo(APP, "Update ready. Sortero will close and reopen "
-                                     "on the new version in a moment.")
             self.after(300, self.destroy)
 
         self.task.run(work, done, "Downloading update")

@@ -41,7 +41,8 @@ def running():
     try:
         if sys.platform.startswith("win"):
             out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq mixxx.exe", "/NH"],
-                                 capture_output=True, text=True).stdout
+                                 capture_output=True, text=True,
+                                 creationflags=subprocess.CREATE_NO_WINDOW).stdout
             return "mixxx.exe" in out.lower()
         r = subprocess.run(["pgrep", "-ix", "mixxx"], capture_output=True)
         return r.returncode == 0

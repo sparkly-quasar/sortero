@@ -387,20 +387,38 @@ class Wizard(tk.Toplevel):
     # -- step: tags ---------------------------------------------------------
     def _tags(self):
         self._heading("Clean up the tags",
-                      "Strips download-site spam out of Genre and Comment, fills in "
-                      "missing Artist/Title from filenames, tidies Genre into a "
-                      "consistent set, and moves Mixed In Key's energy rating into a "
-                      "field your DJ software can actually sort on.")
+                      "Tick the fixes you want. Sortero works out every change first "
+                      "and nothing is written until you press Apply, so you can read "
+                      "the full list before deciding.")
         if not self.recs:
             ttk.Label(self.body, text="Nothing scanned yet.").pack(anchor="w")
             return
+        if not hasattr(self, "tag_fixes"):
+            self.tag_fixes = {k: tk.BooleanVar(value=True) for k in fixtags.FIXES}
+        box = ttk.Frame(self.body)
+        box.pack(anchor="w", fill="x")
+        for i, k in enumerate(fixtags.FIXES):
+            ttk.Checkbutton(box, text=fixtags.FIX_SHORT[k], variable=self.tag_fixes[k],
+                            command=lambda: self._when_free(self.render)
+                            ).grid(row=i // 2, column=i % 2, sticky="w", padx=(0, 24), pady=1)
         self._name_order_row()
         self.tags_note = self._mono("Checking…")
-        self.tags_btn, _ = self._action_row("Apply these fixes", self._apply_tags)
+        self.tags_btn, self.tags_how = self._action_row("Apply these fixes", self._apply_tags)
         self.tags_btn.configure(state="disabled")
+        self.tags_list = ui.link(self.body, "See every change…", self._show_tag_changes)
+        fixes = {k for k, v in self.tag_fixes.items() if v.get()}
+        safety = ("The safety net is on, so the whole setup can also be undone in one "
+                  "go from History." if self.use_testing.get() else
+                  "This can be undone from History afterwards.")
+        ttk.Label(self.body, style="Muted.TLabel", wraplength=690, justify="left",
+                  text="Only tags change, never the audio. " + safety
+                  ).pack(anchor="w", side="bottom", pady=(10, 0))
+        if not fixes:
+            self.tags_note.configure(text="Nothing ticked, so nothing will change.")
+            return
 
         def work(progress):
-            return fixtags.plan(self.recs, set(fixtags.FIXES), order=self._order())
+            return fixtags.plan(self.recs, fixes, order=self._order())
 
         def done(changes):
             self._tag_changes = changes
@@ -410,11 +428,22 @@ class Wizard(tk.Toplevel):
                 self.tags_note.configure(text="Nothing to fix here — tags look fine.")
                 return
             c = fixtags.summarize(changes)
-            lines = "\n".join(f"  {v:5}  {k}" for k, v in c.most_common())
-            self.tags_note.configure(text=f"{len(changes)} files would change:\n{lines}")
+            del c["files affected"]
+            top = c.most_common(5)
+            lines = "\n".join(f"  {v:5}  {k}" for k, v in top)
+            more = len(c) - len(top)
+            self.tags_note.configure(
+                text=f"{len(changes)} files would change:\n{lines}"
+                     + (f"\n  …and {more} more kinds of change" if more else ""))
             self.tags_btn.configure(state="normal")
+            self.tags_list.pack(anchor="w", pady=(6, 0))
 
         self._run(work, done, "Checking tags")
+
+    def _show_tag_changes(self):
+        changes = getattr(self, "_tag_changes", None)
+        if changes:
+            TagChanges(self, changes)
 
     def _order(self):
         o = settings.get("name_order")
@@ -605,6 +634,8 @@ class Wizard(tk.Toplevel):
                                           self._apply_stage)
         if not pending:
             self.an_btn.configure(state="disabled")
+        ui.link(self.body, "Don't have an analysis tool? See which ones work…",
+                self._analysis_help).pack(anchor="w", pady=(8, 0))
         ttk.Label(self.body, style="Muted.TLabel", wraplength=690, justify="left",
                   text="\nAfterwards: analyse them, then save or move the results into "
                        "'Processed'. Sortero doesn't move anything out of 'To Be "
@@ -613,6 +644,9 @@ class Wizard(tk.Toplevel):
                        "taken out of a set rejoin its playlist automatically when they "
                        "come back."
                   ).pack(anchor="w", pady=(10, 0))
+
+    def _analysis_help(self):
+        messagebox.showinfo("Which analysis tool?", organize.ANALYSIS_HELP, parent=self)
 
     def _apply_stage(self):
         pending = getattr(self, "_pending", None)
@@ -676,9 +710,39 @@ class Wizard(tk.Toplevel):
                            "The setup guide's first steps will also "
                            "pick them up if you run it again."
                       ).pack(anchor="w")
+            ui.link(self.body, "Which analysis tool?", self._analysis_help).pack(
+                anchor="w", pady=(4, 0))
         ttk.Label(self.body, style="Muted.TLabel", wraplength=690, justify="left",
                   text="\nReopen this guide any time from Help → Setup Guide."
                   ).pack(anchor="w", pady=(10, 0))
+
+
+class TagChanges(tk.Toplevel):
+    """Every tag the setup guide's clean-up would change, file by file."""
+
+    def __init__(self, parent, changes):
+        super().__init__(parent)
+        self.title("The tag changes")
+        self.transient(parent)
+        frame = ttk.Frame(self, padding=ui.PAD)
+        frame.pack(fill="both", expand=True)
+        rows = fixtags.preview_rows(changes)
+        total = sum(len(ch) for _, ch in changes)
+        note = (f"{total:,} changes to {ui.plural(len(changes), 'file')}. Nothing has "
+                "been written yet.")
+        if total > len(rows):
+            note += f" The first {len(rows):,} are shown."
+        ttk.Label(frame, text=note, style="Muted.TLabel").pack(anchor="w", pady=(0, 6))
+        ttk.Button(frame, text="Close", command=self.destroy).pack(side="bottom",
+                                                                   anchor="e", pady=(8, 0))
+        f, tv = ui.tree(frame, [("track", "Track", 250), ("field", "Tag", 190),
+                                ("before", "Now", 210), ("after", "Becomes", 210)],
+                        height=18, selectmode="browse")
+        f.pack(fill="both", expand=True)
+        for row in rows:
+            tv.insert("", "end", values=row)
+        self.geometry("900x520")
+        self.bind("<Escape>", lambda e: self.destroy())
 
 
 def maybe_run(app, on_finish=None):

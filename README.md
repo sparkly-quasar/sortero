@@ -640,7 +640,7 @@ It can also check automatically on launch (at most once a day) — toggle that i
 Settings.
 ## What's new since v0.18.0
 
-v0.18.0 is the free download. The current version, **v0.35.1**, is what
+v0.18.0 is the free download. The current version, **v0.35.2**, is what
 [Supporter licence](#supporting-sortero) holders get, and what you get by
 [building from source](#building-from-source). It adds:
 
@@ -694,7 +694,10 @@ run of tracks in any list.
   only files that changed are read again.
 
 **Fixes.** Writing the backup stick no longer risks deleting a real track whose
-name starts with "._".
+name starts with "._". On Windows, a one-click update now replaces the old copy
+instead of leaving the new one in a subfolder and reopening the old one, and no
+blank command window opens over Sortero while it updates. Copies from before
+v0.35.2 still have the old updater, so update those by hand once.
 
 ## Install & update
 
@@ -747,9 +750,10 @@ xattr -dr com.apple.quarantine /Applications/Sortero.app
 ### Windows
 
 1. Download **`Sortero-windows-x86_64.zip`**.
-2. Right-click it → **Extract All…**, and pick a folder to keep it in, such as
-   `Documents` or `C:\Program Files`. Run Sortero from the extracted folder,
-   not from inside the zip.
+2. Right-click it → **Extract All…**, and pick a folder in your own user
+   space to keep it in, such as `Documents`. Not `C:\Program Files`: Sortero
+   can't update itself there. Run Sortero from the extracted folder, not from
+   inside the zip.
 3. Open the **Sortero** folder and double-click **`Sortero.exe`**.
 4. Windows shows **"Windows protected your PC"**: click **More info**, then
    **Run anyway**. You only do this once.

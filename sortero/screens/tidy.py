@@ -310,20 +310,8 @@ class CleanTagsScreen(ToolScreen):
         spec = JOBS[job]
         self.job = job
         self.tv.delete(*self.tv.get_children())
-        shown = 0
-        for r, ch in changes:
-            for field, (old, new) in ch.items():
-                if shown >= 2000:
-                    break
-                self.tv.insert("", "end", values=(
-                    os.path.basename(r.path), fixtags.field_label(field),
-                    # a blank cell reads as missing data; say the tag is empty now
-                    "(empty)" if old in (None, "") else str(old)[:120],
-                    "(cleared)" if new is None else
-                    # looks the same, but an accent was stored a different way
-                    str(new)[:100] + "  (accents re-encoded)"
-                    if fixtags._same_text(old or "", new) else str(new)[:120]))
-                shown += 1
+        for row in fixtags.preview_rows(changes):
+            self.tv.insert("", "end", values=row)
         if not changes:
             self.changes = None
             self.pending.configure(text="")

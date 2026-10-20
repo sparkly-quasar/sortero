@@ -138,9 +138,10 @@ class Steps(unittest.TestCase):
 class When(unittest.TestCase):
     def test_today_yesterday_and_earlier(self):
         now = time.mktime((2026, 10, 14, 21, 30, 0, 0, 0, -1))
-        self.assertEqual(K.when(now - 600, now), "21:20")
-        self.assertEqual(K.when(now - 86400, now), "yesterday 21:30")
-        self.assertEqual(K.when(now - 5 * 86400, now), "9 Oct 21:30")
+        self.assertEqual(K.when(now - 600, now), "9:20 PM")
+        self.assertEqual(K.when(now - 86400, now), "yesterday 9:30 PM")
+        self.assertEqual(K.when(now - 5 * 86400, now), "9 Oct 9:30 PM")
+        self.assertEqual(K.when(now - 21.5 * 3600, now), "12:00 AM")
 
     def test_stick_check_round_trip(self):
         chk = stick(True)

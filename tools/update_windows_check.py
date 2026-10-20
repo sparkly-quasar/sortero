@@ -17,6 +17,11 @@ A stand-in "old Sortero" (a small Python process started in the old folder)
 calls updater.install() and quits, exactly as the app does. Then this waits
 for the helper's log, and checks the folder now holds the new version, with
 no nested copy and no .old left behind.
+
+Then the repair, for copies an older updater already left stuck: the new
+version inside the old folder, at <old>\\Sortero. A stand-in started from
+there, as a double-click would start it, calls updater.finish_stuck() and
+quits, and the same checks follow.
 """
 import os, shutil, subprocess, sys, tempfile, time
 
@@ -28,7 +33,7 @@ STAND_IN = r"""
 import sys
 sys.path.insert(0, {here!r})
 from sortero import updater
-updater.install({new!r}, target={app!r})
+{call}
 """
 
 
@@ -41,24 +46,16 @@ def fake_build(folder, version):
         fh.write(version)
 
 
-def main():
-    if os.name != "nt":
-        sys.exit("this check needs Windows")
-    work = tempfile.mkdtemp(prefix="update-check-", dir=HERE)   # D: on GitHub's runners
-    app = os.path.join(work, "Sortero")
-    fake_build(app, "old")
-    new = os.path.join(tempfile.mkdtemp(prefix="sortero-dl-"), "unpacked", "Sortero")
-    fake_build(new, "new")
-    print(f"old copy: {app}\nnew copy: {new}")
+def swap(title, app, call, cwd):
+    """Run `call` from a stand-in started in `cwd`, then check `app` holds the new version."""
+    print(f"\n== {title}")
     log = updater.log_path()
     if os.path.exists(log):
         os.remove(log)
-
-    # The stand-in runs with the old folder as its working directory
-    code = STAND_IN.format(here=HERE, new=new, app=app)
-    r = subprocess.run([sys.executable, "-c", code], cwd=app)
+    r = subprocess.run([sys.executable, "-c", STAND_IN.format(here=HERE, call=call)],
+                       cwd=cwd)
     if r.returncode:
-        sys.exit("updater.install() failed")
+        return [f"{call} failed"]
 
     deadline = time.time() + 90
     text = ""
@@ -77,13 +74,37 @@ def main():
     if got != "new":
         problems.append(f"the folder holds the {got!r} version, not the new one")
     if os.path.isdir(os.path.join(app, "Sortero")):
-        problems.append("the new version went inside the old folder as a subfolder")
+        problems.append("a copy is still inside the folder as a subfolder")
     for leftover in (app + ".old", app + ".new"):
         if os.path.exists(leftover):
             problems.append(f"{leftover} was left behind")
+    return [f"{title}: {p}" for p in problems]
+
+
+def main():
+    if os.name != "nt":
+        sys.exit("this check needs Windows")
+    problems = []
+
+    work = tempfile.mkdtemp(prefix="update-check-", dir=HERE)   # D: on GitHub's runners
+    app = os.path.join(work, "Sortero")
+    fake_build(app, "old")
+    new = os.path.join(tempfile.mkdtemp(prefix="sortero-dl-"), "unpacked", "Sortero")
+    fake_build(new, "new")
+    # The stand-in runs with the old folder as its working directory
+    problems += swap("update", app, f"updater.install({new!r}, target={app!r})", cwd=app)
+
+    work = tempfile.mkdtemp(prefix="stuck-check-", dir=HERE)
+    app = os.path.join(work, "Sortero")
+    fake_build(app, "old")
+    nested = os.path.join(app, "Sortero")      # where an older updater left it
+    fake_build(nested, "new")
+    problems += swap("finishing a stuck update", app,
+                     f"updater.finish_stuck({nested!r}, parent={app!r})", cwd=nested)
+
     if problems:
         sys.exit("FAILED:\n  " + "\n  ".join(problems))
-    print("OK: the update replaced the folder in place")
+    print("\nOK: both replaced the folder in place")
 
 
 if __name__ == "__main__":

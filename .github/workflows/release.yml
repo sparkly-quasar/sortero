@@ -19,7 +19,9 @@ permissions:
   contents: write
 
 env:
-  LAST_PUBLIC: v0.18.0
+  # The free download: the one release whose builds are also attached
+  # publicly. Every other release's builds go to supporters only.
+  LAST_PUBLIC: v0.35.3
 
 jobs:
   # Which commit a hand-started run builds was nobody's decision: checkout took
@@ -216,14 +218,14 @@ jobs:
           make_latest: ${{ !contains(github.event.inputs.tag || github.ref_name, '-') }}
           body: |
             ${{ contains(github.event.inputs.tag || github.ref_name, '-') && '**This is a beta**, for trying new features before they are released. It can have bugs: before a gig, bring a stick checked with a release build too. Sortero offers betas only when *Offer beta builds* is ticked in Settings.' || '' }}
-            ${{ (github.event.inputs.tag || github.ref_name) == env.LAST_PUBLIC && 'This is the last release with public downloads. Updating to it gives every copy the new updater; later updates install with one click for Supporter licence holders.' || '' }}
+            ${{ (github.event.inputs.tag || github.ref_name) == env.LAST_PUBLIC && 'This is the free download: anyone can download it below. Later releases come to Supporter licence holders first, with one-click updates.' || '' }}
 
             **How to install:** step-by-step instructions for macOS, Windows
             and Linux, including how to get past the one-time warning for an
             unsigned app, are in
             [Install & update](https://github.com/sparkly-quasar/sortero#install--update).
             To try Sortero for free, download it from
-            [v0.18.0](https://github.com/sparkly-quasar/sortero/releases/tag/v0.18.0).
+            [${{ env.LAST_PUBLIC }}](https://github.com/sparkly-quasar/sortero/releases/tag/${{ env.LAST_PUBLIC }}).
 
             Sortero is free and open source: build it yourself by following
             [Building from source](https://github.com/sparkly-quasar/sortero#building-from-source).
@@ -234,16 +236,15 @@ jobs:
             released at its author's own expense with the help of Claude Code,
             and supporters are what keep it improving.
 
-            As a thank-you, supporters get the ready-to-run app for macOS,
-            Windows and Linux, with one-click updates.
+            As a thank-you, supporters get each new version of the
+            ready-to-run app for macOS, Windows and Linux as it's released,
+            with one-click updates.
 
             ---
 
-      # Copies from before the Supporter licence update from the public release
-      # and can't present a key. LAST_PUBLIC also goes out publicly, so every
-      # copy can update onto the licence-aware updater; after it, builds are
-      # private only.
-      - name: Attach builds publicly (last public release only)
+      # The free download. Copies from before the Supporter licence also update
+      # from the public release, since they can't present a key.
+      - name: Attach builds publicly (the free download only)
         if: (github.event.inputs.tag || github.ref_name) == env.LAST_PUBLIC
         uses: softprops/action-gh-release@v2
         with:

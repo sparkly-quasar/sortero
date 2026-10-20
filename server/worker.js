@@ -10,9 +10,12 @@
  *   GET  /downloads                  Download page for returning buyers: paste key.
  *   POST /downloads                  (form: key) the download buttons for a key.
  *   POST /file                       (form: key, platform) redirects to the build.
- *   POST /update                     (JSON: key, platform, channel?) newest build,
- *                                    for the app's updater. channel "beta" also
+ *   POST /update                     (JSON: key, platform, channel?, version?) newest
+ *                                    build, for the app's updater. channel "beta" also
  *                                    considers pre-releases (tags like v0.34.0-beta.1).
+ *                                    version is the asking copy's, sent from 0.35.3 on;
+ *                                    no version means an older copy, whose Windows
+ *                                    updater leaves the new copy inside the old one.
  *   POST /check                      (JSON: key) signed "subscription paid until".
  *   POST /webhook                    Stripe's checkout.session.completed: saves the
  *                                    key on the payment, so it can be resent.

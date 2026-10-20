@@ -691,6 +691,9 @@ class Sortero(tk.Tk):
 
     # -- first run / updates -----------------------------------------------
     def _first_run(self):
+        if self._finish_stuck_update():
+            return
+
         def after_wizard(root_dir):
             if root_dir:
                 self.root_dir.set(root_dir)
@@ -703,6 +706,27 @@ class Sortero(tk.Tk):
                 self.scan()
             # Asked before the update check, so a yes is offered the newest beta now.
             self._maybe_ask_beta(then=self._maybe_auto_update)
+
+    def _finish_stuck_update(self):
+        """Started from inside an older copy, where its failed update left this one?
+        Offer to put this copy in its place. True when Sortero is about to quit."""
+        old = updater.stuck_inside()
+        if not old:
+            return False
+        if not messagebox.askyesno(
+                APP, "Your last update didn't finish: Windows left this new version "
+                     f"inside the folder of the old one,\n\n{old}\n\nFinish the "
+                     "update now? Sortero puts this version in place of the old one, "
+                     "closes, and opens again in a moment. Your music, playlists and "
+                     "settings aren't touched."):
+            return False
+        try:
+            updater.finish_stuck(parent=old)
+        except updater.UpdateError as e:
+            messagebox.showerror(APP, str(e))
+            return False
+        self.after(300, self.destroy)
+        return True
 
     def _maybe_ask_beta(self, then):
         """Once, on a launch after the first: offer betas too, or only releases?"""

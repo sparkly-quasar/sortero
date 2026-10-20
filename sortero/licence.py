@@ -192,7 +192,10 @@ def latest_build(timeout=20):
         raise LicenceError("This copy of Sortero doesn't know where to get updates.")
     try:
         from . import updates
-        ask = {"key": key, "platform": platform()}
+        from .version import __version__
+        # Copies before 0.35.3 send no version, which is how the server can tell
+        # them apart: their Windows updater can't finish an update by itself.
+        ask = {"key": key, "platform": platform(), "version": __version__}
         if updates.beta():
             ask["channel"] = "beta"         # the newest build, betas included
         body = _post(store.SERVER.rstrip("/") + "/update", ask, timeout)

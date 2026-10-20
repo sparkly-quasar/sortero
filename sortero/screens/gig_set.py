@@ -375,6 +375,34 @@ class SetPicker(tk.Frame):
         menu.tk_popup(e.x_root, e.y_root)
         return "break"
 
+    # ------------------------------------------------- from Your playlists
+    def take(self, src):
+        """Put a playlist at the end of the set. False if it was in it already."""
+        src = sources.for_gig(src, self.app.root_dir.get())
+        self.load()
+        if src.key in self.chosen:
+            return False
+        self.toggle(src.key)
+        return src.key in self.chosen
+
+    def renamed(self, old_key, new_key):
+        """One of Sortero's own playlists has a new name, so a new key."""
+        if old_key in self.chosen:
+            self.chosen[self.chosen.index(old_key)] = new_key
+            self.load()
+            self._changed("You renamed a playlist in the set")
+        else:
+            self.load()
+
+    def dropped(self, key):
+        """A playlist was deleted or taken off the list elsewhere."""
+        was = key in self.chosen
+        if was:
+            self.chosen.remove(key)
+        self.load()
+        if was:
+            self._changed("A playlist in the set was removed")
+
     # ------------------------------------------------- playlists from elsewhere
     def _add(self, new, tick=True, note=""):
         fresh = sources.remember(new)

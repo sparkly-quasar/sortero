@@ -12,7 +12,7 @@ import os, re, csv, json, difflib, urllib.request, urllib.error, collections
 
 from . import net
 from .dupes import norm_artist, norm_title
-from .organize import PLAYLIST_DIR, safe
+from .organize import PLAYLIST_DIR, QUARANTINE, safe
 
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
@@ -485,3 +485,48 @@ def append(root, name, paths):
         for r in have + added:
             fh.write(r + "\n")
     return fp, len(added)
+
+
+# ------------------------------------------------- renaming and deleting
+def rename(root, old, new, journal=None):
+    """Rename one of Sortero's own playlists. Returns the name it ended up with
+    (made safe for a filename). Raises FileExistsError if that name is taken."""
+    d = playlist_dir(root)
+    src = os.path.join(d, old + ".m3u8")
+    name = safe(new, 100)
+    dst = os.path.join(d, name + ".m3u8")
+    if name == old:
+        return name
+    # On a Mac or Windows "peak" and "Peak" are the same file: rename it via a
+    # temporary name rather than calling the new name taken.
+    if os.path.exists(dst) and not os.path.samefile(src, dst):
+        raise FileExistsError(dst)
+    if os.path.exists(dst):
+        tmp = src + ".renaming"
+        os.rename(src, tmp)
+        os.rename(tmp, dst)
+    else:
+        os.rename(src, dst)
+    if journal:
+        journal.moved(src, dst)
+    from . import membership
+    membership.rename_playlist(old, name)
+    return name
+
+
+def delete(root, name, journal=None):
+    """Set one of Sortero's own playlists aside in _Quarantine/_Playlists, where
+    History can bring it back from. Returns where it went."""
+    src = os.path.join(playlist_dir(root), name + ".m3u8")
+    away = os.path.join(root, QUARANTINE, PLAYLIST_DIR)
+    os.makedirs(away, exist_ok=True)
+    dst, n = os.path.join(away, name + ".m3u8"), 1
+    while os.path.exists(dst):
+        n += 1
+        dst = os.path.join(away, f"{name} ({n}).m3u8")
+    os.rename(src, dst)
+    if journal:
+        journal.moved(src, dst)
+    from . import membership
+    membership.rename_playlist(name, None)
+    return dst

@@ -250,6 +250,25 @@ def survey(root, progress=None):
     return out
 
 
+def for_gig(src, root):
+    """The Source Gig prep lists for this playlist, remembering it first if Gig
+    prep wouldn't otherwise see it: a playlist file in the collection while
+    Gig prep isn't looking there is added as a playlist file."""
+    if src.key in {s.key for s in listed(root)}:
+        return src
+    if src.kind == COLLECTION:
+        src = m3u_sources([src.path])[0]
+    remember([src])
+    return src
+
+
+def removable(src):
+    """Can this be taken off the list? Only what was added to it: Sortero's own
+    and the collection's are found by themselves, and a watched folder's go
+    when the folder stops being watched."""
+    return src.kind not in (SORTERO, COLLECTION, WATCHED)
+
+
 def file_of(src):
     """The file to show in Finder or Explorer for this playlist."""
     if src.kind == SORTERO:

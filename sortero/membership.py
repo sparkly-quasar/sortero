@@ -139,6 +139,23 @@ def release(recs):
     _save([e for e in data if id(e) not in drop])
 
 
+def rename_playlist(old, new):
+    """A playlist was renamed (or deleted, when `new` is None): tracks away
+    being analysed come back into it under its new name, or not at all."""
+    data = _load()
+    changed = False
+    for e in data:
+        names = e.get("playlists") or []
+        if old in names:
+            names = [n for n in names if n != old]
+            if new and new not in names:
+                names.append(new)
+            e["playlists"] = names
+            changed = True
+    if changed:
+        _save(data)
+
+
 def pending_count():
     return len(_load())
 

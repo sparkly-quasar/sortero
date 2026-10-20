@@ -2,7 +2,7 @@
 rekordbox XML and Mixxx."""
 import os, sqlite3, unittest
 
-from sortero import playlists, settings
+from sortero import journal, membership, playlists, settings
 from sortero.gig import backup, convert, sources as S
 from tests.test_tagio import TempDir
 
@@ -344,6 +344,80 @@ class YourPlaylists(TempDir):
         self.assertEqual(S.file_of(own), os.path.join(self.root, "_Playlists", "Warmup.m3u8"))
         self.assertTrue(os.path.isfile(S.file_of(own)))
         self.assertEqual(S.file_of(found), self.peak)
+
+
+class FromYourPlaylists(YourPlaylists):
+    """What Your playlists does to them: into Gig prep, renamed, deleted."""
+
+    def setUp(self):
+        super().setUp()
+        settings.set("gig_playlists", [])
+        self.addCleanup(settings.set, "gig_playlists", [])
+        membership._save([])
+        self.addCleanup(membership._save, [])
+
+    def test_into_gig_prep_as_it_lists_them(self):
+        own, found = [s for s, _, _ in S.survey(self.root)]
+        self.assertEqual(S.for_gig(own, self.root), own)
+        self.assertEqual(S.for_gig(found, self.root), found)
+        self.assertEqual(S.added(), [])
+
+    def test_a_collection_file_gig_prep_isnt_looking_for_is_added(self):
+        settings.set("gig_search_collection", False)
+        found = S.everywhere(self.root)[1]
+        got = S.for_gig(found, self.root)
+        self.assertEqual((got.kind, got.path), (S.M3U, self.peak))
+        self.assertIn(got.key, {s.key for s in S.listed(self.root)})
+
+    def test_only_added_ones_can_be_taken_off(self):
+        own, found = [s for s, _, _ in S.survey(self.root)]
+        self.assertFalse(S.removable(own))
+        self.assertFalse(S.removable(found))
+        self.assertTrue(S.removable(S.m3u_sources([self.peak])[0]))
+        self.assertTrue(S.removable(S.folder_source(self.root)))
+
+    def own_file(self, name):
+        return os.path.join(self.root, "_Playlists", name + ".m3u8")
+
+    def test_renamed_and_undone(self):
+        j = journal.Journal("rename-playlist", self.root)
+        self.assertEqual(playlists.rename(self.root, "Warmup", "AC/DC: night ", journal=j),
+                         "AC-DC- night")
+        self.assertFalse(os.path.exists(self.own_file("Warmup")))
+        self.assertEqual(len(playlists.entries(self.root, "AC-DC- night")), 2)
+        journal.revert(j.save(), log=lambda m: None)
+        self.assertTrue(os.path.exists(self.own_file("Warmup")))
+
+    def test_a_name_thats_taken(self):
+        playlists.write(self.root, "Peak", [])
+        with self.assertRaises(FileExistsError):
+            playlists.rename(self.root, "Warmup", "Peak")
+        self.assertTrue(os.path.exists(self.own_file("Warmup")))
+
+    def test_only_the_case_changes(self):
+        self.assertEqual(playlists.rename(self.root, "Warmup", "WARMUP"), "WARMUP")
+        self.assertEqual(playlists.existing(self.root), ["WARMUP"])
+
+    def test_deleted_into_quarantine_and_undone(self):
+        j = journal.Journal("delete-playlist", self.root)
+        away = playlists.delete(self.root, "Warmup", journal=j)
+        self.assertEqual(away, os.path.join(self.root, "_Quarantine", "_Playlists",
+                                            "Warmup.m3u8"))
+        self.assertEqual(playlists.existing(self.root), [])
+        # deleted again later, it doesn't overwrite the first one set aside
+        playlists.write(self.root, "Warmup", [])
+        self.assertTrue(playlists.delete(self.root, "Warmup").endswith("Warmup (2).m3u8"))
+        journal.revert(j.save(), log=lambda m: None)
+        self.assertEqual(len(playlists.entries(self.root, "Warmup")), 2)
+
+    def test_tracks_away_for_analysis_follow_the_new_name(self):
+        membership._save([{"ident": "a", "title": "a", "playlists": ["Warmup", "Peak"]},
+                          {"ident": "b", "title": "b", "playlists": ["Warmup"]}])
+        playlists.rename(self.root, "Warmup", "Opening")
+        self.assertEqual([e["playlists"] for e in membership._load()],
+                         [["Peak", "Opening"], ["Opening"]])
+        playlists.delete(self.root, "Opening")
+        self.assertEqual([e["playlists"] for e in membership._load()], [["Peak"], []])
 
 
 class InTheCollection(TempDir):

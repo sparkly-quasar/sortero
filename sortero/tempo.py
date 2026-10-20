@@ -70,11 +70,11 @@ def _pygame_pcm(path, start, length):
 
 def _tool_pcm(path, start, length):
     """ffmpeg if it's installed, else afconvert, which every Mac has."""
-    ffmpeg = shutil.which("ffmpeg")
+    from .gig import ffmpeg as tools
+    ffmpeg = tools.find("ffmpeg")           # the app's own copy, else the PATH's
     if ffmpeg:
-        r = subprocess.run([ffmpeg, "-v", "quiet", "-ss", str(start), "-t", str(length),
-                            "-i", path, "-ac", "1", "-ar", str(RATE), "-f", "s16le", "-"],
-                           capture_output=True)
+        r = tools.run([ffmpeg, "-v", "quiet", "-ss", str(start), "-t", str(length),
+                       "-i", path, "-ac", "1", "-ar", str(RATE), "-f", "s16le", "-"])
         if r.returncode == 0 and r.stdout:
             return r.stdout, start
     if sys.platform == "darwin" and shutil.which("afconvert"):

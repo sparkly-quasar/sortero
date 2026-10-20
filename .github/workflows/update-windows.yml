@@ -1,0 +1,23 @@
+name: Updating on Windows
+
+# Runs the Windows self-update helper for real and checks it replaces the old
+# copy in place, whenever the updater changes.
+on:
+  push:
+    paths:
+      - "sortero/updater.py"
+      - "tools/update_windows_check.py"
+      - ".github/workflows/update-windows.yml"
+  workflow_dispatch:
+
+jobs:
+  swap:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Update a stand-in copy and check it
+        run: python -u tools/update_windows_check.py

@@ -41,6 +41,23 @@ UNSORTED = "Unsorted"
 RESERVED_TOP = set(PROTECTED) | {TRACKS_DIR, SETS_DIR, ALBUMS_DIR, MIXES_DIR,
                                  "Compilations", "Recorded Mixes", "Recordings"}
 
+# What "your analysis tool" means, for anyone who doesn't have one yet
+ANALYSIS_HELP = (
+    "Sortero only needs each track's key and BPM written into its tags. Any of "
+    "these does that:\n\n"
+    "•  Mixxx: free and open source, on Windows, macOS and Linux. Analyse the "
+    "tracks, then have it write the results into the files' tags.\n"
+    "•  Mixed In Key: paid. The most accurate for key, and where the 1-10 energy "
+    "rating comes from.\n"
+    "•  Serato DJ or Traktor: if you already use one, it writes key and BPM into "
+    "the files as it analyses them.\n"
+    "•  KeyFinder: free, but key only, so BPM still needs one of the others.\n\n"
+    "Point the tool at 'To Be Processed', then save or move the results into "
+    "'Processed'.\n\n"
+    "The tool doesn't need to make waveforms or beat grids. They aren't kept in "
+    "the file's tags: your DJ software makes its own when it imports a track, and "
+    "Gig prep makes the waveforms the players show when it writes the main stick.")
+
 MIX_MIN_SECONDS = 20 * 60          # longer than this and it is a mix, not a track
 
 # Canonical genre vocabulary, ordered: first match wins.

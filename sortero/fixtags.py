@@ -20,6 +20,16 @@ FIX_LABELS = {
     "genre": "Tidy genre names into one consistent set",
 }
 
+# The same, short enough for a tick box in the setup guide
+FIX_SHORT = {
+    "energy": "Copy Mixed In Key's key and energy into Grouping",
+    "spam": "Clear download-site spam",
+    "artist": "Fill in missing artists and titles",
+    "repeat": "Take the artist out of the title",
+    "spelling": "Spell each artist the same way",
+    "genre": "Tidy genre names into one set",
+}
+
 # What each tag is called on screen. "grouping" alone means nothing to most
 # people; what Sortero puts there is the key and energy.
 FIELD_LABELS = {
@@ -490,6 +500,24 @@ def change_lines(changes, n=3):
             else:
                 parts.append(f"{label} '{_short(old)}' becomes '{_short(new)}'")
         out.append(f"{_short(name, 60)}: " + "; ".join(parts))
+    return out
+
+
+def preview_rows(changes, limit=2000):
+    """(file, tag, now, becomes) for each planned change, as a table shows them."""
+    out = []
+    for r, ch in changes:
+        for field, (old, new) in ch.items():
+            if len(out) >= limit:
+                return out
+            out.append((
+                os.path.basename(r.path), field_label(field),
+                # a blank cell reads as missing data; say the tag is empty now
+                "(empty)" if old in (None, "") else str(old)[:120],
+                "(cleared)" if new is None else
+                # looks the same, but an accent was stored a different way
+                str(new)[:100] + "  (accents re-encoded)"
+                if _same_text(old or "", new) else str(new)[:120]))
     return out
 
 

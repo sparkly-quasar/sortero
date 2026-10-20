@@ -595,7 +595,7 @@ class PickDialog(tk.Toplevel):
         ttk.Label(frame, text=title, style="Heading.TLabel").pack(anchor="w")
         ui.WrapLabel(frame, style="Muted.TLabel",
                      text="Click the ones you're playing. They go into your set in the "
-                          "order you click them.").pack(fill="x", pady=(2, 6))
+                          "order you click them. Select all adds them in the order shown.").pack(fill="x", pady=(2, 6))
         row = ttk.Frame(frame)
         row.pack(side="bottom", fill="x", pady=(ui.GAP, 0))
         self.add_btn = ttk.Button(row, text="Add", default="active", command=self._done,
@@ -603,6 +603,8 @@ class PickDialog(tk.Toplevel):
         self.add_btn.pack(side="right")
         ttk.Button(row, text="Cancel", command=self.destroy).pack(side="right",
                                                                   padx=(0, ui.GAP))
+        self.all_btn = ttk.Button(row, text="Select all", command=self.toggle_all)
+        self.all_btn.pack(side="left")
         f, self.tv = ui.tree(frame, [("tick", "", 30), ("name", "Playlist", 260),
                                      ("where", "In", 200), ("count", "Tracks", 60)],
                              height=14, selectmode="none")
@@ -621,6 +623,9 @@ class PickDialog(tk.Toplevel):
                 "✓" if already else "", src.name, where,
                 counts.get(key, "")), tags=("have",) if already else ())
         self.have = have
+        self.free = [k for k in self.found if k not in have]
+        if not self.free:
+            self.all_btn.configure(state="disabled")
         self.tv.bind("<Button-1>", self._click)
         self.geometry("640x480")
         self.grab_set()
@@ -633,15 +638,27 @@ class PickDialog(tk.Toplevel):
             self.picked.remove(key)
         else:
             self.picked.append(key)
-        for k in self.found:
-            if k not in self.have:
-                pos = self.picked.index(k) + 1 if k in self.picked else ""
-                self.tv.set(k, "tick", pos)
-                self.tv.item(k, tags=("picked",) if pos else ())
+        self._draw()
+        return "break"
+
+    def toggle_all(self):
+        """Pick every one not already in the list, in the order shown; or none again."""
+        if len(self.picked) == len(self.free):
+            self.picked = []
+        else:
+            self.picked += [k for k in self.free if k not in self.picked]
+        self._draw()
+
+    def _draw(self):
+        for k in self.free:
+            pos = self.picked.index(k) + 1 if k in self.picked else ""
+            self.tv.set(k, "tick", pos)
+            self.tv.item(k, tags=("picked",) if pos else ())
         n = len(self.picked)
         self.add_btn.configure(text=f"Add {ui.plural(n, 'playlist')}" if n else "Add",
                                state="normal" if n else "disabled")
-        return "break"
+        self.all_btn.configure(text="Select none" if self.free and n == len(self.free)
+                               else "Select all")
 
     def _done(self):
         picked = [self.found[k] for k in self.picked]

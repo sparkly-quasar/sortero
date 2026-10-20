@@ -375,6 +375,14 @@ class Names(unittest.TestCase):
         self.assertIn("Change the album to “hide & seek - devils romance”", c.details[1])
         self.assertIsNone(V.slash_split("Contents/Artist/Album/01.mp3"))
 
+    def test_slash_on_a_stick_sortero_wrote_says_write_it_again(self):
+        entries = [V.Entry("Contents/OFF / GRID/Downtown Dubs/01.mp3", "/nowhere", 1),
+                   V.Entry("PIONEER/rekordbox/.sortero-export.json", "/nowhere", 1)]
+        c = V.check_names(entries, P.UNIVERSAL)
+        self.assertEqual(c.level, V.FAIL)
+        self.assertIn("Write the main stick again: it's “OFF - GRID” now", c.details[0])
+        self.assertNotIn("rekordbox", c.details[0])
+
     def test_over_4_gb(self):
         big = V.Entry("Mixes/set.wav", "/nowhere", 5 * 1024 ** 3)
         c = V.check_names([big], P.UNIVERSAL)

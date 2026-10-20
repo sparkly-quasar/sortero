@@ -478,6 +478,8 @@ def check_names(entries, profile):
     fails, warns = [], []
     depth = profile.folder_depth    # None: the maker states no limit
     per_folder, splits = {}, {}
+    from .usbexport import MARKER
+    ours = any(e.rel == MARKER.replace(os.sep, "/") for e in entries)
     for e in entries:
         if is_appledouble(e.rel):
             continue
@@ -492,9 +494,12 @@ def check_names(entries, profile):
         if split:
             # One line per tag, saying what to change, not one per file it split.
             where, tag, value = split
-            splits[where] = (f"{where}/: the {tag} “{value}” has a “/”, which rekordbox "
-                             f"makes into folders. Change the {tag} to "
-                             f"“{value.replace('/', '-')}” in rekordbox, then export again")
+            fixed = value.replace("/", "-")
+            splits[where] = (
+                f"{where}/: the {tag} “{value}” has a “/”, which an earlier Sortero made "
+                f"into folders. Write the main stick again: it's “{fixed}” now" if ours else
+                f"{where}/: the {tag} “{value}” has a “/”, which rekordbox makes into "
+                f"folders. Change the {tag} to “{fixed}” in rekordbox, then export again")
             problems = [p for p in problems if "ends in a space" not in p]
         fails += problems
     fails += splits.values()

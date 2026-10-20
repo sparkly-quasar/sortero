@@ -622,7 +622,7 @@ It can also check automatically on launch (at most once a day) — toggle that i
 Settings.
 ## What's new since v0.18.0
 
-v0.18.0 is the free download. The current version, **v0.33.4**, is what
+v0.18.0 is the free download. The current version, **v0.34.0**, is what
 [Supporter licence](#supporting-sortero) holders get, and what you get by
 [building from source](#building-from-source). It adds:
 
@@ -632,8 +632,11 @@ can trust at the venue.
 - Playable copies of only the tracks a player can't play. A small ffmpeg comes
   with the app, so this works out of the box.
 - The main stick written by Sortero itself, no rekordbox needed: both
-  libraries Pioneer players read, with your playlists, beat grids and cue
-  points. Or a rekordbox XML of the set, and a plain-folder backup stick.
+  libraries Pioneer players read, with your playlists, beat grids, cue
+  points, waveforms and artwork. Writing it again only redoes what changed.
+  Or a rekordbox XML of the set.
+- An optional plain-folder backup stick, with a button to eject the main
+  stick first when there's only one USB port.
 - Safe formatting of a stick on macOS, Windows and Linux, at any size, and a
   **GIG READY / NOT READY** check before you leave.
 - Playlists from anywhere: Sortero's own, playlist files, watched folders, any

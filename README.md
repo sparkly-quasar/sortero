@@ -6,9 +6,11 @@ A cross-platform desktop app for getting a DJ collection under control: one
 canonical copy of every track, playlists that preserve your curation, clean
 tags, and an intake lane for new music. Runs on macOS, Windows and Linux.
 
-New, in beta: [Gig prep](#gig-prep) takes your set to a checked USB stick that
-plays on Pioneer and Denon players, and writes the stick itself, so you don't
-need rekordbox just to export a USB.
+New in v0.34.1, in beta: [Gig prep](#gig-prep) takes your set to a checked
+USB stick that plays on Pioneer and Denon players, and writes the stick itself,
+so you don't need rekordbox just to export a USB. It isn't in the free v0.18.0
+download; see [What's new since v0.18.0](#whats-new-since-v0180) for how to
+get v0.34.1.
 
 > **Sortero is free and open source.** If it's been useful to you, please
 > consider [buying a Supporter licence](#supporting-sortero). Sortero is an
@@ -427,7 +429,7 @@ original is set aside in `_Quarantine/damaged headers`, and History undoes it.
 
 ## Gig prep
 
-> **Beta.** Gig prep's aim is to take rekordbox out of getting ready for a gig.
+> **Beta, in v0.34.1.** Gig prep's aim is to take rekordbox out of getting ready for a gig.
 > Today most DJs keep rekordbox installed only to export a USB stick, even if
 > they prepare their music somewhere else. Gig prep writes that stick itself:
 > the same libraries rekordbox writes for Pioneer players, with your

@@ -22,7 +22,7 @@ GROUPS = [(sources.SORTERO, "In your collection"),
           (sources.COLLECTION, "Found in your collection's folders"), (sources.WATCHED, ""),
           (sources.M3U, "Playlist files"),
           (sources.FOLDER, "Folders of tracks"), (sources.REKORDBOX, "From rekordbox"),
-          (sources.MIXXX, "From Mixxx")]
+          (sources.MIXXX, "From Mixxx"), (sources.ITUNES, "From iTunes or Music")]
 TICK, NO_TICK, REMOVE = "☑", "☐", "×"
 # Listed by Sortero itself, so there's nothing to take off the list
 FOUND = {sources.SORTERO, sources.COLLECTION}
@@ -56,6 +56,7 @@ class SetPicker(tk.Frame):
         menu.add_separator()
         menu.add_command(label="From a rekordbox XML…", command=self.add_rekordbox)
         menu.add_command(label="From Mixxx…", command=self.add_mixxx)
+        menu.add_command(label="From iTunes or Music…", command=self.add_itunes)
         menu.add_separator()
         self.search_var = tk.BooleanVar(value=sources.searching_collection())
         menu.add_checkbutton(label="Find playlist files anywhere in my collection",
@@ -527,9 +528,60 @@ class SetPicker(tk.Frame):
             return
         PickDialog(self, "Playlists and crates in Mixxx", found, counts, self._add)
 
+    def add_itunes(self):
+        path = self._itunes_xml()
+        if not path:
+            return
+
+        def work(progress, log):
+            try:
+                found = sources.itunes_sources(path)
+                return found, {s.key: len(sources.tracks(s)) for s in found}
+            except sources.SourceError as e:
+                return e
+
+        def done(res):
+            if isinstance(res, sources.SourceError):
+                messagebox.showwarning(APP, str(res))
+                return
+            settings.set("gig_itunes_xml", path)
+            found, counts = res
+            if not found:
+                messagebox.showinfo(APP, "There are no playlists in that library yet.")
+                return
+            PickDialog(self, "Playlists in iTunes or Music", found, counts,
+                       lambda picked: self._add(
+                           picked, note="They're read again each time, so smart playlists "
+                                        "keep following their rules."))
+
+        self.app.task.run(work, done, "Reading the iTunes or Music library")
+
+    def _itunes_xml(self):
+        """The library XML: the one used last, else where iTunes or Music keeps it,
+        else one picked by hand."""
+        current = settings.get("gig_itunes_xml") or ""
+        if os.path.isfile(current):
+            return current
+        found = sources.find_itunes()
+        if found:
+            return found
+        if not messagebox.askokcancel(
+                APP, "Sortero reads your iTunes or Music playlists from the library XML, "
+                     "the same file rekordbox reads. Turn it on in Music: Settings → "
+                     "Files (in iTunes: Preferences → Advanced) → Share Library XML with "
+                     "other applications.\n\nThen choose the file. Music keeps it in "
+                     "Music/Music as Library.xml; iTunes keeps it in Music/iTunes as "
+                     "iTunes Music Library.xml."):
+            return None
+        return filedialog.askopenfilename(
+            title="Choose the iTunes or Music library XML",
+            initialdir=self._start_dir(os.path.dirname(current),
+                                       os.path.join(os.path.expanduser("~"), "Music")),
+            filetypes=[("Library XML", "*.xml"), ("All files", "*")]) or None
+
 
 class PickDialog(tk.Toplevel):
-    """Tick playlists from a rekordbox XML or Mixxx to add to Gig prep's list."""
+    """Tick playlists from a rekordbox XML, Mixxx or iTunes to add to Gig prep's list."""
 
     def __init__(self, picker, title, found, counts, on_add):
         super().__init__(picker)
@@ -560,6 +612,8 @@ class PickDialog(tk.Toplevel):
         for key, src in self.found.items():
             if src.kind == sources.REKORDBOX:
                 where = " › ".join(src.ref[:-1])
+            elif src.kind == sources.ITUNES:
+                where = " › ".join(src.ref[1:])
             else:
                 where = "Crate" if src.ref[0] == "crate" else "Playlist"
             already = key in have

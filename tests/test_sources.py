@@ -1,6 +1,6 @@
 """Where Gig prep's playlists come from: Sortero's own, playlist files, folders,
-rekordbox XML and Mixxx."""
-import os, sqlite3, unittest
+rekordbox XML, Mixxx and iTunes."""
+import os, plistlib, sqlite3, unittest
 
 from sortero import journal, membership, playlists, settings
 from sortero.gig import backup, convert, sources as S
@@ -207,6 +207,111 @@ class Mixxx(TempDir):
     def test_no_library(self):
         with self.assertRaises(S.SourceError):
             S.mixxx_sources(self.path("nope.sqlite"))
+
+
+def itunes_library(**changes):
+    """A library XML as Music writes it: built-in playlists, a folder, a smart
+    playlist, and a track that's only in the cloud."""
+    loc = "file://localhost/music/"
+    lib = {
+        "Major Version": 1, "Minor Version": 1, "Application Version": "1.4",
+        "Tracks": {
+            "101": {"Track ID": 101, "Name": "One", "Location": loc + "One.mp3"},
+            "102": {"Track ID": 102, "Name": "Two", "Location": loc + "Two%20B.m4a"},
+            "103": {"Track ID": 103, "Name": "Streamed"},
+        },
+        "Playlists": [
+            {"Name": "Library", "Master": True, "Visible": False,
+             "Playlist Persistent ID": "AAAA0000AAAA0000",
+             "Playlist Items": [{"Track ID": 101}, {"Track ID": 102}]},
+            {"Name": "Music", "Distinguished Kind": 4,
+             "Playlist Persistent ID": "BBBB0000BBBB0000",
+             "Playlist Items": [{"Track ID": 101}]},
+            {"Name": "Gigs", "Folder": True, "Playlist Persistent ID": "F1F1F1F1F1F1F1F1",
+             "Playlist Items": [{"Track ID": 102}]},
+            {"Name": "October", "Folder": True, "Playlist Persistent ID": "F2F2F2F2F2F2F2F2",
+             "Parent Persistent ID": "F1F1F1F1F1F1F1F1"},
+            {"Name": "Peak", "Playlist Persistent ID": "C0C0C0C0C0C0C0C0",
+             "Parent Persistent ID": "F2F2F2F2F2F2F2F2",
+             "Playlist Items": [{"Track ID": 102}, {"Track ID": 103}, {"Track ID": 101}]},
+            {"Name": "Fresh techno", "Playlist Persistent ID": "5E5E5E5E5E5E5E5E",
+             "Smart Info": b"\x01", "Smart Criteria": b"\x02",
+             "Playlist Items": [{"Track ID": 101}]},
+            {"Name": "Empty", "Playlist Persistent ID": "E0E0E0E0E0E0E0E0"},
+        ],
+    }
+    lib.update(changes)
+    return lib
+
+
+class ITunes(TempDir):
+    def setUp(self):
+        super().setUp()
+        self.xml = self.write(itunes_library())
+
+    def write(self, lib, name="Library.xml"):
+        p = self.path(name)
+        with open(p, "wb") as fh:
+            plistlib.dump(lib, fh)
+        os.utime(p, ns=(1, os.stat(p).st_mtime_ns + 10 ** 9))   # a fresh mtime
+        return p
+
+    def test_playlists_without_the_built_in_ones_or_folders(self):
+        found = S.itunes_sources(self.xml)
+        self.assertEqual([(s.name, s.ref) for s in found],
+                         [("Peak", ("C0C0C0C0C0C0C0C0", "Gigs", "October")),
+                          ("Fresh techno", ("5E5E5E5E5E5E5E5E",)),
+                          ("Empty", ("E0E0E0E0E0E0E0E0",))])
+        self.assertEqual(found[0].where, "iTunes/Music: Gigs › October")
+        self.assertEqual(found[1].where, "iTunes/Music")
+
+    def test_tracks_in_playlist_order_leaving_out_cloud_only_ones(self):
+        found = {s.name: s for s in S.itunes_sources(self.xml)}
+        n = os.path.normpath
+        self.assertEqual(S.tracks(found["Peak"]), [n("/music/Two B.m4a"), n("/music/One.mp3")])
+        self.assertEqual(S.tracks(found["Fresh techno"]), [n("/music/One.mp3")])
+        self.assertEqual(S.tracks(found["Empty"]), [])
+
+    def test_windows_locations(self):
+        lib = itunes_library()
+        lib["Tracks"]["101"]["Location"] = "file://localhost/C:/Users/dj/Music/One%20(Edit).mp3"
+        found = {s.name: s for s in S.itunes_sources(self.write(lib))}
+        self.assertEqual(S.tracks(found["Fresh techno"]),
+                         [os.path.normpath("C:/Users/dj/Music/One (Edit).mp3")])
+
+    def test_a_smart_playlist_that_matches_more_later(self):
+        smart = {s.name: s for s in S.itunes_sources(self.xml)}["Fresh techno"]
+        lib = itunes_library()
+        lib["Playlists"][5]["Playlist Items"] = [{"Track ID": 102}, {"Track ID": 101}]
+        self.write(lib)
+        self.assertEqual(S.tracks(smart), [os.path.normpath("/music/Two B.m4a"),
+                                           os.path.normpath("/music/One.mp3")])
+
+    def test_renamed_or_moved_still_found_by_its_id(self):
+        peak = S.itunes_sources(self.xml)[0]
+        lib = itunes_library()
+        lib["Playlists"][4]["Name"] = "Peak time"
+        del lib["Playlists"][4]["Parent Persistent ID"]     # out of its folder
+        self.write(lib)
+        self.assertEqual(len(S.tracks(peak)), 2)
+
+    def test_a_playlist_deleted_since(self):
+        gone = S.Source(S.ITUNES, self.xml, "Old", ("0123456789ABCDEF",))
+        with self.assertRaises(S.SourceError):
+            S.tracks(gone)
+
+    def test_not_a_library(self):
+        bad = self.path("bad.xml")
+        with open(bad, "w") as fh:
+            fh.write("<plist><dict><key>Tracks")
+        with self.assertRaises(S.SourceError):
+            S.itunes_sources(bad)
+        with self.assertRaises(S.SourceError):
+            S.itunes_sources(self.path("nope.xml"))
+
+    def test_ids_survive_the_round_trip(self):
+        src = S.itunes_sources(self.xml)[0]
+        self.assertEqual(S.Source.from_dict(src.to_dict()).key, src.key)
 
 
 class Remembering(TempDir):

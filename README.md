@@ -455,6 +455,13 @@ are just a title.
      in xml format*), picked from rekordbox's own folders.
    - **Playlists and crates from Mixxx**, read straight from its library. A
      crate has no order of its own, so it plays in filename order.
+   - **Playlists from iTunes or Music**, smart playlists included, read from
+     the library XML that rekordbox reads too. Turn it on in Music under
+     *Settings → Files → Share Library XML with other applications* (in iTunes,
+     *Preferences → Advanced*). Sortero finds the file where Music or iTunes
+     keeps it, or asks for it. A smart playlist plays whatever its rules match
+     now, and a playlist you rename or move to another folder is still found.
+     Tracks that are only in the cloud have no file, so they're left out.
 
    Sortero only reads these, and reads them again each time, so a change made
    in the app they came from is picked up. The × takes one off the list; the

@@ -14,11 +14,14 @@ are always listed. Others are added from Gig prep and remembered:
   * a playlist from a rekordbox XML export (File > Export Collection in xml
     format), found by its place in rekordbox's playlist folders
   * a Mixxx playlist or crate, read straight from Mixxx's library
+  * a playlist from the iTunes or Music library XML, smart playlists included,
+    found by its persistent ID so a rename doesn't lose it
 
 Each is read again whenever it's used, so a playlist changed in the app that
 made it is picked up. Nothing here ever writes to any of them.
 """
-import collections, os, re, sqlite3, urllib.parse
+import collections, os, plistlib, re, sqlite3, sys, urllib.parse
+import xml.parsers.expat
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 
@@ -27,6 +30,7 @@ from ..common import AUDIO_EXTS
 from .cues import location_path
 
 SORTERO, M3U, FOLDER, REKORDBOX, MIXXX = "sortero", "m3u", "folder", "rekordbox", "mixxx"
+ITUNES = "itunes"
 WATCHED, COLLECTION = "watched", "collection"
 # Not searched for playlist files: Sortero's own (listed already) and set-asides
 NOT_SEARCHED = {"_Playlists", "_Quarantine"}
@@ -37,6 +41,9 @@ RB_FOLDER, RB_PLAYLIST = "0", "1"
 # Mixxx keeps Auto DJ's queue (1) and the history (2) as hidden playlists
 # (PlaylistDAO::HiddenType in Mixxx's src/library/dao/playlistdao.h).
 MIXXX_SHOWN = 0
+# What a broken iTunes/Music library XML raises
+PLIST_ERRORS = (plistlib.InvalidFileException, xml.parsers.expat.ExpatError, ValueError,
+                KeyError, TypeError, AttributeError)
 
 
 class SourceError(Exception):
@@ -50,6 +57,7 @@ class Source:
     name: str               # the playlist's own name
     ref: tuple = ()         # rekordbox: folder names, then the playlist's;
                             # Mixxx: ("playlist" or "crate", id);
+                            # iTunes: (persistent ID, then its folder names);
                             # watched: (the watched folder,)
 
     @property
@@ -68,6 +76,9 @@ class Source:
             return f"rekordbox{': ' + folders if folders else ''}"
         if self.kind == MIXXX:
             return "Mixxx crate" if self.ref[0] == "crate" else "Mixxx playlist"
+        if self.kind == ITUNES:
+            folders = " › ".join(self.ref[1:])
+            return f"iTunes/Music{': ' + folders if folders else ''}"
         if self.kind == SORTERO:
             return "Sortero"
         return self.path
@@ -293,7 +304,9 @@ def tracks(src, root=None):
             return _rekordbox(src.path).tracks(src.ref)
         if src.kind == MIXXX:
             return _mixxx_tracks(src.path, *src.ref)
-    except (OSError, ET.ParseError, sqlite3.Error) as e:
+        if src.kind == ITUNES:
+            return _itunes(src.path).tracks(src.ref[0], src.name)
+    except (OSError, ET.ParseError, sqlite3.Error, *PLIST_ERRORS) as e:
         raise SourceError(_why(src, e)) from e
     raise SourceError(f"Sortero doesn't know how to read “{src.name}”.")
 
@@ -305,6 +318,9 @@ def _why(src, e):
         return f"{os.path.basename(src.path)} isn't a rekordbox XML Sortero can read ({e})."
     if isinstance(e, sqlite3.Error):
         return f"Mixxx's library couldn't be read ({e})."
+    if src.kind == ITUNES and not isinstance(e, OSError):
+        return (f"{os.path.basename(src.path)} isn't an iTunes or Music library XML "
+                f"Sortero can read ({e}).")
     return f"{src.path} couldn't be read ({e.strerror or e})."
 
 
@@ -461,6 +477,93 @@ def rekordbox_sources(xml_path):
         return _rekordbox(xml_path).sources()
     except (OSError, ET.ParseError) as e:
         raise SourceError(_why(Source(REKORDBOX, xml_path, ""), e)) from e
+
+
+# ---------------------------------------------------------- iTunes / Music
+def itunes_candidates():
+    """Where iTunes and the Music app write their library XML, once "Share
+    Library XML with other applications" is on (rekordbox reads the same file)."""
+    music = os.path.join(os.path.expanduser("~"), "Music")
+    if sys.platform == "darwin":
+        return [os.path.join(music, "Music", "Library.xml"),
+                os.path.join(music, "iTunes", "iTunes Music Library.xml"),
+                os.path.join(music, "iTunes", "iTunes Library.xml")]
+    return [os.path.join(music, "iTunes", "iTunes Music Library.xml"),
+            os.path.join(music, "iTunes", "iTunes Library.xml")]
+
+
+def find_itunes():
+    for p in itunes_candidates():
+        if os.path.isfile(p):
+            return p
+    return None
+
+
+class _ITunesLibrary:
+    """The library XML, a plist: every track's Location under Tracks, and
+    the playlists in order. A smart playlist lists the tracks its rules matched
+    when the XML was last written, which Music does whenever the library changes."""
+
+    def __init__(self, path):
+        self.path = path
+        with open(path, "rb") as fh:
+            lib = plistlib.load(fh)
+        self.locations = {str(t.get("Track ID", k)): t["Location"]
+                          for k, t in (lib.get("Tracks") or {}).items()
+                          if isinstance(t, dict) and t.get("Location")}
+        pls = [p for p in lib.get("Playlists") or [] if isinstance(p, dict)]
+        names = {p.get("Playlist Persistent ID"): (p.get("Name") or "Untitled",
+                                                   p.get("Parent Persistent ID"))
+                 for p in pls if p.get("Folder")}
+        self.playlists = {}         # persistent ID: (name, folders, [track IDs])
+        for p in pls:
+            pid = p.get("Playlist Persistent ID")
+            # the whole library, Music, Movies, Purchased and the like are
+            # built in; a folder's tracks are its playlists' tracks
+            if (not pid or p.get("Folder") or p.get("Master") or
+                    p.get("Distinguished Kind") or p.get("Visible") is False):
+                continue
+            folders, parent = [], p.get("Parent Persistent ID")
+            while parent in names and len(folders) < 50:
+                folders.insert(0, names[parent][0])
+                parent = names[parent][1]
+            ids = [str(i["Track ID"]) for i in p.get("Playlist Items") or []
+                   if isinstance(i, dict) and "Track ID" in i]
+            self.playlists[pid] = (p.get("Name") or "Untitled", tuple(folders), ids)
+
+    def sources(self):
+        return [Source(ITUNES, self.path, name, (pid, *folders))
+                for pid, (name, folders, _) in self.playlists.items()]
+
+    def tracks(self, pid, name=""):
+        if pid not in self.playlists:
+            raise SourceError(f"There's no playlist “{name}” in "
+                              f"{os.path.basename(self.path)} any more.")
+        # a track with no Location is in the cloud only, so there's no file to play
+        return [location_path(self.locations[i]) for i in self.playlists[pid][2]
+                if i in self.locations]
+
+
+_itunes_cache = {}
+
+
+def _itunes(path):
+    stamp = os.stat(path).st_mtime_ns
+    hit = _itunes_cache.get(path)
+    if hit and hit[0] == stamp:
+        return hit[1]
+    lib = _ITunesLibrary(path)
+    _itunes_cache.clear()
+    _itunes_cache[path] = (stamp, lib)
+    return lib
+
+
+def itunes_sources(xml_path):
+    """Every playlist in the iTunes or Music library XML, in its own order."""
+    try:
+        return _itunes(xml_path).sources()
+    except (OSError, *PLIST_ERRORS) as e:
+        raise SourceError(_why(Source(ITUNES, xml_path, ""), e)) from e
 
 
 # ------------------------------------------------------------------- Mixxx

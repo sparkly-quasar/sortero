@@ -487,7 +487,8 @@ are just a title.
 3. **Main stick.** The step asks one thing, *How do you want to make it?*,
    and its button follows the answer: *Sortero writes it*, *Write it with
    rekordbox or Engine DJ*, or *No main stick* (the folders stick only, which
-   also suits a laptop running Serato). Below that, one line says how
+   Pioneer and Denon players browse by folder, and which also suits a laptop
+   running Serato). Below that, one line says how
    many tracks have cue points and beat grids, and **Change…** opens a window
    listing where they come from.
 
@@ -662,8 +663,14 @@ It can also check automatically on launch (at most once a day) — toggle that i
 Settings.
 ## What's new in v0.35.6
 
-v0.35.6 is the free download, and the current version. Compared with v0.18.0,
-the free download before it, it adds:
+v0.35.6 is the free download. Compared with v0.18.0, the free download before
+it, it adds what's below. The current version, **v0.36.0**, is what
+[Supporter licence](#supporting-sortero) holders get: Gig prep's main stick step
+asks one question, *How do you want to make it?*, with one button that follows
+the answer, and the cue point options move to a window of their own. It can
+also skip the main stick for a folders stick alone, which Pioneer and Denon
+players browse by folder, and offers to format a stick the players can't read
+before anything is copied to it.
 
 **Gig prep**, a new screen: one checklist from your playlists to a USB stick you
 can trust at the venue.

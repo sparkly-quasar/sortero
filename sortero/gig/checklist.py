@@ -243,8 +243,8 @@ def steps(st):
                         NEXT, "Write the folders stick again…" if st.skip_main
                         else "Write the backup again…"))
     elif st.skip_main:
-        out.append(Step("backup", title, "The set as numbered folders on the stick, for "
-                        "players and laptops to browse.", NEXT, "Write the folders stick…"))
+        out.append(Step("backup", title, "The set as numbered folders on the stick.",
+                        NEXT, "Write the folders stick…"))
     else:
         out.append(Step("backup", title, "The set as numbered folders on a "
                         "second stick, to browse if the main stick fails.",

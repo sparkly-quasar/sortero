@@ -485,8 +485,9 @@ are just a title.
    A file that is already lossy is decoded to AIFF rather than encoded lossy a
    second time. Copies are remembered, so the next gig only converts what's new.
 3. **Main stick.** The step asks one thing, *How do you want to make it?*,
-   and its button follows the answer: *Sortero writes it*, *Export it from
-   rekordbox or Engine DJ*, or *No main stick*. Below that, one line says how
+   and its button follows the answer: *Sortero writes it*, *Write it with
+   rekordbox or Engine DJ*, or *No main stick* (the folders stick only, which
+   also suits a laptop running Serato). Below that, one line says how
    many tracks have cue points and beat grids, and **Change…** opens a window
    listing where they come from.
 
@@ -516,7 +517,7 @@ are just a title.
    rekordbox's own). The waveforms are approximations of rekordbox's: close
    in shape and colour, not identical.
 
-   *Export it from rekordbox or Engine DJ*: **Save the set for rekordbox or
+   *Write it with rekordbox or Engine DJ*: **Save the set for rekordbox or
    Engine DJ** writes a rekordbox XML of the same set, and the step shows how
    to get it onto the stick: into rekordbox 7.2.11 or later, which writes both
    libraries; for Denon players, Engine DJ imports the same XML, cues

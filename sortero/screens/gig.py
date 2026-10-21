@@ -26,12 +26,13 @@ MARK = {verify.FAIL: "✗", verify.WARN: "!", verify.PASS: "✓"}
 ROUTES = [("sortero", "Sortero writes it",
            "For Pioneer players. No other app needed. Denon players can still browse its "
            "folders."),
-          ("app", "Export it from rekordbox or Engine DJ",
+          ("app", "Write it with rekordbox or Engine DJ",
            "Sortero saves the set for the app to import, and shows the steps. Denon "
            "players need this: Sortero can't write Engine DJ's library."),
           ("skip", "No main stick",
            "Only the folders stick (step 5). Players browse it by folder, without "
-           "playlists, cue points or beat grids.")]
+           "playlists, cue points or beat grids. Good for a laptop running Serato or "
+           "other DJ software.")]
 
 
 def _profile_label(p):
@@ -573,8 +574,8 @@ class GigScreen(Screen):
                 f"Written to {st.backup_check.name if st.backup_check else 'the stick'}: "
                 f"{ui.plural(len(b.written) + len(b.unchanged), 'track')}." if b else
                 "Each playlist becomes a numbered folder (01 Warmup/01 Artist - "
-                "Title.mp3), so a player browsing folders, or a laptop, finds the next "
-                "track fast."))
+                "Title.mp3), so a player browsing folders, or a laptop running Serato "
+                "or other DJ software, finds the next track fast."))
             order += [(w["top"], True), (self.eject_row, bool(mount))]
         f = w["findings"]
         if report and not skipped:

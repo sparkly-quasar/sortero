@@ -643,10 +643,11 @@ Settings.
 ## What's new in v0.35.4
 
 v0.35.4 is the free download. Compared with v0.18.0, the free download before
-it, it adds what's below. The current version, **v0.35.5**, is what
+it, it adds what's below. The current version, **v0.35.6**, is what
 [Supporter licence](#supporting-sortero) holders get: before writing the main
 stick, it also says which playlists would go on it missing tracks, such as an
-old playlist pointing at files that aren't there any more.
+old playlist pointing at files that aren't there any more, and the main stick's
+library matches rekordbox's in one more header field players check.
 
 **Gig prep**, a new screen: one checklist from your playlists to a USB stick you
 can trust at the venue.

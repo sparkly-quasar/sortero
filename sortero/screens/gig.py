@@ -720,6 +720,11 @@ class GigScreen(Screen):
             messagebox.showinfo(APP, "Tonight's playlists have no tracks Sortero can use. "
                                      "Check them in step 1.")
             return
+        if convert.counts(st.items)[convert.CONVERT]:
+            # A track waiting for its copy has nothing to play yet, and would be
+            # left out of the file, so the copies come first, as for the stick.
+            self.make_copies(then=self.make_xml)
+            return
         work = self._xml_work(self._xml_path(), st.items, list(st.sets or []))
 
         def done(res):
@@ -849,8 +854,10 @@ class GigScreen(Screen):
             self.make_copies(then=self.write_main)
             return
         sets = st.sets
-        path = st.xml_path or self._xml_path()
-        make_xml = None if st.xml_path else self._xml_work(path, st.items, sets or [])
+        # Made again every time from the tracks as they are now: one made earlier
+        # may predate copies made since, and leaves those tracks off the stick.
+        path = self._xml_path() or st.xml_path
+        make_xml = self._xml_work(path, st.items, sets or [])
         stick = self._choose_stick("main")
         if not stick:
             return

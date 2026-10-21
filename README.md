@@ -646,7 +646,8 @@ v0.35.3 is the free download. Compared with v0.18.0, the free download before
 it, it adds what's below. The current version, **v0.35.4**, is what
 [Supporter licence](#supporting-sortero) holders get: it also writes the browse
 menu Pioneer players need to show the main stick's tracks (an XDJ-RX2 showed
-none without it).
+none without it), and no longer leaves tracks that needed a gig-safe copy off
+the main stick when the playlists file was made before the copies.
 
 **Gig prep**, a new screen: one checklist from your playlists to a USB stick you
 can trust at the venue.

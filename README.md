@@ -11,7 +11,7 @@ tags, and an intake lane for new music. Runs on macOS, Windows and Linux.
 > independent project: I pay to build and release it, with the help of Claude
 > Code, and supporters are what keep it improving.
 
-### ⬇️ [Try Sortero free (v0.35.4)](https://github.com/sparkly-quasar/sortero/releases/tag/v0.35.4) · [How to install](#install--update) · [What's new in v0.35.4](#whats-new-in-v0354)
+### ⬇️ [Try Sortero free (v0.35.6)](https://github.com/sparkly-quasar/sortero/releases/tag/v0.35.6) · [How to install](#install--update) · [What's new in v0.35.6](#whats-new-in-v0356)
 
 Ready-to-run for macOS, Windows and Linux. The app isn't code-signed, so your
 computer warns you once on first launch; [the install steps](#install--update)
@@ -640,14 +640,10 @@ Management**, or keep Sortero somewhere in your home folder.
 
 It can also check automatically on launch (at most once a day) — toggle that in
 Settings.
-## What's new in v0.35.4
+## What's new in v0.35.6
 
-v0.35.4 is the free download. Compared with v0.18.0, the free download before
-it, it adds what's below. The current version, **v0.35.6**, is what
-[Supporter licence](#supporting-sortero) holders get: before writing the main
-stick, it also says which playlists would go on it missing tracks, such as an
-old playlist pointing at files that aren't there any more, and the main stick's
-library matches rekordbox's in one more header field players check.
+v0.35.6 is the free download, and the current version. Compared with v0.18.0,
+the free download before it, it adds:
 
 **Gig prep**, a new screen: one checklist from your playlists to a USB stick you
 can trust at the venue.
@@ -699,9 +695,11 @@ run of tracks in any list.
   only files that changed are read again.
 
 **Fixes.** The main stick now carries the browse menu Pioneer players need to
-show its tracks (an XDJ-RX2 showed none without it), and tracks that needed a
+show its tracks (an XDJ-RX2 showed none without it), its library matches
+rekordbox's in one more header field players check, and tracks that needed a
 gig-safe copy are no longer left off it when the playlists file was made before
-the copies. Writing the backup stick no longer risks deleting a real track whose
+the copies. Before writing it, Gig prep says which playlists would go on missing
+tracks, such as an old playlist pointing at files that aren't there any more. Writing the backup stick no longer risks deleting a real track whose
 name starts with "._". On Windows, a one-click update now replaces the old copy
 instead of leaving the new one in a subfolder and reopening the old one, and no
 blank command window opens over Sortero while it updates. Copies from before
@@ -715,7 +713,7 @@ once, and it finishes the update itself (see
 There are three ways to run Sortero. All of them have every feature.
 
 - **Try it free:** download the ready-to-run app from
-  **[v0.35.4](https://github.com/sparkly-quasar/sortero/releases/tag/v0.35.4)**,
+  **[v0.35.6](https://github.com/sparkly-quasar/sortero/releases/tag/v0.35.6)**,
   the free download. Later releases come to supporters first, so it can fall a
   few versions behind, but it's the quickest way to see whether Sortero suits
   you.

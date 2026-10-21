@@ -667,13 +667,14 @@ Settings.
 ## What's new in v0.35.6
 
 v0.35.6 is the free download. Compared with v0.18.0, the free download before
-it, it adds what's below. The current version, **v0.36.0**, is what
+it, it adds what's below. The current version, **v0.36.1**, is what
 [Supporter licence](#supporting-sortero) holders get: Gig prep's main stick step
 asks one question, *How do you want to make it?*, with one button that follows
 the answer, and the cue point options move to a window of their own. It can
 also skip the main stick for a folders stick alone, which Pioneer and Denon
 players browse by folder, and offers to format a stick the players can't read
-before anything is copied to it.
+before anything is copied to it. A stick that passes its check opens *Ready to
+leave* straight away, with **Eject the stick** right there.
 
 **Gig prep**, a new screen: one checklist from your playlists to a USB stick you
 can trust at the venue.

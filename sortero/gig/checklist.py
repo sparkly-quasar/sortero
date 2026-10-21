@@ -15,6 +15,9 @@ Five steps, in the order a gig is prepared:
 A step is DONE, NEXT (the one to do now) or WAITING (not yet). The backup is
 optional, so it comes last: it can be done any time after the tracks, and is
 NEXT once the main stick passes, but Ready to leave is what opens then.
+
+The main stick can be skipped (skip_main): then the folders stick is the only
+one, it's no longer optional, and GIG READY waits for it to pass instead.
 """
 import time
 from dataclasses import dataclass, field
@@ -64,6 +67,7 @@ class State:
     backup: object = None       # the last backup.Result, if a backup stick was written
     backup_check: StickCheck = None
     earlier: float = None       # sticks checked in an earlier session, for this same set
+    skip_main: bool = False     # no main stick tonight: the folders stick is the only one
 
 
 @dataclass
@@ -180,6 +184,9 @@ def steps(st):
     main_ok = bool(st.main and st.main.ready)
     if not tracks_done:
         out.append(Step("main", title, "", WAITING))
+    elif st.skip_main:
+        out.append(Step("main", title, "Skipped: tonight it's the folders stick only.",
+                        DONE, "Make a main stick after all"))
     elif main_ok:
         out.append(Step("main", title, _stick_line("Main stick", st.main) + ".", DONE))
     elif st.main:
@@ -187,11 +194,11 @@ def steps(st):
                                   else "")
         out.append(Step("main", title, text, NEXT, "Check the main stick again…"))
     elif st.direct and not st.earlier:
-        text = ("Sortero writes the set to the stick for Pioneer players: the playlists in "
-                "set order, beat grids and cue points. No rekordbox needed. Then it checks "
-                "the stick.")
+        text = ("Sortero copies the set to the stick, with the playlists in set order, cue "
+                "points and beat grids, ready for Pioneer players. No rekordbox needed. "
+                "Then it checks the stick.")
         if "Engine DJ" in st.apps:
-            text += " Denon players need Engine DJ to export it (see below)."
+            text += " Denon players need Engine DJ for it instead: see Other ways below."
         out.append(Step("main", title, text, NEXT, "Write the main stick…"))
     elif not st.xml_path and not st.earlier:
         out.append(Step("main", title, f"Make the playlists file, then put the set on the "
@@ -204,7 +211,15 @@ def steps(st):
 
     # 4. Ready to leave
     b = st.backup_check
-    if not main_ok:
+    if st.skip_main and tracks_done:
+        if b and b.ready:
+            out.append(Step("ready", "Ready to leave", "\n".join([
+                "GIG READY.", _stick_line("Folders stick", b) + ".",
+                "No main stick, so the players browse the folders: no playlists, cue "
+                "points or beat grids.", "Eject the stick before you unplug it."]), DONE))
+        else:
+            out.append(Step("ready", "Ready to leave", "", WAITING))
+    elif not main_ok:
         out.append(Step("ready", "Ready to leave", "", WAITING))
     else:
         lines = ["GIG READY.", _stick_line("Main stick", st.main) + "."]
@@ -216,16 +231,21 @@ def steps(st):
                          "optional: step 5.")
         out.append(Step("ready", "Ready to leave", "\n".join(lines), DONE))
 
-    # 5. Backup stick, optional
-    title = "Backup stick (optional)"
+    # 5. Backup stick, optional unless it's the only one
+    title = "Folders stick" if st.skip_main else "Backup stick (optional)"
     if not tracks_done:
         out.append(Step("backup", title, "", WAITING))
     elif b and b.ready:
-        out.append(Step("backup", title, _stick_line("Backup", b) + ".", DONE))
+        out.append(Step("backup", title, _stick_line(
+            "Folders stick" if st.skip_main else "Backup", b) + ".", DONE))
     elif b:
         out.append(Step("backup", title, b.verdict + (f" {b.first_problem}"
                                                      if b.first_problem else ""),
-                        NEXT, "Write the backup again…"))
+                        NEXT, "Write the folders stick again…" if st.skip_main
+                        else "Write the backup again…"))
+    elif st.skip_main:
+        out.append(Step("backup", title, "The set as numbered folders on the stick, for "
+                        "players and laptops to browse.", NEXT, "Write the folders stick…"))
     else:
         out.append(Step("backup", title, "The set as numbered folders on a "
                         "second stick, to browse if the main stick fails.",
@@ -243,6 +263,8 @@ def next_step(all_steps):
 
 
 def ready(st):
+    if st.skip_main:
+        return bool(st.backup_check and st.backup_check.ready)
     return bool(st.main and st.main.ready)
 
 

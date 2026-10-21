@@ -24,6 +24,7 @@ TITLE = ("Helvetica", 18, "bold")
 HEADING = ("Helvetica", 13, "bold")
 BODY = ("Helvetica", 12)
 SMALL = ("Helvetica", 11)
+STRONG = ("Helvetica", 12, "bold")   # a heading inside a card
 MONO = ("Menlo", 11)
 
 # spacing
@@ -91,7 +92,7 @@ def _detect(root):
 
 def setup(root):
     """Create fonts and styles. Call once, straight after creating the Tk root."""
-    global _root, _mode, TITLE, HEADING, BODY, SMALL, MONO
+    global _root, _mode, TITLE, HEADING, BODY, SMALL, STRONG, MONO
     _root = root
     _mode = _detect(root)
     base = tkfont.nametofont("TkDefaultFont", root=root).actual()
@@ -101,6 +102,7 @@ def setup(root):
                      ("SorteroHeading", dict(family=fam, size=size + 3, weight="bold")),
                      ("SorteroBody", dict(family=fam, size=size)),
                      ("SorteroSmall", dict(family=fam, size=max(size - 1, 9))),
+                     ("SorteroStrong", dict(family=fam, size=size, weight="bold")),
                      ("SorteroMono", dict(family=mono, size=size + 1))):
         try:
             f = tkfont.Font(root=root, name=name, exists=True)
@@ -108,8 +110,9 @@ def setup(root):
         except tk.TclError:
             f = tkfont.Font(root=root, name=name, **kw)
         _fonts.append(f)
-    TITLE, HEADING, BODY, SMALL, MONO = ("SorteroTitle", "SorteroHeading", "SorteroBody",
-                                         "SorteroSmall", "SorteroMono")
+    TITLE, HEADING, BODY, SMALL, STRONG, MONO = ("SorteroTitle", "SorteroHeading",
+                                                 "SorteroBody", "SorteroSmall",
+                                                 "SorteroStrong", "SorteroMono")
     _style()
     if IS_MAC:
         root.after(2000, _watch)

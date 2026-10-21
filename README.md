@@ -496,7 +496,7 @@ are just a title.
    for the players that show them) and each track's embedded artwork. Then it
    checks the stick. Cues come
    from your rekordbox library if you point Sortero at an XML export of it
-   (**Use a rekordbox XML…**; Mixed In Key's `rekordbox.xml` works too), then
+   (**Add cues from rekordbox…**; Mixed In Key's `rekordbox.xml` works too), then
    from Mixxx, then from Mixed In Key's analysis in the files themselves. It
    refuses a stick that already holds a library Sortero didn't write, and
    running it again replaces only what Sortero put there. **This is new and hasn't been
@@ -510,12 +510,16 @@ are just a title.
    rekordbox's own). The waveforms are approximations of rekordbox's: close
    in shape and colour, not identical.
 
-   **Using rekordbox or Engine DJ instead?** **Make the playlists file for it**
-   writes a rekordbox XML of the same set, and the step shows how to get it
-   onto the stick: into rekordbox 7.2.11 or later, which writes both
-   libraries; for Denon players, Engine DJ imports the same XML, cues
-   included, and its Sync Manager exports it. Sortero can't write Engine DJ's
-   library itself yet.
+   Under **Other ways**, each with a line saying what it's for:
+   **Use rekordbox or Engine DJ…** writes a rekordbox XML of the same set,
+   and the step shows how to get it onto the stick: into rekordbox 7.2.11 or
+   later, which writes both libraries; for Denon players, Engine DJ imports
+   the same XML, cues included, and its Sync Manager exports it. Sortero can't
+   write Engine DJ's library itself yet. **Check a stick you already made…**
+   checks one without writing to it. **Skip the main stick…** makes the
+   folders stick (step 4 here) the only one: it's no longer optional, and
+   **GIG READY** waits for it instead. Open the step again to make a main
+   stick after all.
 
    Then **Check the main stick…**: the file system and
    partitions (FAT32 on one MBR partition is what every player reads), that a
@@ -525,7 +529,9 @@ are just a title.
    and FAT32 name and size limits. If the stick itself is the problem, the step
    offers **Format a stick as FAT32…** right there. With MP3 copies, **Cue timing
    on MP3 copies…** has a one-time check in rekordbox for the 25 ms an MP3 can
-   start late, and moves the cues if it's needed.
+   start late, and moves the cues if it's needed. Once a stick has been checked,
+   **Faster check (doesn't play every track)…** checks it again without
+   decoding every file.
 4. **Backup stick** (recommended, not required). Writes each playlist as a
    numbered folder, its tracks numbered in set order (`01 Warmup/01 Artist -
    Title.mp3`), so a player browsing folders (Denon players' Library → Folder
@@ -535,7 +541,8 @@ are just a title.
    tracks no longer in the set are removed, and files Sortero didn't put on the
    stick are never touched. macOS `._` files are cleared, and the stick is
    checked straight afterwards, every file compared with its original.
-5. **Ready to leave.** **GIG READY** once the main stick passes, with each
+5. **Ready to leave.** **GIG READY** once the main stick passes (or the folders
+   stick, when the main stick was skipped), with each
    stick's name and when it was checked, and a reminder to eject both. It's
    remembered: open Sortero the next morning and it still says so, until the
    set changes. A check that finds a problem says *Not ready yet*, with what

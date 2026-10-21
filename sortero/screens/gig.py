@@ -863,8 +863,8 @@ class GigScreen(Screen):
                 APP, "Sortero will copy tonight's tracks to the stick and write the rekordbox "
                      "libraries Pioneer players read, with your playlists, beat grids, cue "
                      "points, waveforms and artwork. Then it checks the stick.\n\n"
-                     "This is new: it hasn't been tried on a player yet, so bring a second "
-                     "stick you trust."):
+                     "This is new: it hasn't been confirmed working on a player yet, so "
+                     "bring a second stick you trust."):
             return
 
         def work(progress, log):

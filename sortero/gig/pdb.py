@@ -39,6 +39,7 @@ class Track:
 class Export:
     tracks: list
     playlists: dict = field(default_factory=dict)   # name -> [track id, ...] in order
+    menu: int = 0       # categories in the browse menu (the columns table)
 
 
 def _text(s):
@@ -75,6 +76,7 @@ def read(path):
                      if not r.is_folder}
             entries = sorted((r.playlist_id, r.entry_index, r.track_id)
                              for r in _rows(db, RekordboxPdb.PageType.playlist_entries))
+            menu = sum(1 for _ in _rows(db, RekordboxPdb.PageType.columns))
     except OSError as e:
         raise ExportError(f"couldn't open it ({e.strerror})")
     except Exception as e:
@@ -83,7 +85,7 @@ def read(path):
     for pid, _, tid in entries:
         if pid in names:
             playlists[names[pid]].append(tid)
-    return Export(tracks, playlists)
+    return Export(tracks, playlists, menu)
 
 
 def on_stick(stick, track_path):

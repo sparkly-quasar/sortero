@@ -499,8 +499,10 @@ are just a title.
    (**Use a rekordbox XML…**; Mixed In Key's `rekordbox.xml` works too), then
    from Mixxx, then from Mixed In Key's analysis in the files themselves. It
    refuses a stick that already holds a library Sortero didn't write, and
-   running it again replaces only what Sortero put there. **This is new and hasn't been played
-   on a real player yet**, so bring a second stick you trust until it has.
+   running it again replaces only what Sortero put there. **This is new and hasn't been
+   confirmed on a real player yet**, so bring a second stick you trust until it has. (An
+   XDJ-RX2 showed nothing on sticks from before v0.35.4, which left out the browse menu
+   rekordbox's library carries; v0.35.4 writes it, and the stick check now looks for it.)
    The writers are ports of [openboxxx](https://github.com/sparkly-quasar/openboxxx)'s
    (`export.pdb`, laid out page by page like a real rekordbox export) and
    follow [rbxport](https://github.com/chrisle/rbxport)'s (OneLibrary, and
@@ -640,8 +642,11 @@ It can also check automatically on launch (at most once a day) — toggle that i
 Settings.
 ## What's new in v0.35.3
 
-v0.35.3 is the free download, and the current version. Compared with v0.18.0,
-the free download before it, it adds:
+v0.35.3 is the free download. Compared with v0.18.0, the free download before
+it, it adds what's below. The current version, **v0.35.4**, is what
+[Supporter licence](#supporting-sortero) holders get: it also writes the browse
+menu Pioneer players need to show the main stick's tracks (an XDJ-RX2 showed
+none without it).
 
 **Gig prep**, a new screen: one checklist from your playlists to a USB stick you
 can trust at the venue.

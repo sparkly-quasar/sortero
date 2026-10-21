@@ -2,6 +2,12 @@
 
 Features planned for Sortero but not built yet. Nothing here has a date.
 
+## Ongoing: easier to use, smoother to work with
+
+Not one feature but steady work in every release: clearer screens and wording,
+fewer steps between your music and a gig-ready stick, and less to keep track of
+along the way.
+
 ## After the gig: bring the stick's changes home
 
 Plug the main stick back in after a gig, and Sortero picks up what happened on
@@ -31,13 +37,6 @@ the stick is. It already writes rekordbox XML for Gig prep.
   `export.pdb`, the analysis files, or OneLibrary.
 - Whether rekordbox's XML import replaces cues on a track already in its
   collection, or only adds new tracks.
-- Why a stick Sortero wrote came back from an XDJ-RX2 with no history. The
-  player opened it twice and rewrote `export.pdb`, but left the history tables
-  and the analysis files empty. Either nothing was played long enough to count,
-  or the player won't record history on Sortero's stick (a rekordbox export
-  fills three tables that Sortero leaves empty). The second would be a bug in
-  the stick writer, to fix before this.
-
-**To find out,** play 3 or 4 tracks for over a minute each and set one hot cue,
-then compare the stick before and after: once on a stick Sortero wrote, once on
-one rekordbox wrote, on an older player and a CDJ-3000 or newer.
+- Whether players record history and cue changes on a stick Sortero wrote the
+  same way they do on one rekordbox wrote. If they don't, the stick writer gets
+  fixed first.

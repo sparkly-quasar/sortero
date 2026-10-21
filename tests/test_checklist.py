@@ -54,8 +54,9 @@ class Steps(unittest.TestCase):
                      apps="rekordbox and Engine DJ")
         self.assertEqual(statuses(st)["tracks"], K.DONE)
         nxt = K.next_step(K.steps(st))
-        self.assertEqual((nxt.key, nxt.button), ("main", "Make the playlists file"))
-        self.assertEqual(nxt.title, "Main stick (rekordbox and Engine DJ)")
+        self.assertEqual((nxt.key, nxt.button),
+                         ("main", "Save the set for rekordbox and Engine DJ"))
+        self.assertEqual(nxt.title, "Main stick")
         # the backup can be done now, but the main stick comes first
         self.assertEqual(statuses(st)["backup"], K.WAITING)
         self.assertEqual(step(st, "backup").button, "Write the backup stick…")
@@ -65,12 +66,15 @@ class Steps(unittest.TestCase):
         nxt = step(st, "main")
         self.assertEqual((nxt.status, nxt.button), (K.NEXT, "Write the main stick…"))
         self.assertEqual(nxt.title, "Main stick")
-        self.assertIn("No rekordbox needed", nxt.text)
+        self.assertIn("writes the library Pioneer players read", nxt.text)
         self.assertNotIn("Engine DJ", nxt.text)
-        st.apps = "rekordbox / Engine DJ"
-        self.assertIn("Denon players need Engine DJ", step(st, "main").text)
         st.main = stick(True)
         self.assertEqual(step(st, "main").status, K.DONE)
+
+    def test_a_backup_from_an_earlier_session_still_leaves_the_main_stick_to_write(self):
+        st = K.State(["Warmup"], 2, direct=True, earlier=time.time() - 60,
+                     backup_check=stick(True, "BACKUP"))
+        self.assertEqual(step(st, "main").button, "Write the main stick…")
 
     def test_after_making_the_xml_check_the_main_stick(self):
         st = K.State(["Warmup"], 2, items=[item(C.READY)], xml_path="/lib/x.xml")
@@ -118,7 +122,7 @@ class Steps(unittest.TestCase):
     def test_skipping_the_main_stick_makes_the_folders_stick_the_one(self):
         st = K.State(["Warmup"], 2, items=[item(C.READY)], direct=True, skip_main=True)
         main = step(st, "main")
-        self.assertEqual((main.status, main.button), (K.DONE, "Make a main stick after all"))
+        self.assertEqual((main.status, main.button), (K.DONE, None))
         self.assertIn("Skipped", main.text)
         b = step(st, "backup")
         self.assertEqual((b.status, b.title, b.button),

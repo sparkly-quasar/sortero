@@ -557,7 +557,10 @@ are just a title.
    checked straight afterwards, every file compared with its original.
 5. **Ready to leave.** **GIG READY** once the main stick passes (or the folders
    stick, when the main stick was skipped), with each
-   stick's name and when it was checked, and a reminder to eject both. It's
+   stick's name and when it was checked. A stick that passes opens this step
+   straight away, with anything the check found worth a look listed under
+   *Worth a look*, and **Eject the stick** (or **Eject both sticks**) while a
+   checked stick is still plugged in. It's
    remembered: open Sortero the next morning and it still says so, until the
    set changes. A check that finds a problem says *Not ready yet*, with what
    to fix first.

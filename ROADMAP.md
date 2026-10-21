@@ -8,6 +8,19 @@ Not one feature but steady work in every release: clearer screens and wording,
 fewer steps between your music and a gig-ready stick, and less to keep track of
 along the way.
 
+## Engine DJ, the way rekordbox is supported
+
+Denon players already play a stick from Gig prep, and the stick check
+recognises Engine DJ's library. To get playlists, cues and grids onto a Denon
+stick today, you import Sortero's rekordbox XML into Engine DJ and export from
+there. Planned:
+
+- **Write the Engine library onto the stick,** the way Sortero writes
+  rekordbox's: playlists in set order, cues, loops and beat grids, with no
+  Engine DJ needed and on Linux too.
+- **Playlists from Engine DJ** as a source in Gig prep, read straight from its
+  library, as Mixxx's are.
+
 ## After the gig: bring the stick's changes home
 
 Plug the main stick back in after a gig, and Sortero picks up what happened on

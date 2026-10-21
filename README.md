@@ -678,6 +678,8 @@ run of tracks in any list.
 **Fixes.** Writing the backup stick no longer risks deleting a real track whose
 name starts with "._".
 
+What's planned next is in the [roadmap](ROADMAP.md).
+
 ## Install & update
 
 There are three ways to run Sortero. All of them have every feature.

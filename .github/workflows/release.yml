@@ -21,7 +21,7 @@ permissions:
 env:
   # The free download: the one release whose builds are also attached
   # publicly. Every other release's builds go to supporters only.
-  LAST_PUBLIC: v0.35.3
+  LAST_PUBLIC: v0.35.4
 
 jobs:
   # Which commit a hand-started run builds was nobody's decision: checkout took

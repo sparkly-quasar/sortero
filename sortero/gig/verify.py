@@ -287,6 +287,15 @@ def check_export(stick, entries, profile=None):
             return Check("rekordbox", FAIL, f"export.pdb can't be read: {e}. Write the "
                                             "main stick again.", details), set()
         missing, changed = on_stick((t.path, t.title, t.size) for t in export.tracks)
+        if not export.menu:
+            # Sortero before 0.35.4 wrote no browse menu, and an XDJ-RX2 showed
+            # none of the tracks on such a stick. rekordbox always writes one.
+            from .usbexport import MARKER
+            ours = os.path.isfile(os.path.join(stick, MARKER))
+            levels.append(FAIL if ours else WARN)
+            parts.append("its library has no browse menu, so players may show nothing "
+                         "on it. " + ("Write the main stick again with this version of "
+                                      "Sortero" if ours else "Export it from rekordbox again"))
         if one is not None:
             m2, c2 = on_stick((p, t, z) for _, p, t, z in one[0])
             missing += [m for m in m2 if m not in missing]

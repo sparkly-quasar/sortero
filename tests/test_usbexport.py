@@ -2,6 +2,7 @@
 independent parsers: crate-digger's for export.pdb (the one the stick check
 uses), and pyrekordbox's for the analysis files when it's installed."""
 import json, os, struct, unittest
+from unittest import mock
 
 from sortero.gig import anlz, cues, devicesql as D, pdb, profiles as P, usbexport as U
 from sortero.gig import artwork as A, waveform as W
@@ -92,6 +93,52 @@ class LikeRekordbox(TempDir):
         self.assertTrue(all(ok for _, ok in ours))
         row = next(pdb._rows(db, type(db).PageType.tracks))
         self.assertEqual(row.autoload_hot_cues.body.text, "ON")
+
+    def test_the_browse_menu_is_rekordboxs(self):
+        # Without these tables a player has no categories to browse, and an
+        # XDJ-RX2 showed none of the tracks on a stick Sortero wrote.
+        fixture = os.path.join(os.path.dirname(__file__), "fixtures", "rekordcrate-demo",
+                               "export.pdb")
+        with open(fixture, "rb") as fh:
+            real = fh.read()
+        ours = D.build([D.Track(1, "T", "/Contents/A/B/t.mp3")], [])
+        for kind in (D.COLUMNS, D.UNKNOWN17, D.UNKNOWN18):
+            pages = []
+            for data in (real, ours):
+                kind_, _, first, last = struct.unpack_from("<4I", data, 0x1C + 16 * kind)
+                self.assertEqual(kind_, kind)
+                self.assertEqual(last, first + 1)       # an index page, then one of rows
+                pages.append(data[last * D.PAGE:][:D.PAGE])
+            real_page, our_page = pages
+            # the rows, their index at the end of the page, and the counts and
+            # flags in its header; not the page numbers or edit sequence
+            self.assertEqual(our_page[0x18:], real_page[0x18:], kind)
+
+    def test_an_empty_table_leads_on_to_its_empty_candidate(self):
+        fixture = os.path.join(os.path.dirname(__file__), "fixtures", "rekordcrate-demo",
+                               "export.pdb")
+        with open(fixture, "rb") as fh:
+            real = fh.read()
+        ours = D.build([D.Track(1, "T", "/Contents/A/B/t.mp3")], [])
+        for data in (real, ours):
+            empty = 0
+            for kind in range(20):
+                _, spare, first, last = struct.unpack_from("<4I", data, 0x1C + 16 * kind)
+                if first == last:
+                    empty += 1
+                    page = data[first * D.PAGE:][:D.PAGE]
+                    self.assertEqual(struct.unpack_from("<I", page, 0x0C)[0], spare, kind)
+            self.assertTrue(empty)
+
+    def test_fresh_pages_look_like_rekordboxs_fresh_pages(self):
+        # In real exports a page no row was ever deleted from is flagged 0x24 and
+        # counts its rows as one transaction.
+        page = D.Page(D.GENRES)
+        for i in range(3):
+            page.add(D.genre_row(i + 1, "G"))
+        data = page.bytes(5, 6)
+        self.assertEqual(data[0x1B], 0x24)
+        self.assertEqual(struct.unpack_from("<HH", data, 0x20), (3, 0))
 
     def test_rows_start_on_four_byte_boundaries(self):
         page = D.Page(D.ARTISTS)
@@ -323,6 +370,19 @@ class Stick(TempDir):
         self.assertEqual(len(listed), 3)
         main = V.check_main(self.stick, NXS2, ["01 Warmup", "02 Peak"])
         self.assertEqual(main.level, V.PASS, main.summary)
+
+    def test_a_stick_written_without_a_browse_menu_fails_the_check(self):
+        # What Sortero wrote before 0.35.4: an XDJ-RX2 showed nothing on it.
+        with mock.patch.object(D, "MENU_COLUMNS", ()):
+            U.write(self.stick, self.xml, log=lambda *a: None)
+        self.assertEqual(pdb.read(os.path.join(self.stick, pdb.RELATIVE)).menu, 0)
+        check, _ = V.check_export(self.stick, V.walk(self.stick), NXS2)
+        self.assertEqual(check.level, V.FAIL, check.summary)
+        self.assertIn("browse menu", check.summary)
+        U.write(self.stick, self.xml, log=lambda *a: None)      # this version's
+        self.assertEqual(pdb.read(os.path.join(self.stick, pdb.RELATIVE)).menu, 27)
+        check, _ = V.check_export(self.stick, V.walk(self.stick), NXS2)
+        self.assertEqual(check.level, V.PASS, check.summary)
 
     def test_slashes_in_tags_and_accents_either_way_still_find_the_file(self):
         # "OFF / GRID" as an album made a folder "OFF " that FAT32 stores as "OFF", and

@@ -11,7 +11,7 @@ tags, and an intake lane for new music. Runs on macOS, Windows and Linux.
 > independent project: I pay to build and release it, with the help of Claude
 > Code, and supporters are what keep it improving.
 
-### ⬇️ [Try Sortero free (v0.35.3)](https://github.com/sparkly-quasar/sortero/releases/tag/v0.35.3) · [How to install](#install--update) · [What's new in v0.35.3](#whats-new-in-v0353)
+### ⬇️ [Try Sortero free (v0.35.4)](https://github.com/sparkly-quasar/sortero/releases/tag/v0.35.4) · [How to install](#install--update) · [What's new in v0.35.4](#whats-new-in-v0354)
 
 Ready-to-run for macOS, Windows and Linux. The app isn't code-signed, so your
 computer warns you once on first launch; [the install steps](#install--update)
@@ -499,8 +499,10 @@ are just a title.
    (**Use a rekordbox XML…**; Mixed In Key's `rekordbox.xml` works too), then
    from Mixxx, then from Mixed In Key's analysis in the files themselves. It
    refuses a stick that already holds a library Sortero didn't write, and
-   running it again replaces only what Sortero put there. **This is new and hasn't been played
-   on a real player yet**, so bring a second stick you trust until it has.
+   running it again replaces only what Sortero put there. **This is new and hasn't been
+   confirmed on a real player yet**, so bring a second stick you trust until it has. (An
+   XDJ-RX2 showed nothing on sticks from before v0.35.4, which left out the browse menu
+   rekordbox's library carries; v0.35.4 writes it, and the stick check now looks for it.)
    The writers are ports of [openboxxx](https://github.com/sparkly-quasar/openboxxx)'s
    (`export.pdb`, laid out page by page like a real rekordbox export) and
    follow [rbxport](https://github.com/chrisle/rbxport)'s (OneLibrary, and
@@ -638,9 +640,9 @@ Management**, or keep Sortero somewhere in your home folder.
 
 It can also check automatically on launch (at most once a day) — toggle that in
 Settings.
-## What's new in v0.35.3
+## What's new in v0.35.4
 
-v0.35.3 is the free download, and the current version. Compared with v0.18.0,
+v0.35.4 is the free download, and the current version. Compared with v0.18.0,
 the free download before it, it adds:
 
 **Gig prep**, a new screen: one checklist from your playlists to a USB stick you
@@ -692,7 +694,10 @@ run of tracks in any list.
 - Rescans after a change take a fraction of a second instead of several, since
   only files that changed are read again.
 
-**Fixes.** Writing the backup stick no longer risks deleting a real track whose
+**Fixes.** The main stick now carries the browse menu Pioneer players need to
+show its tracks (an XDJ-RX2 showed none without it), and tracks that needed a
+gig-safe copy are no longer left off it when the playlists file was made before
+the copies. Writing the backup stick no longer risks deleting a real track whose
 name starts with "._". On Windows, a one-click update now replaces the old copy
 instead of leaving the new one in a subfolder and reopening the old one, and no
 blank command window opens over Sortero while it updates. Copies from before
@@ -706,7 +711,7 @@ once, and it finishes the update itself (see
 There are three ways to run Sortero. All of them have every feature.
 
 - **Try it free:** download the ready-to-run app from
-  **[v0.35.3](https://github.com/sparkly-quasar/sortero/releases/tag/v0.35.3)**,
+  **[v0.35.4](https://github.com/sparkly-quasar/sortero/releases/tag/v0.35.4)**,
   the free download. Later releases come to supporters first, so it can fall a
   few versions behind, but it's the quickest way to see whether Sortero suits
   you.

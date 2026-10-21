@@ -10,7 +10,8 @@ The file is 4096-byte pages. Page 0 is the header: the table list, each
 table's first and last page. Every other page belongs to one table and holds
 rows packed forward from 0x28, with an index growing back from the end of the
 page in groups of sixteen: each group is 36 bytes, sixteen 2-byte row offsets,
-a 2-byte "present" mask and 2 spare bytes. A table's pages chain to the next.
+a 2-byte "present" mask and a 2-byte mask of the rows in the page's transaction.
+A table's pages chain to the next.
 
 All twenty standard tables are written, in rekordbox's order. Laid out the way
 a real rekordbox export is (compared page by page with the one in
@@ -22,6 +23,12 @@ tests/fixtures), which goes beyond what openboxxx writes:
     header names and which is written as a blank page
   * rows start on 4-byte boundaries, and index_shift steps by 0x20 a row
   * tracks say autoload_hot_cues "ON", and when they were added and analysed
+  * the browse menu: the categories a player offers (COLUMNS) and which of them
+    it shows, in what order (UNKNOWN17, UNKNOWN18). rekordbox always writes
+    these. Without them a player has nothing to browse by, and an XDJ-RX2
+    showed none of the tracks on a stick written without them
+  * pages that have never had a row deleted are flagged 0x24 and count their
+    rows as one transaction, as rekordbox writes a fresh page
 
 A few track-row fields only rekordbox itself reads are copied from a real
 export (TRACK_* below) and may differ between rekordbox versions.
@@ -32,7 +39,7 @@ from dataclasses import dataclass, field
 PAGE = 4096
 HEADER = 0x28
 GROUP = 16
-DATA_PAGE_FLAGS = 0x34
+DATA_PAGE_FLAGS = 0x24
 INDEX_PAGE_FLAGS = 0x64
 INDEX_ENTRIES = 1004            # data pages one index page can list
 NO_PAGE = 0x03FFFFFF
@@ -50,6 +57,37 @@ TRACK_STRINGS = 21
 S_AUTOLOAD, S_DATE_ADDED = 7, 10
 S_ANALYZE_PATH, S_ANALYZE_DATE, S_COMMENT, S_TITLE, S_FILENAME, S_FILE_PATH = \
     14, 15, 16, 17, 19, 20
+
+# The browse menu, from rekordbox's export of its demo tracks (tests/fixtures).
+# COLUMNS: the categories a player can browse by, (id, field, name). The same
+# in every rekordbox export.
+MENU_COLUMNS = (
+    (1, 0x80, "GENRE"), (2, 0x81, "ARTIST"), (3, 0x82, "ALBUM"), (4, 0x83, "TRACK"),
+    (5, 0x85, "BPM"), (6, 0x86, "RATING"), (7, 0x87, "YEAR"), (8, 0x88, "REMIXER"),
+    (9, 0x89, "LABEL"), (10, 0x8A, "ORIGINAL ARTIST"), (11, 0x8B, "KEY"),
+    (12, 0x8D, "CUE"), (13, 0x8E, "COLOR"), (14, 0x92, "TIME"), (15, 0x93, "BITRATE"),
+    (16, 0x94, "FILE NAME"), (17, 0x84, "PLAYLIST"), (18, 0x98, "HOT CUE BANK"),
+    (19, 0x95, "HISTORY"), (20, 0x91, "SEARCH"), (21, 0x96, "COMMENTS"),
+    (22, 0x8C, "DATE ADDED"), (23, 0x97, "DJ PLAY COUNT"), (24, 0x90, "FOLDER"),
+    (25, 0xA1, "DEFAULT"), (26, 0xA2, "ALPHABET"), (27, 0xAA, "MATCHING"))
+# UNKNOWN17 and UNKNOWN18: which categories the menu shows and in what order.
+# rekordbox's Preferences can change these; these are its demo export's.
+MENU_17 = (
+    (0x01, 0x01, 0x163, 0x00), (0x05, 0x06, 0x105, 0x00), (0x06, 0x07, 0x163, 0x00),
+    (0x07, 0x08, 0x163, 0x00), (0x08, 0x09, 0x163, 0x00), (0x09, 0x0a, 0x163, 0x00),
+    (0x0a, 0x0b, 0x163, 0x00), (0x0d, 0x0f, 0x163, 0x00), (0x0e, 0x13, 0x104, 0x00),
+    (0x0f, 0x14, 0x106, 0x00), (0x10, 0x15, 0x163, 0x00), (0x12, 0x17, 0x163, 0x00),
+    (0x02, 0x02, 0x02, 0x01), (0x03, 0x03, 0x03, 0x02), (0x04, 0x04, 0x01, 0x03),
+    (0x0b, 0x0c, 0x63, 0x04), (0x11, 0x05, 0x63, 0x05), (0x13, 0x16, 0x63, 0x06),
+    (0x14, 0x12, 0x63, 0x07), (0x1b, 0x1a, 0x263, 0x08), (0x18, 0x11, 0x63, 0x09),
+    (0x16, 0x1b, 0x63, 0x0a))
+MENU_18 = (
+    (0x01, 0x06, 0x01, 0x00), (0x15, 0x07, 0x01, 0x00), (0x0e, 0x08, 0x01, 0x00),
+    (0x08, 0x09, 0x01, 0x00), (0x09, 0x0a, 0x01, 0x00), (0x0a, 0x0b, 0x01, 0x00),
+    (0x0f, 0x0d, 0x01, 0x00), (0x0d, 0x0f, 0x01, 0x00), (0x17, 0x10, 0x01, 0x00),
+    (0x16, 0x11, 0x01, 0x00), (0x19, 0x00, 0x100, 0x00), (0x1a, 0x01, 0x200, 0x00),
+    (0x02, 0x02, 0x300, 0x00), (0x03, 0x03, 0x400, 0x00), (0x05, 0x04, 0x500, 0x00),
+    (0x06, 0x05, 0x600, 0x00), (0x0b, 0x0c, 0x700, 0x00))
 
 # rekordbox's eight track colours, ids 1-8.
 PALETTE = (("Pink", (0xF8, 0x70, 0xF8)), ("Red", (0xF8, 0x70, 0x90)),
@@ -189,6 +227,15 @@ def playlist_entry_row(index, track, playlist):
     return struct.pack("<III", index, track, playlist)
 
 
+def column_row(id_, field_, name):
+    # the name is marked off by U+FFFA and U+FFFB, which also makes it UTF-16
+    return struct.pack("<HH", id_, field_) + string(f"\ufffa{name}\ufffb")
+
+
+def menu_row(values):
+    return struct.pack("<4H", *values)
+
+
 # -------------------------------------------------------------------- pages
 def index_bytes(n):
     """Bytes of row index `n` rows need: 36 per full group, 4 + 2 per row in a partial one."""
@@ -222,22 +269,25 @@ class Page:
             struct.pack_into("<H", page, PAGE - g * 36 - (6 + 2 * local), ofs)
         for g in range((n + GROUP - 1) // GROUP):
             count = min(GROUP, n - g * GROUP)
-            struct.pack_into("<H", page, PAGE - g * 36 - 4, (1 << count) - 1)
+            # which rows are present, then which came in the page's transaction: all
+            struct.pack_into("<HH", page, PAGE - g * 36 - 4, (1 << count) - 1,
+                             (1 << count) - 1)
         struct.pack_into("<III", page, 0x04, index, self.kind, next_index)
         packed = (n & 0x1FFF) | ((n & 0x7FF) << 13)        # num_rows_small, num_rows_large
         page[0x18:0x1B] = packed.to_bytes(3, "little")
         page[0x1B] = DATA_PAGE_FLAGS
-        struct.pack_into("<HH", page, 0x1C, PAGE - HEADER - self.used - index_bytes(n),
-                         self.used)
+        struct.pack_into("<HHH", page, 0x1C, PAGE - HEADER - self.used - index_bytes(n),
+                         self.used, n)          # every row added in one transaction
         return bytes(page)
 
 
-def index_page(index, kind, data_pages):
-    """The page a table starts with: which pages hold its rows."""
+def index_page(index, kind, data_pages, spare):
+    """The page a table starts with: which pages hold its rows. With none, it
+    leads straight on to the table's empty candidate, `spare`, as rekordbox's do."""
     page = bytearray(PAGE)
     first = data_pages[0] if data_pages else NO_PAGE
     n = len(data_pages)
-    struct.pack_into("<III", page, 0x04, index, kind, first)
+    struct.pack_into("<III", page, 0x04, index, kind, data_pages[0] if data_pages else spare)
     page[0x1B] = INDEX_PAGE_FLAGS
     struct.pack_into("<HHHH", page, 0x20, 0x1FFF, 0x1FFF, INDEX_ENTRIES, n)
     struct.pack_into("<IIIIHH", page, HEADER, index, first, NO_PAGE, 0, n, 0x1FFF)
@@ -288,6 +338,9 @@ def build(tracks, playlists, today=None, artwork=()):
         COLORS: [color_row(i + 1, name) for i, (name, _) in enumerate(PALETTE)],
         PLAYLIST_TREE: tree_rows,
         PLAYLIST_ENTRIES: entry_rows,
+        COLUMNS: [column_row(*c) for c in MENU_COLUMNS],
+        UNKNOWN17: [menu_row(r) for r in MENU_17],
+        UNKNOWN18: [menu_row(r) for r in MENU_18],
     }
     body, spans, next_index = [], [], 1
     for kind in range(20):
@@ -302,7 +355,7 @@ def build(tracks, playlists, today=None, artwork=()):
         index = next_index
         data = list(range(index + 1, index + 1 + len(pages)))
         spare = index + 1 + len(pages)
-        body.append(index_page(index, kind, data))
+        body.append(index_page(index, kind, data, spare))
         for i, page in enumerate(pages):
             body.append(page.bytes(data[i], data[i + 1] if i + 1 < len(data) else spare))
         body.append(bytes(PAGE))                    # the empty candidate

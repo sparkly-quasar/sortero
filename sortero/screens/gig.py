@@ -282,6 +282,7 @@ class GigScreen(Screen):
         self.ready_big.pack(fill="x")
         self.ready_lines = _label(body, tone="text")
         self.ready_lines.pack(fill="x", pady=(4, 0))
+        self.ready_notes = _label(body)             # the checks' warnings, if any
         links = _links(body)
         links.pack(fill="x", pady=(ui.GAP, 0))
         self.backup_open = _button(links, "Make a backup stick…",
@@ -450,6 +451,11 @@ class GigScreen(Screen):
                 text = chk.verdict
             if s.key == "set" and (st.items is not None or st.earlier):
                 button, command = "Done", self._advance
+            if s.key == "ready" and s.status == DONE:
+                mounts = self._ready_mounts()
+                if mounts:
+                    button = "Eject both sticks" if len(mounts) > 1 else "Eject the stick"
+                    command = self.eject_sticks
             if (s.key == "main" and s.status == NEXT and not st.main
                     and self.route_var.get() == "skip"):
                 text = "The folders stick in step 5 will be the only one."
@@ -655,6 +661,14 @@ class GigScreen(Screen):
     def _draw_ready(self, step):
         lines = step.text.split("\n")
         self.ready_lines.configure(text="\n".join(lines[1:]))
+        notes = [f"{MARK[verify.WARN]}  {c.title}: {c.summary}"
+                 for role in ("main", "backup") if role in self.reports
+                 for c in self.reports[role].checks if c.level == verify.WARN]
+        if notes:
+            self.ready_notes.configure(text="Worth a look:\n" + "\n".join(notes))
+            self.ready_notes.pack(fill="x", pady=(ui.GAP, 0), after=self.ready_lines)
+        else:
+            self.ready_notes.pack_forget()
         b = self.state.backup_check
         shown = [(self.backup_open, not (b and b.ready)),
                  (self.ready_check, not self.state.skip_main), (self.ready_clear, True)]
@@ -665,10 +679,36 @@ class GigScreen(Screen):
 
     def _main_mount(self):
         """Where the main stick is mounted right now, or None."""
-        st, report = self.state, self.reports.get("main")
-        path = report.stick if report else (os.path.join("/Volumes", st.main.name)
-                                            if paths.IS_MAC and st.main else None)
+        return self._mount("main")
+
+    def _mount(self, role):
+        """Where the main or backup stick is mounted right now, or None."""
+        report = self.reports.get(role)
+        chk = self.state.main if role == "main" else self.state.backup_check
+        path = report.stick if report else (os.path.join("/Volumes", chk.name)
+                                            if paths.IS_MAC and chk else None)
         return path if path and os.path.ismount(path) else None
+
+    def _ready_mounts(self):
+        """The checked sticks still plugged in, to eject before leaving."""
+        mounts = [self._mount(role) for role in ("main", "backup")]
+        return list(dict.fromkeys(m for m in mounts if m))
+
+    def eject_sticks(self):
+        ejected, failed = [], []
+        for mount in self._ready_mounts():
+            name = os.path.basename(os.path.normpath(mount)) or mount
+            why = disks.eject(mount)
+            if why:
+                failed.append(f"Couldn't eject “{name}”: {why}")
+            else:
+                ejected.append(f"“{name}”")
+        if failed:
+            messagebox.showwarning(APP, "\n\n".join(failed))
+        if ejected:
+            self.app.set_status(f"Ejected {' and '.join(ejected)}. You can unplug "
+                                f"{'it' if len(ejected) == 1 else 'them'} now.")
+        self.refresh()
 
     def eject_main(self):
         mount = self._main_mount()
@@ -1042,8 +1082,9 @@ class GigScreen(Screen):
             else:
                 self.state.backup_check = chk
             self._remember()
-            # Stay put while there's something to read; otherwise on to what's next
-            if report.ready and not report.warnings:
+            # A stick that passed goes on to what's next, where Ready to leave
+            # repeats anything worth a look; one that didn't stays to be fixed
+            if report.ready:
                 self._advance()
             else:
                 self.open_key = role

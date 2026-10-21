@@ -232,5 +232,18 @@ class Build(TempDir):
         self.assertIn("7.2.11", steps)
 
 
+class Short(unittest.TestCase):
+    def test_playlists_that_would_lose_tracks(self):
+        # An old playlist pointing at files that aren't there any more went on a
+        # tester's stick empty, without a word.
+        here, gone, waiting = "/music/here.mp3", "/old/drive/gone.mp3", "/music/hi.flac"
+        items = [C.Item(here, "here.mp3", C.READY),
+                 C.Item(gone, "gone.mp3", C.FAILED, why=["isn't there"]),
+                 C.Item(waiting, "hi.flac", C.CONVERT)]
+        sets = [("Fine", [here]), ("Old", [gone, gone]), ("Mixed", [here, waiting])]
+        self.assertEqual(rbxml.short(items, sets), [("Old", 0, 2), ("Mixed", 1, 2)])
+        self.assertEqual(rbxml.short(items, [("Fine", [here])]), [])
+
+
 if __name__ == "__main__":
     unittest.main()

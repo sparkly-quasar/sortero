@@ -95,7 +95,7 @@ def build(items, sets, gig_name, finder=None, shift_mp3_copies=False):
     `sets` is [(playlist name, [original paths in order])]; `items` the
     checked tracks, which say what file plays for each original.
     """
-    by_src = {cues.key(it.src): it for it in items if it.playable}
+    by_src = _usable(items)
     root = ET.Element("DJ_PLAYLISTS", Version="1.0.0")
     ET.SubElement(root, "PRODUCT", Name="Sortero", Version=__version__, Company="Sortero")
     collection = ET.SubElement(root, "COLLECTION")
@@ -140,6 +140,23 @@ def build(items, sets, gig_name, finder=None, shift_mp3_copies=False):
             ET.SubElement(node, "TRACK", Key=str(tid))
     collection.set("Entries", str(len(ids)))
     return ET.ElementTree(root), counts
+
+
+def _usable(items):
+    """The checked tracks that have something to play, by their original's path."""
+    return {cues.key(it.src): it for it in items if it.playable}
+
+
+def short(items, sets):
+    """[(playlist name, tracks that can go in, tracks it lists)] for each playlist
+    the playlists file would leave tracks out of, in set order."""
+    by_src = _usable(items)
+    out = []
+    for name, originals in sets:
+        have = sum(1 for src in originals if cues.key(src) in by_src)
+        if have < len(originals):
+            out.append((name, have, len(originals)))
+    return out
 
 
 def playlist_names(sets):

@@ -858,6 +858,8 @@ class GigScreen(Screen):
         # may predate copies made since, and leaves those tracks off the stick.
         path = self._xml_path() or st.xml_path
         make_xml = self._xml_work(path, st.items, sets or [])
+        if not self._short_ok(sets or []):
+            return
         stick = self._choose_stick("main")
         if not stick:
             return
@@ -905,6 +907,26 @@ class GigScreen(Screen):
                          rbxml.playlist_names(sets) if sets else None)
 
         self.app.task.run(work, done, "Writing the main stick")
+
+    def _short_ok(self, sets):
+        """Say which playlists would reach the stick missing tracks, before any
+        are written. An empty playlist on a player looks like a broken stick."""
+        lacking = rbxml.short(self.state.items, sets)
+        if not lacking:
+            return True
+        lines = [f"    {name}: " + ("none of its " if not have else f"{have} of ")
+                 + ui.plural(total, "track") for name, have, total in lacking[:12]]
+        if len(lacking) > 12:
+            lines.append(f"    …and {len(lacking) - 12} more")
+        empty = sum(1 for _, have, _ in lacking if not have)
+        head = (f"{ui.plural(len(lacking), 'playlist')} of {len(sets)} would go on the stick "
+                "missing tracks" + (f", {empty} of them empty" if empty else "") + ":")
+        return messagebox.askyesno(
+            APP, head + "\n\n" + "\n".join(lines) + "\n\nSortero can't use those tracks. "
+                 "Step 2 says why for each: usually the playlist points at a file that "
+                 "isn't there any more, as an old playlist from another computer or "
+                 "drive does.\n\nWrite the stick anyway, without them?",
+            icon="warning", default="no")
 
     def check_backup(self, decode=True):
         stick = self._choose_stick("backup")

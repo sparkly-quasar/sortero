@@ -130,6 +130,16 @@ class LikeRekordbox(TempDir):
                     self.assertEqual(struct.unpack_from("<I", page, 0x0C)[0], spare, kind)
             self.assertTrue(empty)
 
+    def test_the_file_header_field_at_0x10_is_rekordboxs(self):
+        # An XDJ-RX2 rewrote the 0 Sortero wrote here to 5 when it read the stick.
+        fixture = os.path.join(os.path.dirname(__file__), "fixtures", "rekordcrate-demo",
+                               "export.pdb")
+        with open(fixture, "rb") as fh:
+            real = fh.read(0x14)
+        ours = D.build([D.Track(1, "T", "/Contents/A/B/t.mp3")], [])
+        self.assertEqual(struct.unpack_from("<I", real, 0x10)[0], 5)
+        self.assertEqual(struct.unpack_from("<I", ours, 0x10)[0], 5)
+
     def test_fresh_pages_look_like_rekordboxs_fresh_pages(self):
         # In real exports a page no row was ever deleted from is flagged 0x24 and
         # counts its rows as one transaction.

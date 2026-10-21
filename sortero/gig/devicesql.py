@@ -29,6 +29,7 @@ tests/fixtures), which goes beyond what openboxxx writes:
     showed none of the tracks on a stick written without them
   * pages that have never had a row deleted are flagged 0x24 and count their
     rows as one transaction, as rekordbox writes a fresh page
+  * the file header's field at 0x10 is 5, as in real exports
 
 A few track-row fields only rekordbox itself reads are copied from a real
 export (TRACK_* below) and may differ between rekordbox versions.
@@ -40,6 +41,7 @@ PAGE = 4096
 HEADER = 0x28
 GROUP = 16
 DATA_PAGE_FLAGS = 0x24
+HEADER_0X10 = 5
 INDEX_PAGE_FLAGS = 0x64
 INDEX_ENTRIES = 1004            # data pages one index page can list
 NO_PAGE = 0x03FFFFFF
@@ -362,7 +364,9 @@ def build(tracks, playlists, today=None, artwork=()):
         spans.append((kind, spare, index, data[-1] if data else index))
         next_index = spare + 1
 
-    header = struct.pack("<IIIIIII", 0, PAGE, len(spans), next_index, 0, 1, 0)
+    # 0x10 is unknown, but 5 in real exports, and an XDJ-RX2 rewrote a 0 there to
+    # 5 when it read a stick. Deep-Symmetry/crate-digger#46 reports it must be 5.
+    header = struct.pack("<IIIIIII", 0, PAGE, len(spans), next_index, HEADER_0X10, 1, 0)
     for kind, spare, first, last in spans:
         header += struct.pack("<IIII", kind, spare, first, last)
     return header.ljust(PAGE, b"\0") + b"".join(body)

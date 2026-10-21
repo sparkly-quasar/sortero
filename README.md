@@ -708,6 +708,8 @@ v0.35.2 still have the old updater, which leaves the new version in a
 once, and it finishes the update itself (see
 [Install & update](#an-update-that-didnt-finish-on-windows)).
 
+What's planned next is in the [roadmap](ROADMAP.md).
+
 ## Install & update
 
 There are three ways to run Sortero. All of them have every feature.

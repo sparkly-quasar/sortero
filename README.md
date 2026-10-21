@@ -484,8 +484,16 @@ are just a title.
    Key's cue points and beat grid; artwork too big for older players is shrunk.
    A file that is already lossy is decoded to AIFF rather than encoded lossy a
    second time. Copies are remembered, so the next gig only converts what's new.
-3. **Main stick.** **Write the main stick…** puts the set on the stick
-   itself, no rekordbox needed (it works on Linux too, where rekordbox doesn't
+3. **Main stick.** The step asks one thing, *How do you want to make it?*,
+   and its button follows the answer: *Sortero writes it*, *Write it with
+   rekordbox or Engine DJ*, or *No main stick* (the folders stick only, which
+   Pioneer and Denon players browse by folder, and which also suits a laptop
+   running Serato). Below that, one line says how
+   many tracks have cue points and beat grids, and **Change…** opens a window
+   listing where they come from.
+
+   *Sortero writes it* (the default): **Write the main stick…** puts the set
+   on the stick itself, no rekordbox needed (it works on Linux too, where rekordbox doesn't
    run): it copies tonight's tracks to the stick and writes both libraries
    Pioneer players read, the Device Library (`PIONEER/rekordbox/export.pdb`,
    every player since the CDJ-900) and OneLibrary (`exportLibrary.db`, which
@@ -495,9 +503,9 @@ are just a title.
    waveforms (the overview and the scrolling detail, in colour and three-band
    for the players that show them) and each track's embedded artwork. Then it
    checks the stick. Cues come
-   from your rekordbox library if you point Sortero at an XML export of it
-   (**Use a rekordbox XML…**; Mixed In Key's `rekordbox.xml` works too), then
-   from Mixxx, then from Mixed In Key's analysis in the files themselves. It
+   from your rekordbox library if you add an XML export of it in the cue points
+   window (Mixed In Key's `rekordbox.xml` works too), then from Mixed In Key's
+   analysis in the files themselves, then from Mixxx. It
    refuses a stick that already holds a library Sortero didn't write, and
    running it again replaces only what Sortero put there. **This is new and hasn't been
    confirmed on a real player yet**, so bring a second stick you trust until it has. (An
@@ -510,12 +518,21 @@ are just a title.
    rekordbox's own). The waveforms are approximations of rekordbox's: close
    in shape and colour, not identical.
 
-   **Using rekordbox or Engine DJ instead?** **Make the playlists file for it**
-   writes a rekordbox XML of the same set, and the step shows how to get it
-   onto the stick: into rekordbox 7.2.11 or later, which writes both
+   *Write it with rekordbox or Engine DJ*: **Save the set for rekordbox or
+   Engine DJ** writes a rekordbox XML of the same set, and the step shows how
+   to get it onto the stick: into rekordbox 7.2.11 or later, which writes both
    libraries; for Denon players, Engine DJ imports the same XML, cues
    included, and its Sync Manager exports it. Sortero can't write Engine DJ's
-   library itself yet.
+   library itself yet, so for Denon-only players this is the only choice.
+
+   *No main stick*: **Use only the folders stick** makes the folders stick
+   (step 4 here) the only one: it's no longer optional, and **GIG READY** waits
+   for it instead. Open the step again to choose another way after all.
+
+   Either stick, the main one or the folders one, is looked at as soon as you
+   choose it: one the players can't read (exFAT, say) is offered **Format it as
+   FAT32** before anything is copied, and so is a main stick holding a library
+   Sortero didn't write.
 
    Then **Check the main stick…**: the file system and
    partitions (FAT32 on one MBR partition is what every player reads), that a
@@ -523,9 +540,12 @@ are just a title.
    do; the missing one is a warning) and that tonight's playlists are in the
    rekordbox one, every file's format, every file decoded from start to finish,
    and FAT32 name and size limits. If the stick itself is the problem, the step
-   offers **Format a stick as FAT32…** right there. With MP3 copies, **Cue timing
-   on MP3 copies…** has a one-time check in rekordbox for the 25 ms an MP3 can
-   start late, and moves the cues if it's needed.
+   offers **Format the stick as FAT32…** right there. With MP3 copies, the cue
+   points window has **Move cues 25 ms later on MP3 copies**, for players that
+   start an MP3 late, with how to tell whether you need it. Once a stick has
+   been checked,
+   **Faster check (doesn't play every track)…** checks it again without
+   decoding every file.
 4. **Backup stick** (recommended, not required). Writes each playlist as a
    numbered folder, its tracks numbered in set order (`01 Warmup/01 Artist -
    Title.mp3`), so a player browsing folders (Denon players' Library → Folder
@@ -535,7 +555,8 @@ are just a title.
    tracks no longer in the set are removed, and files Sortero didn't put on the
    stick are never touched. macOS `._` files are cleared, and the stick is
    checked straight afterwards, every file compared with its original.
-5. **Ready to leave.** **GIG READY** once the main stick passes, with each
+5. **Ready to leave.** **GIG READY** once the main stick passes (or the folders
+   stick, when the main stick was skipped), with each
    stick's name and when it was checked, and a reminder to eject both. It's
    remembered: open Sortero the next morning and it still says so, until the
    set changes. A check that finds a problem says *Not ready yet*, with what
@@ -543,10 +564,10 @@ are just a title.
 
 ![Gig prep with every step done: GIG READY](docs/screenshots/gig-prep.png)
 
-**Format a stick as FAT32…** erases a stick as one FAT32 partition on an MBR
-map, on macOS, Windows and Linux. It's offered in the stick steps: as a quiet
-link for a new stick, and as a button when a check finds the stick itself is
-the problem. Only removable or USB disks are offered, never an internal disk,
+Formatting erases a stick as one FAT32 partition on an MBR map, on macOS,
+Windows and Linux. It's offered when a stick you choose to write can't be read
+by the players or holds another app's library, and as a button when a check
+finds the stick itself is the problem. Only removable or USB disks are offered, never an internal disk,
 the disk the system runs from, or the disk your collection or gig library is
 on, even an ejected one that's still plugged in. It shows the disk and its
 size, and erases only once you type the stick's name. Just before erasing it
@@ -642,8 +663,14 @@ It can also check automatically on launch (at most once a day) — toggle that i
 Settings.
 ## What's new in v0.35.6
 
-v0.35.6 is the free download, and the current version. Compared with v0.18.0,
-the free download before it, it adds:
+v0.35.6 is the free download. Compared with v0.18.0, the free download before
+it, it adds what's below. The current version, **v0.36.0**, is what
+[Supporter licence](#supporting-sortero) holders get: Gig prep's main stick step
+asks one question, *How do you want to make it?*, with one button that follows
+the answer, and the cue point options move to a window of their own. It can
+also skip the main stick for a folders stick alone, which Pioneer and Denon
+players browse by folder, and offers to format a stick the players can't read
+before anything is copied to it.
 
 **Gig prep**, a new screen: one checklist from your playlists to a USB stick you
 can trust at the venue.

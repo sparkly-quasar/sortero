@@ -54,8 +54,9 @@ class Steps(unittest.TestCase):
                      apps="rekordbox and Engine DJ")
         self.assertEqual(statuses(st)["tracks"], K.DONE)
         nxt = K.next_step(K.steps(st))
-        self.assertEqual((nxt.key, nxt.button), ("main", "Make the playlists file"))
-        self.assertEqual(nxt.title, "Main stick (rekordbox and Engine DJ)")
+        self.assertEqual((nxt.key, nxt.button),
+                         ("main", "Save the set for rekordbox and Engine DJ"))
+        self.assertEqual(nxt.title, "Main stick")
         # the backup can be done now, but the main stick comes first
         self.assertEqual(statuses(st)["backup"], K.WAITING)
         self.assertEqual(step(st, "backup").button, "Write the backup stick…")
@@ -65,12 +66,15 @@ class Steps(unittest.TestCase):
         nxt = step(st, "main")
         self.assertEqual((nxt.status, nxt.button), (K.NEXT, "Write the main stick…"))
         self.assertEqual(nxt.title, "Main stick")
-        self.assertIn("No rekordbox needed", nxt.text)
+        self.assertIn("writes the library Pioneer players read", nxt.text)
         self.assertNotIn("Engine DJ", nxt.text)
-        st.apps = "rekordbox / Engine DJ"
-        self.assertIn("Denon players need Engine DJ", step(st, "main").text)
         st.main = stick(True)
         self.assertEqual(step(st, "main").status, K.DONE)
+
+    def test_a_backup_from_an_earlier_session_still_leaves_the_main_stick_to_write(self):
+        st = K.State(["Warmup"], 2, direct=True, earlier=time.time() - 60,
+                     backup_check=stick(True, "BACKUP"))
+        self.assertEqual(step(st, "main").button, "Write the main stick…")
 
     def test_after_making_the_xml_check_the_main_stick(self):
         st = K.State(["Warmup"], 2, items=[item(C.READY)], xml_path="/lib/x.xml")
@@ -114,6 +118,41 @@ class Steps(unittest.TestCase):
         b = step(st, "backup")
         self.assertEqual((b.status, b.button), (K.NEXT, "Write the backup again…"))
         self.assertEqual(statuses(st)["ready"], K.DONE)      # the backup isn't required
+
+    def test_skipping_the_main_stick_makes_the_folders_stick_the_one(self):
+        st = K.State(["Warmup"], 2, items=[item(C.READY)], direct=True, skip_main=True)
+        main = step(st, "main")
+        self.assertEqual((main.status, main.button), (K.DONE, None))
+        self.assertIn("Skipped", main.text)
+        b = step(st, "backup")
+        self.assertEqual((b.status, b.title, b.button),
+                         (K.NEXT, "Folders stick", "Write the folders stick…"))
+        self.assertEqual(statuses(st)["ready"], K.WAITING)
+        self.assertFalse(K.ready(st))
+        self.assertEqual(K.current(K.steps(st)), "backup")
+
+    def test_a_folders_stick_alone_is_gig_ready(self):
+        st = K.State(["Warmup"], 2, items=[item(C.READY)], skip_main=True,
+                     backup_check=stick(True, "BACKUP", "3 tracks in 1 folder"))
+        self.assertTrue(K.ready(st))
+        self.assertEqual(K.current(K.steps(st)), "ready")
+        ready = step(st, "ready").text
+        self.assertTrue(ready.startswith("GIG READY."))
+        self.assertIn("Folders stick “BACKUP” checked", ready)
+        self.assertIn("no playlists, cue points or beat grids", ready)
+        self.assertIn("Folders stick “BACKUP”", step(st, "backup").text)
+
+    def test_a_failed_folders_stick_isnt_ready(self):
+        st = K.State(["Warmup"], 2, items=[item(C.READY)], skip_main=True,
+                     backup_check=stick(False, "BACKUP"))
+        self.assertFalse(K.ready(st))
+        self.assertEqual(statuses(st)["ready"], K.WAITING)
+        self.assertEqual(step(st, "backup").button, "Write the folders stick again…")
+
+    def test_skipping_waits_for_the_tracks_like_everything_else(self):
+        st = K.State(["Warmup"], 2, skip_main=True)
+        self.assertEqual(statuses(st)["main"], K.WAITING)
+        self.assertEqual(statuses(st)["backup"], K.WAITING)
 
     def test_checked_in_an_earlier_session(self):
         then = time.time() - 3600

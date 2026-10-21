@@ -8,13 +8,17 @@ Five steps, in the order a gig is prepared:
   set     Your set: the playlists, in play order
   tracks  Make the tracks gig-safe: check every track, copy the ones that won't play
   main    Main stick: Sortero writes the set to it for Pioneer players (usbexport),
-          or rekordbox / Engine DJ do from the playlists file; then it's checked
+          or rekordbox / Engine DJ export it from the rekordbox XML Sortero saves;
+          then it's checked. Or it's skipped, for a folders stick only
   ready   Ready to leave: GIG READY once the main stick passes
   backup  Backup stick (optional): numbered folders on a second stick, checked
 
 A step is DONE, NEXT (the one to do now) or WAITING (not yet). The backup is
 optional, so it comes last: it can be done any time after the tracks, and is
 NEXT once the main stick passes, but Ready to leave is what opens then.
+
+The main stick can be skipped (skip_main): then the folders stick is the only
+one, it's no longer optional, and GIG READY waits for it to pass instead.
 """
 import time
 from dataclasses import dataclass, field
@@ -64,6 +68,7 @@ class State:
     backup: object = None       # the last backup.Result, if a backup stick was written
     backup_check: StickCheck = None
     earlier: float = None       # sticks checked in an earlier session, for this same set
+    skip_main: bool = False     # no main stick tonight: the folders stick is the only one
 
 
 @dataclass
@@ -176,35 +181,44 @@ def steps(st):
         out.append(Step("tracks", title, text, DONE))
 
     # 3. Main stick
-    title = "Main stick" if st.direct else f"Main stick ({st.apps})"
+    title = "Main stick"
     main_ok = bool(st.main and st.main.ready)
     if not tracks_done:
         out.append(Step("main", title, "", WAITING))
+    elif st.skip_main:
+        out.append(Step("main", title, "Skipped: tonight it's the folders stick only.", DONE))
     elif main_ok:
         out.append(Step("main", title, _stick_line("Main stick", st.main) + ".", DONE))
     elif st.main:
         text = st.main.verdict + (f" {st.main.first_problem}" if st.main.first_problem
                                   else "")
         out.append(Step("main", title, text, NEXT, "Check the main stick again…"))
-    elif st.direct and not st.earlier:
-        text = ("Sortero writes the set to the stick for Pioneer players: the playlists in "
-                "set order, beat grids and cue points. No rekordbox needed. Then it checks "
-                "the stick.")
-        if "Engine DJ" in st.apps:
-            text += " Denon players need Engine DJ to export it (see below)."
-        out.append(Step("main", title, text, NEXT, "Write the main stick…"))
+    elif st.direct:
+        out.append(Step("main", title, "Sortero copies the set to the stick and writes the "
+                        "library Pioneer players read: your playlists in set order, cue "
+                        "points and beat grids. Then it checks the stick.", NEXT,
+                        "Write the main stick…"))
     elif not st.xml_path and not st.earlier:
-        out.append(Step("main", title, f"Make the playlists file, then put the set on the "
-                        f"stick with {st.apps}. The steps show here.", NEXT,
-                        "Make the playlists file"))
+        out.append(Step("main", title, f"First Sortero saves the set as a file {st.apps} "
+                        "can import. Then you export the stick from there, following the "
+                        "steps that show here, and Sortero checks it.", NEXT,
+                        f"Save the set for {st.apps}"))
     else:
-        out.append(Step("main", title, f"Put the set on the stick with {st.apps}, "
-                        "following the steps below, then check it.", NEXT,
+        out.append(Step("main", title, f"Export the stick from {st.apps}, following the "
+                        "steps below. Then plug it in here and check it.", NEXT,
                         "Check the main stick…"))
 
     # 4. Ready to leave
     b = st.backup_check
-    if not main_ok:
+    if st.skip_main and tracks_done:
+        if b and b.ready:
+            out.append(Step("ready", "Ready to leave", "\n".join([
+                "GIG READY.", _stick_line("Folders stick", b) + ".",
+                "No main stick, so the players browse the folders: no playlists, cue "
+                "points or beat grids.", "Eject the stick before you unplug it."]), DONE))
+        else:
+            out.append(Step("ready", "Ready to leave", "", WAITING))
+    elif not main_ok:
         out.append(Step("ready", "Ready to leave", "", WAITING))
     else:
         lines = ["GIG READY.", _stick_line("Main stick", st.main) + "."]
@@ -216,16 +230,21 @@ def steps(st):
                          "optional: step 5.")
         out.append(Step("ready", "Ready to leave", "\n".join(lines), DONE))
 
-    # 5. Backup stick, optional
-    title = "Backup stick (optional)"
+    # 5. Backup stick, optional unless it's the only one
+    title = "Folders stick" if st.skip_main else "Backup stick (optional)"
     if not tracks_done:
         out.append(Step("backup", title, "", WAITING))
     elif b and b.ready:
-        out.append(Step("backup", title, _stick_line("Backup", b) + ".", DONE))
+        out.append(Step("backup", title, _stick_line(
+            "Folders stick" if st.skip_main else "Backup", b) + ".", DONE))
     elif b:
         out.append(Step("backup", title, b.verdict + (f" {b.first_problem}"
                                                      if b.first_problem else ""),
-                        NEXT, "Write the backup again…"))
+                        NEXT, "Write the folders stick again…" if st.skip_main
+                        else "Write the backup again…"))
+    elif st.skip_main:
+        out.append(Step("backup", title, "The set as numbered folders on the stick.",
+                        NEXT, "Write the folders stick…"))
     else:
         out.append(Step("backup", title, "The set as numbered folders on a "
                         "second stick, to browse if the main stick fails.",
@@ -243,6 +262,8 @@ def next_step(all_steps):
 
 
 def ready(st):
+    if st.skip_main:
+        return bool(st.backup_check and st.backup_check.ready)
     return bool(st.main and st.main.ready)
 
 

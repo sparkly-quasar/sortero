@@ -22,6 +22,19 @@ TONES = {DONE: "good", NEXT: "text", WAITING: "faint"}
 MARK = {verify.FAIL: "✗", verify.WARN: "!", verify.PASS: "✓"}
 
 
+# The ways to make the main stick: (key, choice, what it means)
+ROUTES = [("sortero", "Sortero writes it",
+           "For Pioneer players. No other app needed. Denon players can still browse its "
+           "folders."),
+          ("app", "Write it with rekordbox or Engine DJ",
+           "Sortero saves the set for the app to import, and shows the steps. Denon "
+           "players need this: Sortero can't write Engine DJ's library."),
+          ("skip", "No main stick",
+           "Only the folders stick (step 5). Pioneer and Denon players browse it by "
+           "folder, without playlists, cue points or beat grids. Good for a laptop "
+           "running Serato or other DJ software too.")]
+
+
 def _profile_label(p):
     return f"{p.name} (safest)" if p.key == profiles.EVERY.key else p.name
 
@@ -98,6 +111,11 @@ def _link(parent, text, command):
 def _button(parent, text, command):
     """An action: a real button, so it can't be mistaken for a highlighted line."""
     return ttk.Button(parent, text=text, command=command)
+
+
+def _heading(parent, text):
+    """A small heading inside a step, so its parts read as groups."""
+    return _label(parent, text, tone="text", font=ui.STRONG)
 
 
 def _label(parent, text="", tone="muted", font=None):
@@ -202,22 +220,29 @@ class GigScreen(Screen):
             self.again_row = _links(body)
             _button(self.again_row, "Write the main stick again…",
                     self.write_main).pack(side="left")
-            self.alt_row = _links(body)
-            _label(self.alt_row, "Using rekordbox or Engine DJ instead?").pack(side="left")
-            _button(self.alt_row, "Make the playlists file for it",
-                    self.make_xml).pack(side="left", padx=(ui.GAP, 0))
-            self.cue_row = _links(body)
-            self.cue_row.pack(fill="x", pady=(2, 0))
-            self.cue_label = _label(self.cue_row)       # wraps: it can be long
-            self.cue_label.pack(fill="x")
-            self.cue_count = _label(self.cue_row)       # what those gave these tracks
 
-            cue_links = _links(self.cue_row)
-            cue_links.pack(fill="x", pady=(4, 0))
-            self.cue_change = _button(cue_links, "", self.choose_cue_xml)
-            self.cue_change.pack(side="left")
-            self.cue_timing_link = _button(cue_links, "Cue timing on MP3 copies…",
-                                           self.cue_timing)
+            # How the stick gets made: one choice, and the step's button follows it
+            self.route_box = _links(body)
+            _heading(self.route_box, "How do you want to make it?").pack(fill="x")
+            self.route_var = tk.StringVar(value=self._route())
+            self.routes = {}
+            for key, text, why in ROUTES:
+                row = _links(self.route_box)
+                tk_radio = tk.Radiobutton(row, text=text, value=key, variable=self.route_var,
+                                          font=ui.BODY, anchor="w", bd=0,
+                                          highlightthickness=0,
+                                          command=self._route_changed)
+                ui.paint(tk_radio, bg="card", fg="text", activebackground="card",
+                         activeforeground="text", selectcolor="card")
+                tk_radio.pack(fill="x")
+                _label(row, why).pack(fill="x", padx=(26, 0))
+                self.routes[key] = row
+
+            self.cue_row = _links(body)
+            self.cue_label = _label(self.cue_row)       # what was found, or where from
+            self.cue_label.pack(side="left", fill="x", expand=True)
+            _link(self.cue_row, "Change…", self.cue_options).pack(side="left", anchor="n",
+                                                                 padx=(ui.GAP, 0))
             how = tk.Frame(body)
             ui.paint(how, bg="card")
             self.how_txt = tk.Text(how, height=5, font=ui.BODY, wrap="word", relief="flat",
@@ -242,11 +267,9 @@ class GigScreen(Screen):
                 side="left", padx=(ui.GAP, 0))
         tools = _links(body)
         tools.pack(side="bottom", fill="x", pady=(6, 0))
-        widgets["format"] = ttk.Button(tools, text="Format a stick as FAT32…",
+        widgets["format"] = ttk.Button(tools, text="Format the stick as FAT32…",
                                        command=self.format_stick)
-        widgets["format_link"] = _button(tools, "New stick? Format it as FAT32…",
-                                         self.format_stick)
-        widgets["quick"] = _button(tools, "Quick check (skip the decode test)",
+        widgets["quick"] = _button(tools, "Faster check (doesn't play every track)…",
                                    lambda: self.check_main(decode=False) if which == "main"
                                    else self.check_backup(decode=False))
         widgets["findings"] = Findings(body)
@@ -263,11 +286,8 @@ class GigScreen(Screen):
         links.pack(fill="x", pady=(ui.GAP, 0))
         self.backup_open = _button(links, "Make a backup stick…",
                                    lambda: self.open("backup"))
-        self.backup_open.pack(side="left")
         self.ready_check = _button(links, "Check the main stick again…", self.check_main)
-        self.ready_check.pack(side="left", padx=(ui.GAP, 0))
-        _button(links, "Clear the set for the next gig", self.picker.clear).pack(
-            side="left", padx=(ui.GAP, 0))
+        self.ready_clear = _button(links, "Clear the set for the next gig", self.picker.clear)
 
     # ------------------------------------------------------------ the set
     def shown(self):
@@ -300,13 +320,15 @@ class GigScreen(Screen):
 
     def _has_progress(self):
         st = self.state
-        return bool(st.items is not None or st.main or st.backup_check or st.earlier)
+        return bool(st.items is not None or st.main or st.backup_check or st.earlier
+                    or st.skip_main)
 
     def _reset(self):
         st = self.state
         st.items, st.copied, st.sets, st.xml_path, st.xml_cues = None, False, None, "", {}
         st.xml_tracks = 0
         st.main, st.backup, st.backup_check, st.earlier = None, None, None, None
+        st.skip_main = False
         self.reports = {}
 
     # --------------------------------------------- remembering a checked gig
@@ -320,7 +342,8 @@ class GigScreen(Screen):
         settings.set("gig_progress", {
             "sig": self._signature(), "when": time.time(),
             "main": st.main.to_dict() if st.main else None,
-            "backup": st.backup_check.to_dict() if st.backup_check else None})
+            "backup": st.backup_check.to_dict() if st.backup_check else None,
+            "skip_main": st.skip_main})
 
     def _recall(self):
         """Sticks checked in an earlier session, for this same set, still count."""
@@ -334,6 +357,7 @@ class GigScreen(Screen):
             st.main = checklist.StickCheck.from_dict(saved["main"])
         if saved.get("backup"):
             st.backup_check = checklist.StickCheck.from_dict(saved["backup"])
+        st.skip_main = bool(saved.get("skip_main"))
         if st.main or st.backup_check:
             st.earlier = saved.get("when")
 
@@ -358,12 +382,29 @@ class GigScreen(Screen):
         self.picker.forget_undo()
         self.set_changed("You changed the players or the copies")
 
+    def _route(self):
+        """How the main stick gets made: "sortero", or "app" (rekordbox / Engine DJ),
+        which is the only way when the chosen players don't read rekordbox's library."""
+        if not profiles.reads_rekordbox(self.profile):
+            return "app"
+        return "app" if settings.get("gig_main_route") == "app" else "sortero"
+
+    def _route_changed(self):
+        choice = self.route_var.get()
+        if choice != "skip":
+            settings.set("gig_main_route", choice)
+            if self.state.skip_main:
+                self.state.skip_main = False
+                self._remember()
+        self.open_key = "main"
+        self.refresh()
+
     def _apps(self):
-        """Where the main stick's library comes from: "rekordbox / Engine DJ"."""
+        """Where the main stick's library comes from: "rekordbox or Engine DJ"."""
         apps = [name for reads, name in ((profiles.reads_rekordbox, "rekordbox"),
                                          (profiles.reads_engine, "Engine DJ"))
                 if reads(self.profile)]
-        return " / ".join(apps) or "rekordbox"
+        return " or ".join(apps) or "rekordbox"
 
     # ------------------------------------------------------------ drawing
     def open(self, key):
@@ -377,17 +418,21 @@ class GigScreen(Screen):
         st = self.state
         st.playlists, st.track_count = self.picker.names(), self.picker.track_count()
         st.apps = self._apps()
-        st.direct = profiles.reads_rekordbox(self.profile)
+        st.direct = profiles.reads_rekordbox(self.profile) and self._route() == "sortero"
+        if st.skip_main:
+            self.route_var.set("skip")
+        elif self.route_var.get() != "skip":       # "skip" is only a choice until it's made
+            self.route_var.set(self._route())
         all_steps = checklist.steps(st)
         by_key = {s.key: s for s in all_steps}
         if self.open_key is None or by_key[self.open_key].status == WAITING:
             self.open_key = checklist.current(all_steps)
-        if st.main or st.earlier:
+        if st.main:
             main_action = self.check_main
         elif st.direct:
             main_action = self.write_main
         else:
-            main_action = self.check_main if st.xml_path else self.make_xml
+            main_action = self.check_main if st.xml_path or st.earlier else self.make_xml
         actions = {"tracks": self.make_copies if st.items else self.check_tracks,
                    "main": main_action,
                    "backup": self.write_backup}
@@ -405,11 +450,14 @@ class GigScreen(Screen):
                 text = chk.verdict
             if s.key == "set" and (st.items is not None or st.earlier):
                 button, command = "Done", self._advance
+            if (s.key == "main" and s.status == NEXT and not st.main
+                    and self.route_var.get() == "skip"):
+                text = "The folders stick in step 5 will be the only one."
+                button, command = "Use only the folders stick", self.skip_main
             card.update(f"{checklist.MARKS[s.status]}   {i}   {s.title}", text,
                         tone=TONES[s.status],
                         text_tone="warn" if text.startswith("Not ready yet") else "muted",
                         button=button, command=command, open=is_open, enabled=enabled)
-            card.pack_configure(fill="both" if is_open else "x", expand=is_open)
             link = self.change[s.key]
             if is_open or s.status == WAITING or s.key == "ready":
                 link.pack_forget()
@@ -423,6 +471,11 @@ class GigScreen(Screen):
         self._draw_stick("main")
         self._draw_stick("backup")
         self._draw_ready(by_key["ready"])
+        # Only a step with a list or findings to show takes the spare room; the
+        # others stay their own height, so their buttons sit right under them.
+        for key, card in self.cards.items():
+            grows = key == self.open_key and self._grows(key)
+            card.pack_configure(fill="both" if grows else "x", expand=grows)
         if self.notice_text:
             self.notice.configure(text=self.notice_text)
             self.notice.pack(fill="x", pady=(0, ui.GAP), before=self.steps_frame)
@@ -436,6 +489,16 @@ class GigScreen(Screen):
             self.header.set_summary(f"Step {n} of {len(checklist.KEYS)}: "
                                     f"{by_key[self.open_key].title}.")
         self._maybe_auto_check()
+
+    def _grows(self, key):
+        if key == "set":
+            return True
+        if key == "tracks":
+            return bool(self.track_box.winfo_manager())
+        if key == "main" and self.how.winfo_manager():
+            return True
+        w = getattr(self, f"{key}_w", None)
+        return bool(w and w["findings"].winfo_manager())
 
     def _draw_tracks(self):
         st = self.state
@@ -464,29 +527,24 @@ class GigScreen(Screen):
     def _draw_stick(self, which):
         st, w = self.state, getattr(self, f"{which}_w")
         report = self.reports.get(which)
+        skipped = which == "main" and st.skip_main
+        order = []                          # the body's parts, top to bottom: (part, shown)
         if which == "main":
             have_xml = bool(st.xml_path)
-            self.xml_label.configure(text="Playlists file ready."
-                                     if have_xml and not st.direct else "")
-            counted = checklist.cue_summary(st.xml_cues, st.xml_tracks)
-            self.cue_count.configure(text=counted)
-            if counted:                         # none until the tracks are checked
-                self.cue_count.pack(fill="x", after=self.cue_label)
-            else:
-                self.cue_count.pack_forget()
+            app_route = not st.direct and not skipped
+            choosing_skip = skipped or self.route_var.get() == "skip"
+            self.xml_label.configure(text="Saved the set for "
+                                          f"{st.apps}." if have_xml and app_route else "")
             src = settings.get("gig_rekordbox_xml")
             src = src if src and os.path.isfile(src) else None
-            self.cue_label.configure(text=checklist.cue_sources(
-                os.path.basename(src) if src else None, mixxx.find_db() is not None))
-            self.cue_change.configure(text="Change rekordbox file…" if src else
-                                      "Add cues from rekordbox…")
-            if self.target == convert.MP3:
-                self.cue_timing_link.pack(side="left", padx=(ui.SECTION, 0))
-            else:
-                self.cue_timing_link.pack_forget()
+            self.cue_label.configure(
+                text=checklist.cue_summary(st.xml_cues, st.xml_tracks)    # once checked
+                or checklist.cue_sources(os.path.basename(src) if src else None,
+                                         mixxx.find_db() is not None))
             self._fill_how()
-            show_how = (have_xml or st.earlier) and (self.how_open or not report)
-            if have_xml or st.earlier:
+            has_how = app_route and (have_xml or st.earlier)
+            show_how = has_how and (self.how_open or not report)
+            if has_how:
                 self.how_toggle.configure(text="Hide the steps" if show_how else
                                           "Show the steps")
                 self.how_toggle.pack(side="right")
@@ -494,59 +552,78 @@ class GigScreen(Screen):
             else:
                 self.how_toggle.pack_forget()
                 self.copy_link.pack_forget()
-            if st.direct and (st.main or st.earlier):
-                self.again_row.pack(fill="x", pady=(6, 0), before=self.cue_row)
-            else:
-                self.again_row.pack_forget()
-            if st.direct and not have_xml:
-                self.alt_row.pack(fill="x", pady=(6, 0), before=self.cue_row)
-            else:
-                self.alt_row.pack_forget()
-            if show_how:
-                self.how.pack(fill="both", expand=not report, pady=(6, 0),
-                              after=self.cue_row)
-            else:
-                self.how.pack_forget()
+            # Sortero writing it is only a choice when the players read its library
+            for key, row in self.routes.items():
+                row.pack_forget()
+                if key != "sortero" or profiles.reads_rekordbox(self.profile):
+                    row.pack(fill="x", pady=(4, 0))
+            order += [(self.route_box, not (st.main and st.main.ready)),
+                      (w["top"], bool(self.xml_label.cget("text") or has_how)
+                       and not choosing_skip),
+                      (self.again_row, st.direct and bool(st.main) and not choosing_skip),
+                      (self.how, show_how and not choosing_skip),
+                      (self.cue_row, not choosing_skip)]
         else:
             mount = self._main_mount()
             if mount:
                 name = os.path.basename(os.path.normpath(mount)) or mount
                 self.eject_label.configure(text=f"The main stick “{name}” is still plugged "
                                                 "in. Only one USB port?")
-                self.eject_row.pack(fill="x", pady=(6, 0), after=w["top"])
-            else:
-                self.eject_row.pack_forget()
             b = st.backup
             self.backup_label.configure(text=(
                 f"Written to {st.backup_check.name if st.backup_check else 'the stick'}: "
                 f"{ui.plural(len(b.written) + len(b.unchanged), 'track')}." if b else
                 "Each playlist becomes a numbered folder (01 Warmup/01 Artist - "
-                "Title.mp3), so a player browsing folders, or a laptop, finds the next "
-                "track fast."))
+                "Title.mp3), so a Pioneer or Denon player browsing folders, or a laptop "
+                "running Serato or other DJ software, finds the next track fast."))
+            order += [(w["top"], True), (self.eject_row, bool(mount))]
         f = w["findings"]
-        if report:
+        if report and not skipped:
             extra = []
             if which == "backup" and st.backup and st.backup.skipped:
                 extra.append((verify.WARN, f"{ui.plural(len(st.backup.skipped), 'track')} "
                               "weren't written", [f"{a}: {b}" for a, b in
                                                   st.backup.skipped[:verify.SHOWN]]))
             f.show_report(report, extra)
-            f.pack(fill="both", expand=True, pady=(6, 0), before=w["tools"])
-        else:
-            f.pack_forget()
+
+        # The step's own button does the job; these are only for after a check.
+        # Formatting when the check found the stick itself is the problem, and a
+        # faster check for a stick that's been checked once already.
         from ..gig import formatting
         stick_failed = bool(report and any(c.title == "Stick" and c.level == verify.FAIL
                                            for c in report.checks))
-        if formatting.available() and stick_failed:
-            w["format"].pack(side="left")
-            w["format_link"].pack_forget()
-        elif formatting.available():
-            w["format"].pack_forget()
-            w["format_link"].pack(side="left")
-        else:
-            w["format"].pack_forget()
-            w["format_link"].pack_forget()
-        w["quick"].pack(side="right")
+        show_format = bool(formatting.available() and stick_failed and not skipped)
+        show_quick = bool(st.main if which == "main" else st.backup_check) and not skipped
+        for button, shown, side in ((w["format"], show_format, "left"),
+                                    (w["quick"], show_quick, "right")):
+            if shown:
+                button.pack(side=side)
+            else:
+                button.pack_forget()
+        order += [(f, bool(report) and not skipped),
+                  (w["tools"], show_format or show_quick)]
+
+        # Packed afresh in this order, so a part that comes back lands in its place
+        # and the first one showing has no gap above it.
+        for part, _ in order:
+            part.pack_forget()
+        if not any(shown for _, shown in order):
+            # An emptied frame keeps its last size in Tk unless told otherwise
+            w["top"].master.configure(height=1)
+        first = True
+        for part, shown in order:
+            if not shown:
+                continue
+            gap = 0 if first else ui.SECTION
+            first = False
+            if part is w["tools"]:
+                part.pack(side="bottom", fill="x", pady=(gap, 0))
+            elif part is f:
+                part.pack(fill="both", expand=True, pady=(gap, 0))
+            elif which == "main" and part is self.how:
+                part.pack(fill="both", expand=not report, pady=(gap, 0))
+            else:
+                part.pack(fill="x", pady=(gap, 0))
 
     def _fill_how(self):
         path = self._xml_path()
@@ -579,10 +656,12 @@ class GigScreen(Screen):
         lines = step.text.split("\n")
         self.ready_lines.configure(text="\n".join(lines[1:]))
         b = self.state.backup_check
-        if b and b.ready:
-            self.backup_open.pack_forget()
-        else:
-            self.backup_open.pack(side="left", before=self.ready_check)
+        shown = [(self.backup_open, not (b and b.ready)),
+                 (self.ready_check, not self.state.skip_main), (self.ready_clear, True)]
+        for button, _ in shown:
+            button.pack_forget()
+        for i, button in enumerate(button for button, show in shown if show):
+            button.pack(side="left", padx=(ui.GAP if i else 0, 0))
 
     def _main_mount(self):
         """Where the main stick is mounted right now, or None."""
@@ -734,7 +813,7 @@ class GigScreen(Screen):
             self.notice_text = ""
             self.refresh()
 
-        self.app.task.run(work, done, "Making the playlists file")
+        self.app.task.run(work, done, f"Saving the set for {st.apps}")
 
     @staticmethod
     def _cue_places():
@@ -779,50 +858,42 @@ class GigScreen(Screen):
             return rbxml.write(path, tree), counts, total
         return work
 
-    def choose_cue_xml(self):
-        current = settings.get("gig_rekordbox_xml") or ""
-        if not messagebox.askokcancel(
-                APP, "Set cue points or beat grids in rekordbox? Sortero can use them too.\n\n"
-                     "rekordbox keeps them in its own database, which Sortero can't read, "
-                     "so export them to a file first: in rekordbox, choose File > Export "
-                     "Collection in xml format. Then choose that file here.\n\n"
-                     "For a track that has cue points there, Sortero uses those instead of "
-                     "Mixxx's or Mixed In Key's. Mixed In Key's own rekordbox.xml export "
-                     "works too.\n\nExport again whenever you change cues in rekordbox."):
-            return
-        path = filedialog.askopenfilename(
-            title="Choose your rekordbox collection XML",
-            initialdir=os.path.dirname(current) or os.path.expanduser("~"),
-            filetypes=[("rekordbox XML", "*.xml"), ("All files", "*")])
-        if not path:
-            return
-        settings.set("gig_rekordbox_xml", path)
-        if self.state.xml_path:
-            self.state.xml_path = ""        # make it again with these cues
-        self.refresh()
-        self._recount_cues()
+    def cue_options(self):
+        from . import gig_cues
 
-    def cue_timing(self):
-        on = bool(settings.get("gig_mp3_cue_shift"))
-        msg = ("An MP3 copy can start 25 ms late in a player that ignores the MP3's "
-               "gapless information, which would put every cue just before its beat.\n\n"
-               "To check once: import one converted track with cue points into rekordbox "
-               "and look at its first cue at full zoom. Is it about 25 ms (a sliver) "
-               "BEFORE the kick it should sit on?\n\n"
-               f"Cues on MP3 copies are now {'moved 25 ms later' if on else 'left as they are'}.")
-        answer = messagebox.askyesnocancel(APP, msg + "\n\nYes: the cue sat early, move "
-                                                      "them.  No: it sat on the kick.")
-        if answer is None:
-            return
-        settings.set("gig_mp3_cue_shift", bool(answer))
-        if self.state.xml_path:
-            self.state.xml_path = ""
+        def changed(recount):
+            if self.state.xml_path:
+                self.state.xml_path = ""        # made again with these cues
             self.refresh()
+            if recount:
+                self._recount_cues()
+        gig_cues.open_for(self.app, self.target == convert.MP3, changed)
 
     def _choose_stick(self, which):
         start = "/Volumes" if paths.IS_MAC and os.path.isdir("/Volumes") else None
         return filedialog.askdirectory(title=f"Choose the {which} stick", initialdir=start,
                                        mustexist=True)
+
+    def _stick_usable(self, stick):
+        """Before writing: a stick the players can't read at all is worth formatting
+        now, not finding out after the copy. Anything less is left to the check."""
+        chk = verify.check_stick(self.profile, disks.volume(stick))
+        if chk.level != verify.FAIL:
+            return True
+        name = os.path.basename(os.path.normpath(stick)) or stick
+        self._offer_format(f"The players can't read “{name}” as it is ({chk.summary}).\n\n"
+                           + "\n".join(chk.details))
+        return False
+
+    def _offer_format(self, why):
+        from ..gig import formatting
+        from .format_stick import INSTRUCTIONS_ELSEWHERE
+        if not formatting.available():
+            messagebox.showwarning(APP, why + "\n\n" + INSTRUCTIONS_ELSEWHERE)
+        elif messagebox.askyesno(APP, why + "\n\nFormat it as FAT32 now? Everything on "
+                                      "it is erased. Then choose it again.",
+                                 icon="warning", default="no"):
+            self.format_stick()
 
     def check_main(self, decode=True):
         stick = self._choose_stick("main")
@@ -861,12 +932,11 @@ class GigScreen(Screen):
         if not self._short_ok(sets or []):
             return
         stick = self._choose_stick("main")
-        if not stick:
+        if not stick or not self._stick_usable(stick):
             return
         why = usbexport.foreign(stick)
         if why:
-            messagebox.showwarning(APP, f"Sortero won't write to this stick: {why}.\n\n"
-                                        "Use another stick, or format this one first.")
+            self._offer_format(f"Sortero won't write to this stick: {why}.")
             return
         if not messagebox.askokcancel(
                 APP, "Sortero will copy tonight's tracks to the stick and write the rekordbox "
@@ -893,7 +963,7 @@ class GigScreen(Screen):
                 return
             if result.missing:
                 messagebox.showwarning(
-                    APP, f"{ui.plural(len(result.missing), 'track')} in the playlists file "
+                    APP, f"{ui.plural(len(result.missing), 'track')} in the set "
                          "couldn't be found on this computer, so they're not on the stick:\n\n"
                          + "\n".join(t for t, _ in result.missing[:10]))
             if result.no_waveform:
@@ -907,6 +977,14 @@ class GigScreen(Screen):
                          rbxml.playlist_names(sets) if sets else None)
 
         self.app.task.run(work, done, "Writing the main stick")
+
+    def skip_main(self):
+        """No main stick tonight: the folders stick becomes the one to make."""
+        st = self.state
+        st.skip_main, st.main = True, None
+        self.reports.pop("main", None)
+        self._remember()
+        self._advance()
 
     def _short_ok(self, sets):
         """Say which playlists would reach the stick missing tracks, before any
@@ -985,7 +1063,7 @@ class GigScreen(Screen):
             return
         sets, missing = backup.sets_from(items, self.state.sets or [])
         stick = self._choose_stick("backup")
-        if not stick:
+        if not stick or not self._stick_usable(stick):
             return
         try:
             p = backup.plan(stick, sets)

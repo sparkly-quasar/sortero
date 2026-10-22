@@ -2,9 +2,12 @@
 
 [![License: GPL v3+](https://img.shields.io/badge/License-GPLv3+-blue.svg)](LICENSE)
 
-A cross-platform desktop app for getting a DJ collection under control: one
-canonical copy of every track, playlists that preserve your curation, clean
-tags, and an intake lane for new music. Runs on macOS, Windows and Linux.
+A free desktop app that tidies a DJ music collection. It finds duplicate
+tracks, cleans up tags, files every track by genre, keeps your folders as
+playlists, rebuilds Spotify and TIDAL playlists from the files you already
+have, and gets a USB stick ready for Pioneer and Denon players, with a check
+before you leave. Nothing is deleted, and every change can be undone. Runs on
+macOS, Windows and Linux.
 
 > **Sortero is free and open source.** If it's been useful to you, please
 > consider [buying a Supporter licence](#supporting-sortero). Sortero is an

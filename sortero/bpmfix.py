@@ -228,8 +228,10 @@ def apply(root, fixes, log=print, progress=None):
         if t.ok:
             t.set("bpm", new)
         if t.ok and t.save():
-            j.tagged(f.rec.path, {"bpm": {"old": old, "new": new}})
-            f.rec.bpm = new
+            # A BPM read from Mixed In Key's beat grid had no tag to restore.
+            j.tagged(f.rec.path, {"bpm": {"old": None if f.rec.bpm_from_mik else old,
+                                          "new": new}})
+            f.rec.bpm, f.rec.bpm_from_mik = new, False
         else:
             failed += 1
 
@@ -252,4 +254,36 @@ def apply(root, fixes, log=print, progress=None):
     path = j.save()
     log(f"fixed BPM: {sum(1 for f in fixes if f.tag) - failed} tags "
         f"({failed} failed), {len(mx)} in Mixxx | journal: {path}")
+    return path, failed
+
+
+def write_mik(root, recs, log=print, progress=None):
+    """Write the BPM tag of tracks whose only BPM is in Mixed In Key's beat grid.
+
+    Mixed In Key doesn't always write the tag itself, and DJ apps that don't
+    read its beat grid then show no BPM at all. The value is the one Sortero
+    already shows for the track (see Track.mik_bpm).
+    """
+    j = Journal("write-mik-bpm", root)
+    total = len(recs) or 1
+    failed = 0
+    for i, r in enumerate(recs):
+        if progress and i % 10 == 0:
+            progress(i, total)
+        t = Track(r.path)
+        new = t.mik_bpm() if t.ok and not t.get("bpm") else None
+        if not new:
+            failed += 1
+            continue
+        t.set("bpm", new)
+        if t.save():
+            j.tagged(r.path, {"bpm": {"old": None, "new": new}})
+            r.bpm, r.bpm_from_mik = new, False
+        else:
+            failed += 1
+    if progress:
+        progress(total, total)
+    path = j.save()
+    log(f"wrote BPM from Mixed In Key: {len(recs) - failed} tags "
+        f"({failed} failed) | journal: {path}")
     return path, failed

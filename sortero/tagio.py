@@ -1,5 +1,5 @@
 """Format-agnostic read/write for the tag fields DJ software actually reads."""
-import os
+import base64, binascii, json, os
 
 import mutagen
 from mutagen.id3 import ID3, TKEY, TIT1, TCON, TPE1, TIT2, TBPM, TALB, COMM, ID3NoHeaderError
@@ -26,6 +26,10 @@ MP4_KEYS = {"grouping": "\xa9grp", "genre": "\xa9gen", "artist": "\xa9ART",
 MP4_KEY_ATOM = "----:com.apple.iTunes:initialkey"
 MP4_ENERGY_ATOM = "----:com.apple.iTunes:EnergyLevel"
 ID3_ENERGY_DESCS = ("energylevel", "energy")
+# Mixed In Key's beat grid: base64 JSON holding its measured "tempo". It is
+# there even when Mixed In Key leaves the BPM tag itself unwritten.
+MIK_GRID_VORBIS = "BEATGRID"
+MIK_GRID_MP4 = "----:com.mixedinkey.mixedinkey:beatgrid"
 
 
 class Track:
@@ -131,6 +135,39 @@ class Track:
             return None
         return None
 
+    def mik_bpm(self):
+        """The tempo in Mixed In Key's beat grid, written the way a BPM tag is, or None.
+
+        Rounded to a whole BPM when it's within a twentieth of one (MIK measures
+        140 as 140.999), otherwise to two places, so 93.33 stays 93.33.
+        """
+        if not self.ok:
+            return None
+        raw = None
+        try:
+            if self.kind == "id3":
+                for f in self.audio.getall("GEOB"):
+                    if f.desc == "BeatGrid":
+                        raw = f.data
+                        break
+            elif self.kind == "vorbis":
+                v = self.audio.get(MIK_GRID_VORBIS)
+                raw = v[0].encode("ascii", "ignore") if v else None
+            elif self.kind == "mp4":
+                v = self.audio.get(MIK_GRID_MP4)
+                raw = bytes(v[0]) if v else None
+            if not raw:
+                return None
+            grid = json.loads(base64.b64decode(b"".join(raw.split())))
+            tempo = float(grid.get("tempo") or 0) if isinstance(grid, dict) else 0
+        except (binascii.Error, ValueError, TypeError, AttributeError):
+            return None
+        if not 20 <= tempo <= 400:
+            return None
+        if abs(tempo - round(tempo)) < 0.05:
+            return str(int(round(tempo)))
+        return f"{tempo:.2f}".rstrip("0").rstrip(".")
+
     # -- write --------------------------------------------------------------
     def set(self, field, value):
         if not self.ok:
@@ -163,7 +200,9 @@ class Track:
                 return
             if field == "bpm":
                 if value:
-                    self.audio["tmpo"] = [int(float(value))]
+                    self.audio["tmpo"] = [int(round(float(value)))]
+                elif "tmpo" in self.audio:
+                    del self.audio["tmpo"]
                 return
             k = MP4_KEYS.get(field)
             if not k:

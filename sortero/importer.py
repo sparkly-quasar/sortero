@@ -96,7 +96,7 @@ def plan(root, sources, library_recs, progress=None, hold_unsorted=True):
             r.title = (t.get("title") or "").strip() or None
             r.genre = (t.get("genre") or "").strip() or None
             r.key = (t.get("key") or "").strip() or None
-            r.bpm = (t.get("bpm") or "").strip() or None
+            r.bpm = (t.get("bpm") or "").strip() or t.mik_bpm()
             r.grouping = (t.get("grouping") or "").strip() or None
             r.comment = (t.get("comment") or "").strip() or None
             r.energylevel = (t.get("energylevel") or "").strip() or None

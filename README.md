@@ -670,7 +670,7 @@ Settings.
 ## What's new in v0.35.6
 
 v0.35.6 is the free download. Compared with v0.18.0, the free download before
-it, it adds what's below. The current version, **v0.36.1**, is what
+it, it adds what's below. The current version, **v0.37.0**, is what
 [Supporter licence](#supporting-sortero) holders get: Gig prep's main stick step
 asks one question, *How do you want to make it?*, with one button that follows
 the answer, and the cue point options move to a window of their own. It can

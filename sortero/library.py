@@ -26,6 +26,9 @@ class Rec:
     genre: str = None
     key: str = None
     bpm: str = None
+    # True when the file has no BPM tag and `bpm` is Mixed In Key's beat-grid
+    # tempo instead. Writing it to the tag is a To do job.
+    bpm_from_mik: bool = False
     grouping: str = None
     comment: str = None
     energylevel: str = None
@@ -133,6 +136,8 @@ def scan(root, progress=None, order=None):
         r.stray_id3 = got["stray"]
         for f in TAG_FIELDS:
             setattr(r, f, got["tags"].get(f))
+        if not r.bpm and got["tags"].get("mik_bpm"):
+            r.bpm, r.bpm_from_mik = got["tags"]["mik_bpm"], True
         r.duration, r.bitrate = got["duration"], got["bitrate"]
         if not r.artist or not r.title:
             a, ti = split_artist_title(clean_stem(p), order)
@@ -157,8 +162,10 @@ def _read(path):
     t = Track(path)
     if not t.ok:
         return {"stray": t.stray_id3, "tags": {}, "duration": 0.0, "bitrate": 0}
-    return {"stray": t.stray_id3,
-            "tags": {f: _clean(t.get(f)) for f in TAG_FIELDS},
+    tags = {f: _clean(t.get(f)) for f in TAG_FIELDS}
+    if not tags["bpm"]:
+        tags["mik_bpm"] = t.mik_bpm()
+    return {"stray": t.stray_id3, "tags": tags,
             "duration": t.length or 0.0, "bitrate": t.bitrate or 0}
 
 

@@ -2,7 +2,7 @@
 import os, traceback
 from tkinter import ttk, messagebox
 
-from .. import ui, importer, paths, review, settings, headers, fixtags, organize
+from .. import ui, importer, paths, review, settings, headers, fixtags, organize, bpmfix
 from ..common import human_size, NAME_ORDERS, NAME_ORDER_LABELS, ARTIST_TITLE
 from .base import Screen, APP, needs_genre, is_mix, in_unsorted
 from .spellings import SpellingsDialog
@@ -137,6 +137,14 @@ class TodoScreen(Screen):
                       "analysis tool.", "Show them", lambda: app.show_library("key"),
                       link_text="Which analysis tool?", link_command=self._analysis_help)
 
+        mik = [r for r in live if r.bpm_from_mik]
+        if mik:
+            self._job(f"{ui.plural(len(mik), 'track')} with a BPM only Mixed In Key can see",
+                      "Mixed In Key measured their tempo and kept it in its beat grid, "
+                      "but didn't write the BPM tag, so other DJ apps show no BPM. "
+                      "Sortero can write it for you.",
+                      "Write BPM tags…", lambda: self._write_mik(mik))
+
         swapped = [r for r in h.get("swapped", []) if not is_mix(r)]
         if swapped:
             self._job(f"{ui.plural(len(swapped), 'track')} with artist and title "
@@ -244,6 +252,29 @@ class TodoScreen(Screen):
             self.app.changed()
 
         self.app.task.run(work, done, "Repairing headers")
+
+    def _write_mik(self, recs):
+        root = self.app.root_dir.get()
+        names = [f"{os.path.relpath(r.path, root)}  ({r.bpm})" for r in recs[:5]]
+        more = len(recs) - len(names)
+        msg = (f"Write the BPM tag of {ui.plural(len(recs), 'track')}?\n\n"
+               + "\n".join(names) + (f"\n…and {more:,} more." if more else "")
+               + "\n\nEach gets the tempo Mixed In Key measured. Nothing else in the "
+                 "file changes, and you can undo this from History.")
+        if not messagebox.askyesno(APP, msg):
+            return
+
+        def work(progress, log):
+            return bpmfix.write_mik(root, recs, log=log, progress=progress)
+
+        def done(res):
+            _, failed = res
+            messagebox.showinfo(APP, f"Wrote {ui.plural(len(recs) - failed, 'BPM tag')}."
+                                + (f"\n{failed} couldn't be written. History → Show log "
+                                   "says why." if failed else ""))
+            self.app.changed()
+
+        self.app.task.run(work, done, "Writing BPM tags")
 
     def _place(self, recs):
         review.ReviewDialog(self.app, self.app, recs,

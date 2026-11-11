@@ -198,6 +198,54 @@ class LibraryNextSteps(unittest.TestCase):
         lib.leave_title_artist()
         self.assertEqual([r.title for r in lib.rows], ["DAVÍ - Boarding Call"])
 
+    def test_lists_are_in_view_with_their_counts(self):
+        app = self.app
+        app.show_library("all")
+        app.update()
+        lib = app.screens["library"]
+        self.assertEqual(lib.chips["all"].cget("text"), "All tracks  3")
+        self.assertEqual(lib.chips["genre"].cget("text"), "Needs a genre  3")
+        self.assertEqual(lib.other_btn.cget("text"), "Other lists")
+        labels = [lib.other_menu.entrycget(i, "label")
+                  for i in range(lib.other_menu.index("end") + 1)]
+        self.assertIn("Title names a different artist  (2)", labels)
+
+        # chosen from To do, a list in Other lists says so on its button
+        app.show_library("title_artist")
+        self.assertEqual(lib.other_btn.cget("text"), "Other: Another artist")
+        lib.chips["genre"].invoke()
+        self.assertEqual(lib.filter_key(), "genre")
+        self.assertEqual(lib.other_btn.cget("text"), "Other lists")
+
+    def test_the_tools_for_selected_tracks_are_in_view(self):
+        app = self.app
+        app.show_library("all")
+        app.update()
+        lib = app.screens["library"]
+        lib.tv.selection_set(())
+        lib._sync()
+        self.addCleanup(lambda: (lib.tv.selection_set(()), lib._sync()))
+        self.assertEqual(str(lib.edit_btn.cget("state")), "disabled")
+        self.assertEqual(str(lib.stage_btn.cget("state")), "disabled")
+        self.assertEqual(str(lib.place_btn.cget("state")), "normal")
+        self.assertIn("select some to work on them", lib.count.cget("text"))
+        swap = lib.names_menu.index("Swap artist and title…")
+        self.assertEqual(lib.names_menu.entrycget(swap, "state"), "disabled")
+        # copying genres from folders works on the whole list, so it stays on
+        folder = lib.genres_menu.index("Use folder names as genres…")
+        self.assertEqual(lib.genres_menu.entrycget(folder, "state"), "normal")
+
+        lib.select_all()
+        self.assertEqual(str(lib.edit_btn.cget("state")), "normal")
+        self.assertEqual(lib.edit_btn.cget("text"), "Edit 3 tracks…")
+        self.assertEqual(lib.place_btn.cget("text"), "Place 3 one by one…")
+        self.assertEqual(lib.names_menu.entrycget(swap, "state"), "normal")
+        # More keeps only what's left over
+        more = [lib.bar.menu.entrycget(i, "label") for i in range(lib.bar.menu.index("end") + 1)
+                if lib.bar.menu.type(i) == "command"]
+        self.assertNotIn("Send selected to analysis…", more)
+        self.assertIn("Shrink lossless tracks to MP3 320…", more)
+
     def test_no_guide_or_becomes_on_plain_lists(self):
         app = self.app
         app.show_library("all")

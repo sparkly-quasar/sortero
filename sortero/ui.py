@@ -128,6 +128,16 @@ def _style():
     s.configure("Good.TLabel", foreground=c("good"))
     s.configure("Bad.TLabel", foreground=c("bad"))
     s.configure("Link.TLabel", foreground=c("link"))
+    # A list to show, as a toggle: Library's lists. On macOS the native
+    # Toolbutton already looks like a toggle; elsewhere it's flat until hovered,
+    # so it gets a border, and the chosen one the selection colour.
+    s.configure("Chip.Toolbutton", padding=(10, 3))
+    if not IS_MAC:
+        s.configure("Chip.Toolbutton", relief="solid", borderwidth=1)
+        s.map("Chip.Toolbutton",
+              background=[("selected", c("select")), ("active", c("border"))],
+              foreground=[("selected", c("on_select"))],
+              relief=[("selected", "solid"), ("active", "solid")])
     s.configure("Treeview", rowheight=int(tkfont.Font(font=BODY).metrics("linespace") * 1.45))
 
 

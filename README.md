@@ -126,7 +126,7 @@ open.
 |---|---|
 | **To do** | Home. Cards for the jobs worth doing, most useful first, each with one button: AIFF or WAV files whose header an older Sortero damaged (see [below](#aiff-and-wav-files-with-a-damaged-header)), analysed tracks waiting in `Processed`, tracks in `Unsorted`, tracks with no genre, tracks not analysed yet, tracks whose artist and title are the wrong way round, tags full of download-site spam. The number beside it in the sidebar is how many jobs there are. Last, and not counted as a job, a suggestion to [shrink lossless tracks to MP3](#shrinking-lossless-tracks-to-mp3) when that would free 100 MB or more, with how much it would save; **Keep my lossless files** puts it away for good. |
 | **Add music** | Choose a folder or files. Analysed tracks go to the folder that already means their genre — yours if you have one. Anything missing a key lands in `To Be Processed`. Tracks with no genre to go on are **held back for you to place** instead of being dropped in `Unsorted`. Tracks already in the library are pointed out, not added twice. |
-| **Library** | Every track in one list. **Show** filters to what needs work (no genre, not analysed, no energy, no artist, artist and title swapped, no BPM, low bitrate, lossless files); **Search** narrows it; click a column heading to sort. Select tracks and set a genre, swap artist and title, re-read both from the filename, send them to analysis, place them one by one, copy genres from folder names, look them up on Discogs, or [shrink lossless tracks to MP3](#shrinking-lossless-tracks-to-mp3). Your own set recordings are hidden unless you ask. |
+| **Library** | Every track in one list. The buttons above the table pick a list, each with how many tracks are in it: **All tracks**, **Needs a genre**, **Not analysed**, **No energy**, and **Other lists** for the rest (artist in the title, artist and title swapped, no artist, no BPM, low bitrate, lossless files and more). **Search** narrows it; click a column heading to sort. Select tracks and the toolbar above the table works on them: **Edit details**, **Artist & title** (swap them, take them from the title or the filename), **Genres** (look them up on Discogs, copy them from folder names, ignore tracks that never get one), **Send to analysis** and **Place one by one**. Set a genre at the bottom. **More** has the rest, including [shrinking lossless tracks to MP3](#shrinking-lossless-tracks-to-mp3). Your own set recordings are hidden unless you ask. |
 | **Your playlists** | Every playlist Sortero can see in one list: its own in `_Playlists`, any `.m3u` or `.m3u8` inside your collection, and the ones added in Gig prep from other apps or watched folders. Each shows its track count and how many files are missing; click a column heading to sort. Select one to see its tracks, missing ones marked. **Add to gig set** puts it at the end of Gig prep's set. Sortero's own can be **renamed** or **deleted** (set aside in `_Quarantine`, and History brings it back); ones from other apps are only read, but one you added can be **taken off the list**. **More** also shows a playlist in Finder or Explorer, repairs broken links in Sortero's own, or rebuilds a playlist for each folder. |
 | **Streaming playlists** | Rebuild a Spotify or TIDAL playlist against your local files from a link, a pasted tracklist or a CSV — all three offered together above the list. |
 | **Gig prep** | Get a USB stick that plays on any Pioneer or Denon player, and check it before you leave. Tick the playlists you're playing, in set order; Sortero makes gig-safe copies of any track that won't play everywhere, then checks the main and backup sticks and ends with **GIG READY**. See [Gig prep](#gig-prep). |
@@ -143,8 +143,8 @@ system's light or dark appearance.
 Sortero works out genre, artist and title on its own, but not key, BPM or
 energy — those come from an analysis tool. Sortero closes that loop:
 
-1. **To do → "tracks not analysed yet" → Show them**, or **Library → Show: Not
-   analysed yet**. Select what you want.
+1. **To do → "tracks not analysed yet" → Show them**, or **Library → Not
+   analysed**. Select what you want.
 2. **Send to analysis…** moves them into `To Be Processed`.
 3. Run that folder through your analysis tool, saving the results into `Processed`.
 4. **To do → Sort them…** files them by genre. That card appears whenever
@@ -265,9 +265,9 @@ is already being read the way you asked.
 
 Sortero derives genre from tags and folder names. When a file has neither —
 an analysis tool stripped the tag, or a Bandcamp rip never had one — there is
-nothing to infer from, and it lands in `Unsorted`. **Library → Show: Needs a
-genre** is the way out: select a group and set it, or **More → Look up selected
-on Discogs**.
+nothing to infer from, and it lands in `Unsorted`. **Library → Needs a
+genre** is the way out: select a group and set it, or **Genres → Look up
+selected on Discogs**.
 
 Discogs needs no API token. Its free tier is rate limited, so lookups are paced
 at 2.5s and cached on disk — re-running never asks twice. A free personal token
@@ -604,7 +604,7 @@ also in **Library → More** for the tracks you've selected, and To do suggests
 it, with how much space it would save, once that's 100 MB or more. It's this: FLAC, WAV, AIFF and Apple Lossless tracks, at any sample rate or bit
 depth, become MP3 320 kbps at 44.1 kHz, beside where they were and under the same
 name. It works on the tracks you selected, or the whole collection if none are
-(**Show → Lossless files** lists them). MP3s and other lossy files (AAC, Ogg
+(**Library → Other lists → Lossless files** lists them). MP3s and other lossy files (AAC, Ogg
 Vorbis, Opus) are left alone: encoding them again loses quality and often makes
 them bigger.
 

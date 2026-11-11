@@ -97,6 +97,34 @@ def candidates(recs):
             and os.path.splitext(r.path)[1].lower() in MAYBE_LOSSLESS]
 
 
+LOSSLESS_EXT = {".flac", ".fla", ".wav", ".aif", ".aiff"}
+ALAC_MIN_BITRATE = 400_000      # an .m4a above this is Apple Lossless, not AAC
+# MP3 320 against a lossless file whose length couldn't be read: FLAC is
+# usually 800-1000 kbps and CD-quality WAV 1411, so about a third or less
+UNKNOWN_LENGTH_RATIO = 0.3
+# To do only suggests Shrink when it would free at least this much
+WORTH_SUGGESTING = 100 * 1024 * 1024
+
+
+def looks_lossless(r):
+    """A quick guess from the name and the bitrate already read, for counting.
+    plan() asks ffprobe before anything is converted."""
+    ext = os.path.splitext(r.path)[1].lower()
+    return ext in LOSSLESS_EXT or (ext == ".m4a"
+                                   and (r.bitrate or 0) > ALAC_MIN_BITRATE)
+
+
+def quick_estimate(recs):
+    """(tracks, bytes now, bytes as MP3) for the lossless tracks among recs,
+    from what the scan already knows, so To do and Tidy up can say what Shrink
+    would save without probing every file."""
+    todo = [r for r in recs if not r.protected and looks_lossless(r)]
+    now = sum(r.size or 0 for r in todo)
+    after = sum(int(r.duration * BYTES_PER_SECOND) if r.duration
+                else int((r.size or 0) * UNKNOWN_LENGTH_RATIO) for r in todo)
+    return len(todo), now, after
+
+
 def plan(root, recs, archive, progress=None):
     """An Item for every lossless track among recs. Others are left out entirely."""
     recs = candidates(recs)

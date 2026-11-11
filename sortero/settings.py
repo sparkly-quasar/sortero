@@ -24,6 +24,8 @@ DEFAULTS = {
     "gig_sources": [],
     # where Shrink to MP3 moves the originals ("" = "<collection> - Originals")
     "shrink_archive": "",
+    # True once someone has said To do needn't suggest Shrink to MP3 again
+    "shrink_card_hidden": False,
     # a rekordbox collection XML to take cue points from ("" = none)
     "gig_rekordbox_xml": "",
     # the iTunes or Music library XML Gig prep last read playlists from ("" = look

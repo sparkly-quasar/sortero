@@ -3,7 +3,7 @@ import collections, os
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 
-from .. import ui, organize, dupes, fixtags, settings, bpmfix, mixxx, tempo
+from .. import ui, organize, dupes, fixtags, settings, bpmfix, mixxx, tempo, shrink
 from ..transport import Transport
 from ..common import (human_size, name_order_note, ARTIST_TITLE, NAME_ORDERS,
                       NAME_ORDER_LABELS)
@@ -18,7 +18,33 @@ class TidyUpScreen(Screen):
 
     def build(self):
         self.bar.pack_forget()
+        self.scroll = ui.ScrollFrame(self)
+        self.scroll.pack(fill="both", expand=True)
+        self.cards = self.scroll.body
+        self._draw()
+
+    def shown(self):
+        self._draw()
+
+    def invalidate(self):
+        self._draw()
+
+    def _shrink_text(self):
+        text = ("Lossless tracks become MP3 320 with every tag kept. The originals wait "
+                "in an archive until you're sure.")
+        if not self.app.recs:
+            return text
+        n, now, after = shrink.quick_estimate(self.app.recs)
+        if not n:
+            return text + " You have no lossless tracks right now."
+        return (text + f" Yours would save about {human_size(now - after)}: "
+                f"{ui.plural(n, 'lossless track')} take {human_size(now)} now.")
+
+    def _draw(self):
+        for w in self.cards.winfo_children():
+            w.destroy()
         app = self.app
+        cards = []
         for title, text, button, command in (
                 ("Clean tags",
                  "Clear download-site spam from tags, fill in missing artists, put "
@@ -40,10 +66,19 @@ class TidyUpScreen(Screen):
                 ("Fix playlist links",
                  "Re-link playlist entries whose files have moved or changed format.",
                  "Check…", app.repair_playlists),
+                ("Shrink lossless tracks to MP3", self._shrink_text(), "Open",
+                 lambda: app.screens["shrink"].open_for(None, came_from="tidy")),
                 ("Reorganise the whole collection",
                  "Move every track into one genre-folder layout, keeping your current "
                  "folders as playlists.", "Open", lambda: app.show("reorganise"))):
-            ui.Card(self, title, text, button, command).pack(fill="x", pady=(0, ui.GAP))
+            cards.append(ui.Card(self.cards, title, text, button, command))
+        # Two columns, so every tool is in view at once in a normal window: one
+        # column of eight ran off the bottom, and the last tools went unseen.
+        for i, card in enumerate(cards):
+            card.grid(row=i // 2, column=i % 2, sticky="nsew",
+                      padx=(0, ui.GAP) if i % 2 == 0 else (0, 0), pady=(0, ui.GAP))
+        for col in (0, 1):
+            self.cards.columnconfigure(col, weight=1, uniform="tools")
 
 
 class ToolScreen(Screen):

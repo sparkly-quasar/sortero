@@ -60,6 +60,61 @@ class TodoCards(unittest.TestCase):
             self.assertIn(expected, text)
         self.assertNotIn("couldn't be worked out", text)
 
+    def test_shrink_is_suggested_with_the_space_it_saves(self):
+        from unittest import mock
+        from sortero import shrink
+        big = os.path.join(self.root, "Techno", "Big - Lossless.wav")
+        with open(big, "wb") as fh:          # sparse: big on paper, nothing on disk
+            fh.truncate(400 * 1024 * 1024)
+        settings.set("shrink_card_hidden", False)
+        try:
+            text = self.refresh()
+            self.assertIn("by shrinking 1 lossless track to MP3", text)
+            self.assertIn("Save about", text)
+
+            tidy = self.app.screens["tidy"]
+            tidy._draw()
+            tidy_text = " | ".join(_texts(tidy.cards, []))
+            self.assertIn("Shrink lossless tracks to MP3", tidy_text)
+            self.assertIn("1 lossless track take", tidy_text)
+            self.assertIn("Yours would save about", tidy_text)
+
+            # opened from To do, its back link goes to To do
+            scr = self.app.screens["shrink"]
+            with mock.patch.object(scr, "preview"):
+                scr.open_for(None, came_from="todo")
+                self.assertEqual(scr.header.crumb.cget("text"), "‹ To do")
+                self.assertEqual(scr.nav, "todo")
+                self.app.show("tidy")
+                scr.open_for(None, came_from="tidy")
+                self.assertEqual(scr.header.crumb.cget("text"), "‹ Tidy up")
+            self.app.show("todo")
+
+            # it's a suggestion: it doesn't count as a job, and it can be put away
+            jobs = self.app.screens["todo"].jobs
+            os.remove(big)
+            self.refresh()
+            self.assertEqual(self.app.screens["todo"].jobs, jobs)
+            with open(big, "wb") as fh:
+                fh.truncate(400 * 1024 * 1024)
+            with mock.patch("sortero.screens.todo.messagebox.showinfo"):
+                self.app.screens["todo"]._hide_shrink()
+            self.assertNotIn("lossless", self.refresh())
+            self.assertIn("1 lossless track take", " | ".join(_texts(tidy.cards, [])))
+        finally:
+            settings.set("shrink_card_hidden", False)
+            if os.path.exists(big):
+                os.remove(big)
+
+    def test_small_savings_arent_suggested(self):
+        small = os.path.join(self.root, "Techno", "Small - Lossless.wav")
+        with open(small, "wb") as fh:
+            fh.truncate(20 * 1024 * 1024)
+        try:
+            self.assertNotIn("lossless", self.refresh())
+        finally:
+            os.remove(small)
+
     def test_a_failing_check_keeps_the_cards_before_it(self):
         todo = self.app.screens["todo"]
         real = todo._checks

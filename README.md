@@ -124,13 +124,13 @@ open.
 
 | Screen | What it's for |
 |---|---|
-| **To do** | Home. Cards for the jobs worth doing, most useful first, each with one button: AIFF or WAV files whose header an older Sortero damaged (see [below](#aiff-and-wav-files-with-a-damaged-header)), analysed tracks waiting in `Processed`, tracks in `Unsorted`, tracks with no genre, tracks not analysed yet, tracks whose artist and title are the wrong way round, tags full of download-site spam. The number beside it in the sidebar is how many jobs there are. |
+| **To do** | Home. Cards for the jobs worth doing, most useful first, each with one button: AIFF or WAV files whose header an older Sortero damaged (see [below](#aiff-and-wav-files-with-a-damaged-header)), analysed tracks waiting in `Processed`, tracks in `Unsorted`, tracks with no genre, tracks not analysed yet, tracks whose artist and title are the wrong way round, tags full of download-site spam. The number beside it in the sidebar is how many jobs there are. Last, and not counted as a job, a suggestion to [shrink lossless tracks to MP3](#shrinking-lossless-tracks-to-mp3) when that would free 100 MB or more, with how much it would save; **Keep my lossless files** puts it away for good. |
 | **Add music** | Choose a folder or files. Analysed tracks go to the folder that already means their genre — yours if you have one. Anything missing a key lands in `To Be Processed`. Tracks with no genre to go on are **held back for you to place** instead of being dropped in `Unsorted`. Tracks already in the library are pointed out, not added twice. |
 | **Library** | Every track in one list. **Show** filters to what needs work (no genre, not analysed, no energy, no artist, artist and title swapped, no BPM, low bitrate, lossless files); **Search** narrows it; click a column heading to sort. Select tracks and set a genre, swap artist and title, re-read both from the filename, send them to analysis, place them one by one, copy genres from folder names, look them up on Discogs, or [shrink lossless tracks to MP3](#shrinking-lossless-tracks-to-mp3). Your own set recordings are hidden unless you ask. |
 | **Your playlists** | Every playlist Sortero can see in one list: its own in `_Playlists`, any `.m3u` or `.m3u8` inside your collection, and the ones added in Gig prep from other apps or watched folders. Each shows its track count and how many files are missing; click a column heading to sort. Select one to see its tracks, missing ones marked. **Add to gig set** puts it at the end of Gig prep's set. Sortero's own can be **renamed** or **deleted** (set aside in `_Quarantine`, and History brings it back); ones from other apps are only read, but one you added can be **taken off the list**. **More** also shows a playlist in Finder or Explorer, repairs broken links in Sortero's own, or rebuilds a playlist for each folder. |
 | **Streaming playlists** | Rebuild a Spotify or TIDAL playlist against your local files from a link, a pasted tracklist or a CSV — all three offered together above the list. |
 | **Gig prep** | Get a USB stick that plays on any Pioneer or Denon player, and check it before you leave. Tick the playlists you're playing, in set order; Sortero makes gig-safe copies of any track that won't play everywhere, then checks the main and backup sticks and ends with **GIG READY**. See [Gig prep](#gig-prep). |
-| **Tidy up** | Tools for an existing collection: **Clean tags** (including which way round filenames read), **Fix wrong BPMs**, **Find duplicates**, **Place a folder's tracks by hand**, **Flatten release folders**, **Fix playlist links**, and **Reorganise the whole collection**. Every tool previews before it changes anything. |
+| **Tidy up** | Tools for an existing collection: **Clean tags** (including which way round filenames read), **Fix wrong BPMs**, **Find duplicates**, **Place a folder's tracks by hand**, **Flatten release folders**, **Fix playlist links**, **Shrink lossless tracks to MP3** (with how much space it would save), and **Reorganise the whole collection**. Every tool previews before it changes anything. |
 | **History** | Every operation, with undo, and the **safety net**. **Show log** reveals the detailed log. |
 | **Settings** | Collection folder, update checks, Discogs token, Spotify and TIDAL accounts, and the setup guide. |
 
@@ -599,8 +599,9 @@ uses that build if you've made one, or the ffmpeg on your PATH
 
 ## Shrinking lossless tracks to MP3
 
-**Library → More → Shrink lossless tracks to MP3 320…** makes the collection
-smaller: FLAC, WAV, AIFF and Apple Lossless tracks, at any sample rate or bit
+**Tidy up → Shrink lossless tracks to MP3** makes the collection smaller. It's
+also in **Library → More** for the tracks you've selected, and To do suggests
+it, with how much space it would save, once that's 100 MB or more. It's this: FLAC, WAV, AIFF and Apple Lossless tracks, at any sample rate or bit
 depth, become MP3 320 kbps at 44.1 kHz, beside where they were and under the same
 name. It works on the tracks you selected, or the whole collection if none are
 (**Show → Lossless files** lists them). MP3s and other lossy files (AAC, Ogg
@@ -632,6 +633,11 @@ them bigger.
   by its path without the extension, and Shrink keeps folder and name the same.
   Let Navidrome scan before retagging anything; `navidrome missing list` shows
   any it didn't match, and `navidrome missing fix` moves their history across.
+  **Keep the archive out of every folder Navidrome scans.** If it can see the
+  originals in their new place, every tag the same, it takes them for the
+  tracks it knew, and lists the MP3s as new tracks without their history. The
+  same goes for Plex, Jellyfin and other music servers. The Shrink screen says
+  so beside the archive folder, with **Change…** to pick another.
 - **It's one entry in History**, so all of it can be undone, until you delete
   the archived originals. The Shrink screen lists each archive with **Delete
   them…**, which asks you to type DELETE, keeps any original whose MP3 has gone,

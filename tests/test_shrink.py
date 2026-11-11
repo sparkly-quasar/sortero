@@ -25,6 +25,32 @@ class Archive(TempDir):
                 S.archive_dir(root, bad)
 
 
+class QuickEstimate(unittest.TestCase):
+    """What To do and Tidy up say Shrink would save, from the scan alone."""
+
+    def r(self, name, size, duration=0.0, bitrate=0, protected=False):
+        return Rec(path=f"/m/{name}", rel=name, size=size, duration=duration,
+                   bitrate=bitrate, protected=protected)
+
+    def test_counts_lossless_tracks_only(self):
+        mb = 1024 * 1024
+        recs = [self.r("a.flac", 40 * mb, 300), self.r("b.WAV", 50 * mb, 300),
+                self.r("c.aiff", 50 * mb, 300),
+                self.r("alac.m4a", 35 * mb, 300, bitrate=900_000),
+                self.r("aac.m4a", 9 * mb, 300, bitrate=256_000),
+                self.r("d.mp3", 12 * mb, 300, bitrate=320_000),
+                self.r("e.flac", 40 * mb, 300, protected=True)]
+        n, now, after = S.quick_estimate(recs)
+        self.assertEqual(n, 4)
+        self.assertEqual(now, 175 * mb)
+        self.assertEqual(after, 4 * 300 * S.BYTES_PER_SECOND)
+
+    def test_a_track_of_unknown_length_isnt_counted_as_free(self):
+        n, now, after = S.quick_estimate([self.r("a.flac", 1000)])
+        self.assertEqual((n, now), (1, 1000))
+        self.assertEqual(after, 300)
+
+
 @needs_ffmpeg
 class Shrink(TempDir):
     def setUp(self):

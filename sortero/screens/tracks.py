@@ -365,7 +365,7 @@ class LibraryScreen(Screen):
 
     def shrink(self):
         """Selected tracks if any, otherwise the whole collection."""
-        self.app.screens["shrink"].open_for(self._selected() or None)
+        self.app.screens["shrink"].open_for(self._selected() or None, came_from="library")
 
     def reveal(self):
         recs = self._selected()

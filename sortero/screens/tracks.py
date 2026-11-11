@@ -31,6 +31,13 @@ FILTERS = [
                                                        ".aiff")),
 ]
 LABELS = {k: label for k, label, _ in FILTERS}
+# The lists most people need, shown as buttons with their counts. The rest sit
+# in Other lists, under a short name the button shows while one is chosen.
+CHIPS = {"all": "All tracks", "genre": "Needs a genre", "key": "Not analysed",
+         "energy": "No energy"}
+OTHER = {"repeat": "Artist in title", "title_artist": "Another artist",
+         "swapped": "Swapped", "artist": "No artist", "bpm": "No BPM",
+         "genre_ignored": "Ignored", "bitrate": "Low bitrate", "lossless": "Lossless"}
 
 COLUMNS = [("artist", "Artist", 160), ("title", "Title", 230),
            ("new_artist", "New artist", 160), ("new_title", "New title", 230),
@@ -83,13 +90,15 @@ class LibraryScreen(Screen):
     title = "Library"
     summary = ("Every track in your collection. Show what needs work, select tracks, "
                "and fix them together.")
-    details = ("Choose what to show, then select tracks. Shift-click selects a range. "
+    details = ("Choose a list above the table: the number on each is how many tracks "
+               "are in it, and Other lists has the rest. Then select tracks and use "
+               "the buttons above the table. Shift-click selects a range. "
                "Click a column heading to sort by it: sorting by artist or folder lets "
-               "you select whole groups at once. Right-click a track to edit its "
-               "artist, title or album. Set a genre directly, or use More to "
-               "copy genres from folder names or look them up on Discogs. Tracks that "
-               "should never have a genre can be ignored from More, so they stop "
-               "being flagged.\n\n"
+               "you select whole groups at once. Right-click a track for the same "
+               "tools. Set a genre at the bottom, or use Genres to copy genres from "
+               "folder names or look them up on Discogs. Tracks that should never "
+               "have a genre can be ignored from Genres, so they stop being "
+               "flagged.\n\n"
                "Tracks with no key need your analysis tool. Show 'Not analysed yet', "
                "select them and send them to analysis: they move to 'To Be Processed', "
                "and once you've saved the results into 'Processed', To do offers to sort "
@@ -104,18 +113,69 @@ class LibraryScreen(Screen):
         # small window and would otherwise clip it
         self.hide_mixes = tk.BooleanVar(value=True)
         ttk.Checkbutton(top, text="Hide set recordings", variable=self.hide_mixes,
-                        command=self.refresh).pack(side="right")
-        ttk.Label(top, text="Show").pack(side="left")
-        self.filter_var = tk.StringVar(value=LABELS["all"])
-        box = ttk.Combobox(top, textvariable=self.filter_var, width=26, state="readonly",
-                           values=[label for _, label, _ in FILTERS])
-        box.pack(side="left", padx=(ui.GAP, 0))
-        box.bind("<<ComboboxSelected>>", lambda e: self.refresh())
-        ttk.Label(top, text="Search").pack(side="left", padx=(ui.SECTION, 0))
+                        command=self._hide_changed).pack(side="right")
+        ttk.Label(top, text="Search", width=9).pack(side="left")
         self.search_var = tk.StringVar()
-        ttk.Entry(top, textvariable=self.search_var, width=24).pack(side="left",
+        ttk.Entry(top, textvariable=self.search_var, width=32).pack(side="left",
                                                                     padx=(ui.GAP, 0))
         self.search_var.trace_add("write", lambda *a: self._debounce())
+
+        # The lists, as buttons. They used to be a Show dropdown, which hid what
+        # lists there were and how many tracks were in each until you opened it.
+        lists = ttk.Frame(self)
+        lists.pack(fill="x", pady=(0, ui.GAP))
+        self.filter_var = tk.StringVar(value="all")
+        self.chips = {}
+        ttk.Label(lists, text="Show", width=9).pack(side="left")
+        for k, label in CHIPS.items():
+            b = ttk.Radiobutton(lists, text=label, value=k, variable=self.filter_var,
+                                style="Chip.Toolbutton", command=self.refresh)
+            b.pack(side="left", padx=(0, 4))
+            self.chips[k] = b
+        self.other_btn = ttk.Menubutton(lists, text="Other lists")
+        self.other_menu = tk.Menu(self.other_btn, tearoff=0)
+        self.other_btn.configure(menu=self.other_menu)
+        self.other_btn.pack(side="left", padx=(ui.GAP, 0))
+        self.counts = {}
+        self._counted_for = None
+
+        # What can be done to the selected tracks, in view: these used to live
+        # in More, where people who didn't know Sortero never found them.
+        self.tools = ttk.Frame(self)
+        self.tools.pack(fill="x", pady=(0, ui.GAP))
+        ttk.Label(self.tools, text="Selected", width=9).pack(side="left")
+        self.edit_btn = ttk.Button(self.tools, text="Edit details…",
+                                   command=self.edit_details)
+        self.edit_btn.pack(side="left")
+        self.names_btn = ttk.Menubutton(self.tools, text="Artist & title")
+        self.names_menu = tk.Menu(self.names_btn, tearoff=0)
+        for item in (
+                ("Swap artist and title…", self.swap_names),
+                ("Take artist and title from the title…", self.credit_from_title),
+                ("Read artist and title from the filename…", self.names_from_file),
+                None,
+                ("Leave as they are (the title names another artist)",
+                 self.leave_title_artist)):
+            self._add(self.names_menu, item)
+        self.names_btn.configure(menu=self.names_menu)
+        self.names_btn.pack(side="left", padx=(ui.GAP, 0))
+        self.genres_btn = ttk.Menubutton(self.tools, text="Genres")
+        self.genres_menu = tk.Menu(self.genres_btn, tearoff=0)
+        for item in (
+                ("Look up selected on Discogs…", self.lookup),
+                ("Use folder names as genres…", self.apply_from_folder),
+                None,
+                ("Ignore selected for genres", lambda: self.ignore_genre(True)),
+                ("Stop ignoring selected for genres", lambda: self.ignore_genre(False))):
+            self._add(self.genres_menu, item)
+        self.genres_btn.configure(menu=self.genres_menu)
+        self.genres_btn.pack(side="left", padx=(ui.GAP, 0))
+        self.stage_btn = ttk.Button(self.tools, text="Send to analysis…",
+                                    command=self.stage)
+        self.stage_btn.pack(side="left", padx=(ui.GAP, 0))
+        self.place_btn = ttk.Button(self.tools, text="Place one by one…",
+                                    command=self.review_one_by_one)
+        self.place_btn.pack(side="left", padx=(ui.GAP, 0))
 
         # appears only while Discogs is being asked, or has answers waiting
         self.strip = ttk.Frame(self)
@@ -167,28 +227,14 @@ class LibraryScreen(Screen):
         self.genre_box.pack(side="left", padx=(ui.GAP, 0))
         self.set_btn = ttk.Button(left, text="Set", command=self.apply_manual)
         self.set_btn.pack(side="left", padx=(ui.GAP, 0))
+        # Only what's left over: everything for the selected tracks is above
+        # the table.
         self.bar.set_more([
             ("Select all", self.select_all),
-            ("Edit details of selected…", self.edit_details),
-            None,
-            ("Look up selected on Discogs…", self.lookup),
-            ("Use folder names as genres…", self.apply_from_folder),
-            ("Ignore selected for genres", lambda: self.ignore_genre(True)),
-            ("Stop ignoring selected for genres", lambda: self.ignore_genre(False)),
-            None,
-            ("Swap artist and title on selected…", self.swap_names),
-            ("Take artist and title from the title on selected…", self.credit_from_title),
-            ("Leave selected as they are (title names another artist)",
-             self.leave_title_artist),
-            ("Read artist and title from the filename…", self.names_from_file),
-            None,
-            ("Send selected to analysis…", self.stage),
-            ("Place selected one by one…", self.review_one_by_one),
-            ("Place a folder's tracks by hand…", lambda: self.app.review_folder()),
-            None,
-            ("Show in Finder" if paths.IS_MAC else "Show in folder", self.reveal),
             ("Copy track names", self.copy),
+            ("Show in Finder" if paths.IS_MAC else "Show in folder", self.reveal),
             None,
+            ("Place a folder's tracks by hand…", lambda: self.app.review_folder()),
             ("Shrink lossless tracks to MP3 320…", self.shrink),
         ])
 
@@ -199,12 +245,45 @@ class LibraryScreen(Screen):
         self._after = None
         self._sync()
 
+    @staticmethod
+    def _add(menu, item):
+        """item: (label, command), or None for a separator"""
+        if item is None:
+            menu.add_separator()
+        else:
+            menu.add_command(label=item[0], command=item[1])
+
     # -- listing -----------------------------------------------------------
     def filter_key(self):
-        for k, label, _ in FILTERS:
-            if label == self.filter_var.get():
-                return k
-        return "all"
+        k = self.filter_var.get()
+        return k if k in LABELS else "all"
+
+    def _listed(self, recs, pred):
+        hide = self.hide_mixes.get()
+        return [r for r in recs if not r.protected and pred(r)
+                and not (hide and is_mix(r))]
+
+    def _update_counts(self):
+        """How many tracks each list holds, on its button and in Other lists."""
+        recs = self.app.recs or []
+        self._counted_for = (id(self.app.recs), self.hide_mixes.get())
+        self.counts = {k: len(self._listed(recs, self._pred(k))) for k in LABELS}
+        for k, b in self.chips.items():
+            b.configure(text=f"{CHIPS[k]}  {self.counts[k]:,}" if recs else CHIPS[k])
+        self.other_menu.delete(0, "end")
+        for k in OTHER:
+            self.other_menu.add_radiobutton(
+                label=f"{LABELS[k]}  ({self.counts[k]:,})" if recs else LABELS[k],
+                value=k, variable=self.filter_var, command=self.refresh)
+        self._label_other()
+
+    def _label_other(self):
+        k = self.filter_key()
+        self.other_btn.configure(text=f"Other: {OTHER[k]}" if k in OTHER
+                                 else "Other lists")
+
+    def _hide_changed(self):
+        self.refresh()          # the counts follow, since what's hidden changed
 
     def _pred(self, key):
         """The test for the chosen filter, including the ones needing context."""
@@ -218,13 +297,14 @@ class LibraryScreen(Screen):
         return dict((k, fn) for k, _, fn in FILTERS)[key]
 
     def set_filter(self, key):
-        self.filter_var.set(LABELS.get(key, LABELS["all"]))
+        self.filter_var.set(key if key in LABELS else "all")
         self.search_var.set("")
         self.refresh()
 
     def invalidate(self):
         vocab = sorted(organize.CANONICAL)
         self.genre_box.configure(values=vocab)
+        self._update_counts()
         self.refresh()
 
     def _debounce(self):
@@ -262,13 +342,13 @@ class LibraryScreen(Screen):
         self.tv.delete(*self.tv.get_children())
         self.rows = []
         recs = self.app.recs
+        if self._counted_for != (id(recs), self.hide_mixes.get()):
+            self._update_counts()
         if recs:
             pred = self._pred(self.filter_key())
             q = self.search_var.get().strip().lower()
-            hide = self.hide_mixes.get()
-            rows = [r for r in recs
-                    if not r.protected and pred(r) and not (hide and is_mix(r))
-                    and (not q or q in f"{r.artist or ''} {r.title or ''} {r.rel}".lower())]
+            rows = [r for r in self._listed(recs, pred)
+                    if not q or q in f"{r.artist or ''} {r.title or ''} {r.rel}".lower()]
             self._becomes = self._after_fix(rows)
             rows.sort(key=self._sort_key(), reverse=self.sort_desc)
             self.rows = rows
@@ -295,6 +375,7 @@ class LibraryScreen(Screen):
         for cid, heading, _ in COLUMNS:
             arrow = (" ▼" if self.sort_desc else " ▲") if cid == self.sort_col else ""
             self.tv.heading(cid, text=heading + arrow)
+        self._label_other()
         self._update_strip()
         self._update_guide()
         self._sync()
@@ -325,15 +406,29 @@ class LibraryScreen(Screen):
         else:
             self.leave_link.pack_forget()
         if not self.guide.winfo_manager():
-            self.guide.pack(fill="x", pady=(0, ui.GAP), before=self.table)
+            self.guide.pack(fill="x", pady=(0, ui.GAP), before=self.tools)
 
     def _sync(self):
         n = len(self.tv.selection())
         if self.app.recs:
             self.count.configure(text=ui.plural(len(self.rows), "track")
-                                 + (f" · {n:,} selected" if n else ""))
+                                 + (f" · {n:,} selected" if n else
+                                    " · select some to work on them"
+                                    if self.rows else ""))
         else:
             self.count.configure(text="")
+        some = "normal" if n else "disabled"
+        self.edit_btn.configure(state=some,
+                                text="Edit details…" if n < 2 else f"Edit {n:,} tracks…")
+        self.stage_btn.configure(state=some)
+        self.place_btn.configure(state="normal" if self.rows else "disabled",
+                                 text=f"Place {n:,} one by one…" if n > 1 else
+                                 "Place one by one…")
+        for menu in (self.names_menu, self.genres_menu):
+            for i in range(menu.index("end") + 1):
+                if menu.type(i) == "command" and menu.entrycget(i, "label") != \
+                        "Use folder names as genres…":
+                    menu.entryconfigure(i, state=some)
         key = self.filter_key()
         if key == "key":
             self.bar.set_primary(f"Send {n:,} to analysis…" if n else "Send to analysis…",
@@ -352,8 +447,8 @@ class LibraryScreen(Screen):
                                  else "Select tracks to swap",
                                  self.swap_names, state="normal" if n else "disabled")
         else:
-            self.bar.set_primary("Place one by one…", self.review_one_by_one,
-                                 state="normal" if self.rows else "disabled")
+            # Placing is above the table now, with the other tools
+            self.bar.set_primary(None)
         self.set_btn.configure(state="normal" if n else "disabled")
 
     def select_all(self):
@@ -365,7 +460,7 @@ class LibraryScreen(Screen):
 
     def shrink(self):
         """Selected tracks if any, otherwise the whole collection."""
-        self.app.screens["shrink"].open_for(self._selected() or None)
+        self.app.screens["shrink"].open_for(self._selected() or None, came_from="library")
 
     def reveal(self):
         recs = self._selected()
@@ -474,6 +569,7 @@ class LibraryScreen(Screen):
         set_genre_ignored(recs, on)
         if self.app.health:
             self.app.health.update(library.genre_health(self.app.recs))
+        self._update_counts()
         self.refresh()
         messagebox.showinfo(
             APP, f"{ui.plural(len(recs), 'track')} "
@@ -496,7 +592,7 @@ class LibraryScreen(Screen):
                  if self.suggested.get(r.path, (None,))[0]]
         if not pairs:
             messagebox.showinfo(APP, "No suggestions yet. Select tracks and choose "
-                                     "More → Look up selected on Discogs.")
+                                     "Genres → Look up selected on Discogs.")
             return
         self._write(pairs, f"Accept Discogs' genre for {ui.plural(len(pairs), 'track')}?",
                     then=lambda done: [self.suggested.pop(r.path, None) for r, _ in done])
@@ -574,6 +670,7 @@ class LibraryScreen(Screen):
             messagebox.showinfo(APP, "Select the tracks that are right as they are first.")
             return
         fixtags.leave_title_artist(recs)
+        self._update_counts()
         self.refresh()
         self.app.refresh_todo()
 
@@ -675,7 +772,7 @@ class LibraryScreen(Screen):
             self.stop_btn.configure(state="disabled")
             self.accept_btn.configure(state="normal")
         if not self.strip.winfo_ismapped():
-            self.strip.pack(fill="x", pady=(0, ui.GAP), before=self.table)
+            self.strip.pack(fill="x", pady=(0, ui.GAP), before=self.tools)
 
     def stop_lookup(self):
         self._stop.set()

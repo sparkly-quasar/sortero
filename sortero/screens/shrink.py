@@ -1,7 +1,7 @@
 """Shrink to MP3: lossless tracks become MP3 320, tags kept, originals archived.
 
 Opened from Library's More menu, for the tracks selected there or the whole
-collection. It lists what would change and how much space it saves before
+collection, and for the whole collection from Tidy up and from To do's card. It lists what would change and how much space it saves before
 anything happens. Afterwards the originals sit in an archive outside the
 collection; this screen lists those archives and deletes one when asked.
 """
@@ -15,6 +15,14 @@ from .base import Screen, APP
 from .gig_set import short
 
 FORMATS = {"flac": "FLAC", "alac": "Apple Lossless", "wav": "WAV", "aiff": "AIFF"}
+# the screens that open Shrink, and what the back link calls them
+ORIGINS = {"library": "Library", "tidy": "Tidy up", "todo": "To do"}
+
+# A music server that can see the archive finds the originals there with every
+# tag the same, takes them for the tracks it knew, and lists the MP3s as new.
+SERVER_NOTE = ("Using Navidrome, Plex or another music server? Keep the archive out of "
+               "every folder it scans, or it will follow the originals into the archive "
+               "and list the MP3s as new tracks, without their play counts and stars.")
 
 
 def _format(info):
@@ -45,6 +53,10 @@ class ShrinkScreen(Screen):
                "cues afterwards: an MP3 can start a few milliseconds later than its "
                "original in some players. Mixed In Key's cue points travel inside the "
                "files either way.\n\n"
+               "Navidrome, and Subsonic apps on top of it, should see each MP3 as the same "
+               "track, play counts, stars and playlists included, because the folder and "
+               "name stay the same. That only holds if Navidrome can't also see the "
+               "originals: keep the archive out of every folder it scans.\n\n"
                "It's one entry in History, so it can all be undone, until you delete the "
                "archived originals.")
 
@@ -59,6 +71,8 @@ class ShrinkScreen(Screen):
         self.archive_label = ttk.Label(row, style="Muted.TLabel")
         self.archive_label.pack(side="left")
         ui.link(row, "Change…", self.choose_archive).pack(side="left", padx=(ui.GAP, 0))
+        self.server_label = ui.WrapLabel(self, text=SERVER_NOTE, style="Muted.TLabel")
+        self.server_label.pack(fill="x", pady=(2, 0))
         self.mixxx_label = ui.WrapLabel(self, style="Muted.TLabel")
         self.mixxx_label.pack(fill="x", pady=(2, ui.SECTION))
 
@@ -81,8 +95,13 @@ class ShrinkScreen(Screen):
         self.planned_for = None
 
     # ------------------------------------------------------------ opening
-    def open_for(self, recs=None):
-        """Called by Library: the selected tracks, or None for the whole collection."""
+    def open_for(self, recs=None, came_from=None):
+        """The tracks to look at, or None for the whole collection. came_from is
+        the screen that opened this one (a key of ORIGINS), which the back link
+        and the sidebar follow."""
+        if came_from in ORIGINS and self.app.current is not self:
+            self.nav = came_from
+            self.header.set_crumb(ORIGINS[came_from], lambda: self.app.show(came_from))
         self.recs = list(recs) if recs else None
         self.items, self.planned_for = [], None
         self.result.configure(text="")
@@ -199,7 +218,10 @@ class ShrinkScreen(Screen):
                "check. Your Sortero playlists follow"
                + (", and so does Mixxx." if db else ".")
                + "\n\nrekordbox will show these tracks as missing until you relocate them "
-                 "to the MP3s in rekordbox.\n\nAll of it can be undone from History.")
+                 "to the MP3s in rekordbox. If Navidrome or another music server can "
+                 "see the archive folder, it will take the originals for your tracks "
+                 "and list the MP3s as new: choose another folder first if so."
+                 "\n\nAll of it can be undone from History.")
         if not messagebox.askyesno(APP, msg):
             return
         items = self.items

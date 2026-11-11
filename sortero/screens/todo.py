@@ -2,7 +2,8 @@
 import os, traceback
 from tkinter import ttk, messagebox
 
-from .. import ui, importer, paths, review, settings, headers, fixtags, organize, bpmfix
+from .. import (ui, importer, paths, review, settings, headers, fixtags, organize, bpmfix,
+               shrink)
 from ..common import human_size, NAME_ORDERS, NAME_ORDER_LABELS, ARTIST_TITLE
 from .base import Screen, APP, needs_genre, is_mix, in_unsorted
 from .spellings import SpellingsDialog
@@ -29,8 +30,9 @@ class TodoScreen(Screen):
         self.bar.pack_forget()
         self.stats = ttk.Label(self, style="Muted.TLabel")
         self.stats.pack(fill="x", pady=(0, ui.SECTION))
-        self.cards = ttk.Frame(self)
-        self.cards.pack(fill="both", expand=True)
+        self.scroll = ui.ScrollFrame(self)
+        self.scroll.pack(fill="both", expand=True)
+        self.cards = self.scroll.body
         self.jobs = 0
 
     def shown(self):
@@ -45,6 +47,7 @@ class TodoScreen(Screen):
     def refresh(self):
         for w in self.cards.winfo_children():
             w.destroy()
+        self.scroll.to_top()
         app = self.app
         root = app.root_dir.get()
         self.jobs = 0
@@ -216,6 +219,31 @@ class TodoScreen(Screen):
                        "they're there.",
                        "Show folder", lambda: paths.reveal(folder),
                        link_text="Which analysis tool?", link_command=self._analysis_help)
+
+        # A suggestion, not a problem: plenty of DJs keep lossless on purpose, so
+        # it doesn't count towards the badge, comes last, and can be put away.
+        # Tidy up keeps the tool either way.
+        n, now, after = shrink.quick_estimate(app.recs)
+        if (n and now - after >= shrink.WORTH_SUGGESTING
+                and not settings.get("shrink_card_hidden")):
+            self._card(f"Save about {human_size(now - after)} by shrinking "
+                       f"{ui.plural(n, 'lossless track')} to MP3",
+                       f"They take {human_size(now)} now and would take about "
+                       f"{human_size(after)} as MP3 320. Every tag comes across, cue "
+                       "points and artwork included, and each MP3 keeps its folder and "
+                       "name, so music servers like Navidrome see the same track. The "
+                       "originals wait in an archive until you're sure. You'll see "
+                       "every track before anything changes.",
+                       "Preview…", lambda: app.screens["shrink"].open_for(
+                           None, came_from="todo"),
+                       link_text="Keep my lossless files, don't suggest this again",
+                       link_command=self._hide_shrink)
+
+    def _hide_shrink(self):
+        settings.set("shrink_card_hidden", True)
+        self.refresh()
+        messagebox.showinfo(APP, "To do won't suggest it again. Shrink to MP3 is still "
+                                 "in Tidy up whenever you want it.")
 
     def _analysis_help(self):
         messagebox.showinfo("Which analysis tool?", organize.ANALYSIS_HELP)

@@ -128,6 +128,16 @@ def _style():
     s.configure("Good.TLabel", foreground=c("good"))
     s.configure("Bad.TLabel", foreground=c("bad"))
     s.configure("Link.TLabel", foreground=c("link"))
+    # A list to show, as a toggle: Library's lists. On macOS the native
+    # Toolbutton already looks like a toggle; elsewhere it's flat until hovered,
+    # so it gets a border, and the chosen one the selection colour.
+    s.configure("Chip.Toolbutton", padding=(10, 3))
+    if not IS_MAC:
+        s.configure("Chip.Toolbutton", relief="solid", borderwidth=1)
+        s.map("Chip.Toolbutton",
+              background=[("selected", c("select")), ("active", c("border"))],
+              foreground=[("selected", c("on_select"))],
+              relief=[("selected", "solid"), ("active", "solid")])
     s.configure("Treeview", rowheight=int(tkfont.Font(font=BODY).metrics("linespace") * 1.45))
 
 
@@ -192,6 +202,66 @@ class WrapLabel(ttk.Label):
         self.bind("<Configure>", lambda e: self.configure(wraplength=max(e.width - 4, 200)))
 
 
+class ScrollFrame(ttk.Frame):
+    """A column of content that scrolls when it's taller than the window.
+
+    Put widgets in .body. The scrollbar only shows while there's more than fits,
+    and the wheel or trackpad scrolls it whenever the pointer is over it. To do
+    and Tidy up use it: a big collection can have more cards than a small window
+    has room for, and the ones that didn't fit used to be cut off with no sign
+    they were there.
+    """
+
+    def __init__(self, parent, **kw):
+        super().__init__(parent, **kw)
+        self.canvas = tk.Canvas(self, highlightthickness=0, bd=0, yscrollincrement=20)
+        paint(self.canvas, bg="window")
+        self.bar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
+        self.canvas.configure(yscrollcommand=self._moved)
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.body = ttk.Frame(self.canvas)
+        self._win = self.canvas.create_window(0, 0, window=self.body, anchor="nw")
+        self.body.bind("<Configure>", lambda e: self._fit())
+        self.canvas.bind("<Configure>", lambda e: (
+            self.canvas.itemconfigure(self._win, width=e.width), self._fit()))
+        for seq in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            self.bind_all(seq, self._wheel, add="+")
+
+    def _fit(self):
+        self.canvas.configure(scrollregion=(0, 0, self.body.winfo_reqwidth(),
+                                            self.body.winfo_reqheight()))
+
+    def _moved(self, first, last):
+        self.bar.set(first, last)
+        needed = float(first) > 0 or float(last) < 1
+        if needed and not self.bar.winfo_manager():
+            self.bar.pack(side="right", fill="y", before=self.canvas)
+        elif not needed and self.bar.winfo_manager():
+            self.bar.pack_forget()
+
+    def _wheel(self, e):
+        try:
+            over = self.winfo_containing(e.x_root, e.y_root)
+        except (tk.TclError, KeyError):
+            return
+        if over is None or not str(over).startswith(str(self)):
+            return
+        if self.body.winfo_reqheight() <= self.canvas.winfo_height():
+            return
+        if e.num == 4:
+            step = -1
+        elif e.num == 5:
+            step = 1
+        elif IS_MAC:
+            step = -e.delta                       # small steps, one per notch
+        else:
+            step = -int(e.delta / 120) or (-1 if e.delta > 0 else 1)
+        self.canvas.yview_scroll(step, "units")
+
+    def to_top(self):
+        self.canvas.yview_moveto(0)
+
+
 def link(parent, text, command, style="Link.TLabel"):
     """Text that acts as a button, for quiet secondary actions."""
     lab = ttk.Label(parent, text=text, style=style,
@@ -205,9 +275,12 @@ class Header(ttk.Frame):
 
     def __init__(self, parent, title, summary="", details=None, crumb=None):
         super().__init__(parent)
+        self.crumb = None
+        self._crumb_command = None
         if crumb:
-            text, command = crumb
-            link(self, "‹ " + text, command).pack(anchor="w", pady=(0, 2))
+            text, self._crumb_command = crumb
+            self.crumb = link(self, "‹ " + text, lambda: self._crumb_command())
+            self.crumb.pack(anchor="w", pady=(0, 2))
         row = ttk.Frame(self)
         row.pack(fill="x")
         self.title = ttk.Label(row, text=title, style="Title.TLabel")
@@ -234,6 +307,13 @@ class Header(ttk.Frame):
 
     def set_summary(self, text):
         self.summary.configure(text=text)
+
+    def set_crumb(self, text, command):
+        """Point the back link somewhere else: for a tool reached from more than
+        one screen, it goes back to the one you came from."""
+        if self.crumb:
+            self.crumb.configure(text="‹ " + text)
+            self._crumb_command = command
 
 
 class ActionBar(ttk.Frame):
@@ -303,7 +383,7 @@ class Card(tk.Frame):
                                                                 padx=(12, 0))
         body = tk.Frame(self)
         paint(body, bg="card")
-        body.pack(side="left", fill="x", expand=True)
+        body.pack(side="left", fill="x", expand=True, anchor="n")
         t = tk.Label(body, text=title, font=HEADING, anchor="w", justify="left")
         paint(t, bg="card", fg=tone or "text")
         t.pack(fill="x")

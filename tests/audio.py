@@ -86,3 +86,28 @@ def chunk(path, cid):
 def read(path):
     with open(path, "rb") as fh:
         return fh.read()
+
+
+def drum_loop(bpm, seconds=60.0, kick=0.8, hats=0.35, hat_every=0.5, hat_offset=None,
+              rate=11025, kick_every=1):
+    """A techno-ish loop as mono 16-bit PCM: a kick each beat, hats every
+    `hat_every` beats (0.5 offbeats, 1/3 rolling threes, 0.25 sixteenths)."""
+    beat = 60.0 / bpm
+    kick_shape = [math.sin(2 * math.pi * (55 + 90 * math.exp(-i / (0.01 * rate))) * i / rate)
+                  * math.exp(-i / (0.04 * rate)) for i in range(int(0.12 * rate))]
+    hat_shape, x = [], 12345
+    for i in range(int(0.03 * rate)):           # noise burst, the same every time
+        x = (1103515245 * x + 12345) & 0x7FFFFFFF
+        hat_shape.append(((x / 0x3FFFFFFF) - 1) * math.exp(-i / (0.008 * rate)))
+    n = int(seconds * rate)
+    buf = [0.0] * n
+    hat_offset = hat_every * beat / 2 if hat_offset is None else hat_offset
+    for period, t, shape, gain in ((beat * kick_every, 0.0, kick_shape, kick),
+                                   (beat * hat_every, hat_offset, hat_shape, hats)):
+        while gain and t < seconds:
+            s = int(t * rate)
+            for i, v in enumerate(shape[:n - s]):
+                buf[s + i] += gain * v
+            t += period
+    peak = max(abs(v) for v in buf) or 1.0
+    return b"".join(struct.pack("<h", int(32000 * v / peak)) for v in buf)

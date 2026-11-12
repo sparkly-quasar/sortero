@@ -50,6 +50,13 @@ TOLERANCE = 0.012       # how close a multiple must land to the measured tempo
 # which one to count is the genre's convention.
 MARGIN = 0.05
 OCTAVES = (2.0, 0.5)
+# Those slow tracks pulse at the faster rate, but a genuinely faster tempo is
+# a pulse train with its own spectral line there, and the slow one has none
+# (see tempo._line). On synthetic loops the right tempo's line was 29x or more
+# the wrong one's, and a wrong one's never more than 2x.
+LINE_RATIO = 4.0
+# Thirds of the window whose tempos differ by more than this mean the tempo changes.
+STEADY = 0.02
 
 _backed_up = set()      # Mixxx libraries already backed up this run
 
@@ -95,9 +102,21 @@ def judge(prof, bpm, lo, hi):
     if len(near) != 1:
         return None
     k = near[0]
-    if k not in OCTAVES and prof.score(bpm * k) < prof.score(bpm) + MARGIN:
+    if k not in OCTAVES:
+        if prof.score(bpm * k) < prof.score(bpm) + MARGIN:
+            return None
+        if prof.line(bpm * k) < LINE_RATIO * prof.line(bpm):
+            return None
+    if not steady(prof, lo, hi):
         return None
     return k
+
+
+def steady(prof, lo, hi):
+    """Does the tempo hold through the window? Thirds with no clear pulse (a
+    breakdown) don't count either way."""
+    clear = [b for b, strength in prof.thirds(lo, hi) if strength >= MIN_STRENGTH]
+    return len(clear) < 2 or max(clear) <= min(clear) * (1 + STEADY)
 
 
 def new_tag_value(old, ratio, measured):

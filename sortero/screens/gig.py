@@ -11,7 +11,7 @@ from tkinter import ttk, filedialog, messagebox
 from .. import mixxx, ui, paths, settings
 from ..common import human_size
 from ..gig import (backup, checklist, convert, cues, disks, ffmpeg, profiles, rbxml,
-                   usbexport, verify)
+                   onelibrary, usbexport, verify)
 from ..gig.checklist import DONE, NEXT, WAITING
 from .base import Screen, APP
 from .gig_set import SetPicker, short
@@ -1001,6 +1001,11 @@ class GigScreen(Screen):
                 messagebox.showerror(APP, error)
                 self.refresh()
                 return
+            if not result.onelibrary:
+                m = onelibrary.MISSING
+                messagebox.showwarning(
+                    APP, f"The stick has no OneLibrary. {m[:1].upper() + m[1:]}.\n\n"
+                         "Players other than the newest read the library that was written.")
             if result.missing:
                 messagebox.showwarning(
                     APP, f"{ui.plural(len(result.missing), 'track')} in the set "

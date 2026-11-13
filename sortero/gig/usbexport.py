@@ -287,8 +287,10 @@ def write(stick, xml_path, progress=None, log=print, workers=None, cache=None):
                          artwork=art.table())
         ol_size = os.path.getsize(ol_path)
         res.onelibrary = True
-    elif os.path.exists(ol_path):
-        os.remove(ol_path)          # Sortero's from an earlier run; it no longer matches
+    else:
+        log(f"  ! No OneLibrary: {onelibrary.MISSING}.")
+        if os.path.exists(ol_path):
+            os.remove(ol_path)      # Sortero's from an earlier run; it no longer matches
     _put(stick, MARKER.replace(os.sep, "/"), json.dumps(
         {"written_by": f"Sortero {__version__}", "when": time.strftime("%Y-%m-%d %H:%M"),
          "pdb_size": len(db), "onelibrary_size": ol_size, "audio": sorted(wanted)},

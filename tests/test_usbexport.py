@@ -493,13 +493,19 @@ class Stick(TempDir):
 
     def test_without_sqlcipher_the_newest_players_are_told_its_missing(self):
         from unittest import mock
+        logged = []
         with mock.patch.object(O, "available", return_value=False):
-            res = U.write(self.stick, self.xml, log=lambda *a: None)
+            res = U.write(self.stick, self.xml, log=logged.append)
+            check, _ = V.check_export(self.stick, V.walk(self.stick), P.get("cdj-3000x"))
         self.assertFalse(res.onelibrary)
         self.assertFalse(os.path.exists(os.path.join(self.stick, "PIONEER", "rekordbox",
                                                      O.FILE_NAME)))
-        check, _ = V.check_export(self.stick, V.walk(self.stick), P.get("cdj-3000x"))
+        # the write says so, rather than leaving it for the check to find
+        self.assertTrue(any("SQLCipher" in line for line in logged), logged)
         self.assertEqual(check.level, V.FAIL)
+        # and the check doesn't send them to write the stick again with the same copy
+        self.assertIn("won't help yet", check.details[0])
+        self.assertIn("requirements.txt", check.details[0])
 
     def test_a_rekordbox_stick_is_never_overwritten(self):
         os.makedirs(os.path.join(self.stick, "PIONEER", "rekordbox"))

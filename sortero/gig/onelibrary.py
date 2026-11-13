@@ -43,6 +43,14 @@ def available():
     return _sqlcipher() is not None
 
 
+# What to tell someone when available() is False. The released app always has
+# SQLCipher; a copy run from source has it only once requirements.txt is installed.
+MISSING = ("this copy of Sortero has no SQLCipher, so it can't write OneLibrary "
+           "(exportLibrary.db), the library the newest players (CDJ-3000X, OPUS-QUAD, "
+           "OMNIS-DUO, XDJ-AZ) read. Use the released app, or run "
+           "“pip install -r requirements.txt” if you run Sortero from source")
+
+
 def passphrase():
     data = base64.b85decode(PASSPHRASE_BLOB)
     key = zlib.decompress(bytes(b ^ XOR_KEY[i % len(XOR_KEY)] for i, b in enumerate(data)))

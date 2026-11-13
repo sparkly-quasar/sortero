@@ -256,9 +256,14 @@ def check_export(stick, entries, profile=None):
     levels, parts, details, listed = [], [], [], set()
     for lib in sorted((profile.libraries & profiles.REKORDBOX_LIBRARIES) - present):
         levels.append(FAIL)
+        fix = ("Write the main stick again: Sortero writes both (so does rekordbox "
+               "7.2.11 or later).")
+        if lib == profiles.ONE_LIBRARY and not onelibrary.available():
+            m = onelibrary.MISSING
+            fix = (f"Writing the main stick again won't help yet: {m}. Then write it again "
+                   "(rekordbox 7.2.11 or later writes both too).")
         details.append(f"No {lib} ({LIBRARY_FILES[lib]}), which {WHO_READS[lib]} need to "
-                       "list these playlists. Write the main stick again: Sortero writes "
-                       "both (so does rekordbox 7.2.11 or later).")
+                       f"list these playlists. {fix}")
     sizes = {name_key(e.rel): e.size for e in entries}
 
     def on_stick(tracks):

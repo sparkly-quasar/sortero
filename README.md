@@ -676,7 +676,7 @@ Settings.
 ## What's new in v0.35.6
 
 v0.35.6 is the free download. Compared with v0.18.0, the free download before
-it, it adds what's below. The current version, **v0.38.0**, is what
+it, it adds what's below. The current version, **v0.38.1**, is what
 [Supporter licence](#supporting-sortero) holders get: Library shows its lists
 as buttons with their counts, and the tools for the selected tracks above the
 table, where they used to hide in a menu. Shrink to MP3 is in Tidy up, and To

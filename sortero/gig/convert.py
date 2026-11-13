@@ -21,7 +21,7 @@ resampler, so there's only ever one rounding step.
 Copies are cached by the original's content hash, so a re-run only converts
 what changed, and a track that was moved or renamed is not converted again.
 """
-import concurrent.futures, hashlib, json, os, shutil
+import concurrent.futures, hashlib, json, os, shutil, unicodedata
 from dataclasses import dataclass, field
 
 from .. import paths
@@ -261,6 +261,17 @@ def _convert_one(item, art_px, soxr, check_profile):
             os.remove(tmp)
 
 
+def _same_file(a, b):
+    """Whether two paths name one file. Comparing the strings isn't enough: the same
+    folder can be reached two ways (a symlink, ~/Dropbox vs ~/Library/CloudStorage),
+    and a name like “Rødhåd” can be spelled with composed or decomposed accents."""
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        norm = lambda p: unicodedata.normalize("NFC", os.path.normcase(os.path.abspath(p)))
+        return norm(a) == norm(b)
+
+
 def run(items, profile, cache=None, progress=None, log=print, workers=None):
     """Make every copy the plan calls for. Updates the items in place and returns them."""
     todo = [it for it in items if it.status == CONVERT]
@@ -285,7 +296,7 @@ def run(items, profile, cache=None, progress=None, log=print, workers=None):
             continue
         hit = cache.find(key)
         if hit:
-            if os.path.normcase(hit["out"]) != os.path.normcase(it.out):
+            if not _same_file(hit["out"], it.out):
                 os.makedirs(os.path.dirname(it.out), exist_ok=True)
                 shutil.copyfile(hit["out"], it.out)
                 cache.remember(key, it.out, hit["notes"])

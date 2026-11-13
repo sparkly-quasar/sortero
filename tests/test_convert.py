@@ -249,6 +249,19 @@ class Cached(Base):
         self.assertEqual(again.out, os.path.join(self.lib, "House", "Renamed.mp3"))
         self.assertEqual(sha(again.out), sha(first.out))
 
+    def test_library_reached_by_another_path_reuses_the_copy_in_place(self):
+        # The cached copy and this run's copy are one file under two spellings of
+        # its path (a symlink here; accents or a Dropbox alias in the wild).
+        flac = self.flac_96()
+        [first] = self.go([flac])
+        stamp = os.stat(first.out).st_mtime_ns
+        alias = self.path("Alias")
+        os.symlink(self.lib, alias)
+        self.lib = alias
+        [again] = self.go([flac])
+        self.assertEqual(again.status, C.REUSED)
+        self.assertEqual(os.stat(first.out).st_mtime_ns, stamp)
+
     def test_changed_audio_is_converted_again(self):
         flac = self.flac_96()
         self.go([flac])

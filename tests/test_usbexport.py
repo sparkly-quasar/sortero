@@ -6,7 +6,7 @@ from unittest import mock
 
 from sortero.gig import anlz, cues, devicesql as D, pdb, profiles as P, usbexport as U
 from sortero.gig import artwork as A, waveform as W
-from sortero.gig import onelibrary as O, rbxml, verify as V
+from sortero.gig import enginelib as E, onelibrary as O, rbxml, verify as V
 from tests.audio import write_wav
 from tests.test_tagio import TempDir
 
@@ -541,6 +541,122 @@ class Stick(TempDir):
                          {"01 Short": [1]})
         with open(os.path.join(self.stick, U.MARKER)) as fh:
             self.assertEqual(json.load(fh)["audio"], ["Contents/Alpha/Promo/Opener.wav"])
+
+    # ------------------------------------------------------- Engine DJ
+    def engine(self):
+        return os.path.join(self.stick, E.DATABASE)
+
+    def test_an_engine_library_for_denon_players_over_the_same_audio(self):
+        from tests.test_enginelib import performance, read_beat_data, read_quick_cues
+        res = U.write(self.stick, self.xml, log=lambda *a: None)
+        self.assertTrue(res.engine)
+        tracks, lists = E.read(self.engine())
+        e = pdb.read(os.path.join(self.stick, pdb.RELATIVE))
+        self.assertEqual([(p, t, z) for _, p, t, z in tracks],
+                         [(t.path, t.title, t.size) for t in e.tracks])
+        self.assertEqual(list(lists), ["Gig", "01 Warmup", "02 Peak"])
+        self.assertEqual((lists["01 Warmup"], lists["02 Peak"]), ([1, 2], [3, 2]))
+        # Opener: hot cue A "Drop" at 15.1 s and a 128 BPM grid from 0.1 s, in samples
+        _, bd, qc, _, _ = performance(self.engine(), 1)
+        pads = read_quick_cues(qc)[0]
+        self.assertEqual(pads[0][:2], ("Drop", 15.1 * 44100))
+        markers = read_beat_data(bd)[3]
+        self.assertEqual(markers[0][1], -4)
+        self.assertAlmostEqual(markers[0][0], (0.1 - 4 * 60 / 128) * 44100)
+        for profile in (P.ANY_DENON, P.EVERY):
+            check = V.check_engine(self.stick, profile)
+            self.assertEqual(check.level, V.PASS, check.summary)
+            self.assertIn("hasn't been tried on a real Denon player", check.details[-1])
+            main = V.check_main(self.stick, profile, ["01 Warmup", "02 Peak"])
+            self.assertEqual(main.level, V.PASS, main.summary)
+        self.assertIsNone(U.foreign(self.stick))    # still Sortero's to replace
+
+    def test_writing_again_keeps_the_engine_librarys_identity(self):
+        U.write(self.stick, self.xml, log=lambda *a: None)
+        first = E.info(self.engine())["uuid"]
+        with open(os.path.join(self.stick, U.MARKER)) as fh:
+            self.assertEqual(json.load(fh)["engine"], {"uuid": first, "tracks": 3,
+                                                       "playlists": 3, "schema": [3, 0, 2]})
+        hm = os.path.join(os.path.dirname(self.engine()), "hm.db")
+        with open(hm, "wb") as fh:                  # a player's history: theirs
+            fh.write(b"history")
+        gig_xml(self.xml, [(1, self.files[0], "Opener", "Alpha", "")], [("01 Short", [1])])
+        U.write(self.stick, self.xml, log=lambda *a: None)
+        self.assertEqual(E.info(self.engine())["uuid"], first)
+        self.assertEqual(E.read(self.engine())[1], {"Gig": [], "01 Short": [1]})
+        self.assertTrue(os.path.isfile(hm))
+
+    def test_for_pioneer_players_only_no_engine_library(self):
+        U.write(self.stick, self.xml, log=lambda *a: None)
+        res = U.write(self.stick, self.xml, log=lambda *a: None, engine=False)
+        self.assertFalse(res.engine)
+        self.assertFalse(os.path.exists(self.engine()))     # Sortero's old one goes
+        with open(os.path.join(self.stick, U.MARKER)) as fh:
+            self.assertIsNone(json.load(fh)["engine"])
+
+    def test_an_engine_dj_stick_is_never_overwritten(self):
+        os.makedirs(os.path.dirname(self.engine()))
+        with open(self.engine(), "wb") as fh:
+            fh.write(b"Engine DJ's")
+        why = U.foreign(self.stick)
+        self.assertIn("Engine DJ library", why)
+        with self.assertRaises(U.StickError):
+            U.write(self.stick, self.xml, log=lambda *a: None)
+        with open(self.engine(), "rb") as fh:
+            self.assertEqual(fh.read(), b"Engine DJ's")
+        # Writing for Pioneer players only leaves it be
+        self.assertIsNone(U.foreign(self.stick, engine=False))
+        res = U.write(self.stick, self.xml, log=lambda *a: None, engine=False)
+        self.assertFalse(res.engine)
+        with open(self.engine(), "rb") as fh:
+            self.assertEqual(fh.read(), b"Engine DJ's")
+
+    def test_an_old_engine_library_is_never_overwritten(self):
+        os.makedirs(os.path.join(self.stick, E.FOLDER))
+        with open(os.path.join(self.stick, E.OLD_DATABASE), "wb") as fh:
+            fh.write(b"Engine 1.x")
+        self.assertIn("Engine Library/m.db", U.foreign(self.stick))
+
+    def test_engine_dj_adding_to_or_upgrading_sorteros_library_makes_it_theirs(self):
+        import sqlite3
+        U.write(self.stick, self.xml, log=lambda *a: None)
+        con = sqlite3.connect(self.engine())
+        con.execute("UPDATE Information SET schemaVersionPatch = 3")
+        con.commit()
+        self.assertIn("upgraded", U.foreign(self.stick))
+        con.execute("UPDATE Information SET schemaVersionPatch = 2")
+        con.execute("INSERT INTO Playlist (title, parentListId, isPersisted, nextListId, "
+                    "isExplicitlyExported) VALUES ('Mine', 0, 1, 0, 1)")
+        con.commit()
+        con.close()
+        self.assertIn("added to", U.foreign(self.stick))
+        self.assertFalse(U.wrote_engine(self.stick))
+
+    def test_what_engine_cant_hold_is_reported(self):
+        gig_xml(self.xml, [(1, self.files[0], "Opener", "Alpha", ""),
+                           (2, self.files[1], "Banger", "Beta", "")],
+                [("01 Again", [1, 2, 1])])
+        logged = []
+        res = U.write(self.stick, self.xml, log=logged.append)
+        self.assertEqual(res.engine_repeats, [("01 Again", "Opener")])
+        self.assertEqual(E.read(self.engine())[1]["01 Again"], [1, 2])
+        self.assertEqual(pdb.read(os.path.join(self.stick, pdb.RELATIVE)).playlists,
+                         {"01 Again": [1, 2, 1]})            # rekordbox's keeps it
+        self.assertTrue(any("Opener is in 01 Again once" in line for line in logged))
+
+    def test_engine_needs_a_sample_rate_and_asks_ffprobe(self):
+        from sortero.gig import probe
+        t = D.Track(1, "x", "/Contents/x.wav", duration=30)
+        info = mock.Mock(rate=48000)
+        with mock.patch.object(probe, "probe", return_value=info):
+            self.assertEqual(U._engine_audio(t, "x.wav", [], None).rate, 48000)
+        with mock.patch.object(probe, "probe", side_effect=probe.ProbeError("no")):
+            a = U._engine_audio(t, "x.wav", [], None)
+        self.assertEqual((a.rate, a.samples), (44100, 30 * 44100))
+        t.sample_rate = 44100
+        a = U._engine_audio(t, "x.wav", [], {"PWV7": bytes(3 * 150 * 30)})
+        self.assertEqual(a.samples, 30 * 44100)
+        self.assertTrue(a.overview)
 
     def test_tracks_missing_on_this_computer_are_reported(self):
         os.remove(self.files[1])

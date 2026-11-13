@@ -7,8 +7,8 @@ Five steps, in the order a gig is prepared:
 
   set     Your set: the playlists, in play order
   tracks  Make the tracks gig-safe: check every track, copy the ones that won't play
-  main    Main stick: Sortero writes the set to it for Pioneer players (usbexport),
-          or rekordbox / Engine DJ export it from the rekordbox XML Sortero saves;
+  main    Main stick: Sortero writes the set to it for Pioneer and Denon players
+          (usbexport), or rekordbox / Engine DJ export it from the rekordbox XML Sortero saves;
           then it's checked. Or it's skipped, for a folders stick only
   ready   Ready to leave: GIG READY once the main stick passes
   backup  Backup stick (optional): numbered folders on a second stick, checked
@@ -57,7 +57,7 @@ class State:
     playlists: list = field(default_factory=list)   # chosen, in set order
     track_count: int = 0
     apps: str = "rekordbox"     # where the main stick's library comes from, for wording
-    direct: bool = False        # Sortero writes the main stick itself (Pioneer players chosen)
+    direct: bool = False        # Sortero writes the main stick itself
     items: list = None          # convert.plan's result, once the tracks are checked
     copied: bool = False        # convert.run has finished on these items
     sets: list = None           # [(playlist, [paths])] as read when the tracks were checked
@@ -69,6 +69,14 @@ class State:
     backup_check: StickCheck = None
     earlier: float = None       # sticks checked in an earlier session, for this same set
     skip_main: bool = False     # no main stick tonight: the folders stick is the only one
+
+
+def _libraries_for(apps):
+    """Which libraries Sortero writes, for the players whose apps are named."""
+    who = [brand for app, brand in (("rekordbox", "Pioneer"), ("Engine DJ", "Denon"))
+           if app in apps] or ["Pioneer"]
+    return ("libraries " if len(who) > 1 else "library ") + " and ".join(who) + \
+        " players read"
 
 
 @dataclass
@@ -195,7 +203,7 @@ def steps(st):
         out.append(Step("main", title, text, NEXT, "Check the main stick again…"))
     elif st.direct:
         out.append(Step("main", title, "Sortero copies the set to the stick and writes the "
-                        "library Pioneer players read: your playlists in set order, cue "
+                        f"{_libraries_for(st.apps)}: your playlists in set order, cue "
                         "points and beat grids. Then it checks the stick.", NEXT,
                         "Write the main stick…"))
     elif not st.xml_path and not st.earlier:

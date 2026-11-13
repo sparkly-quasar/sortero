@@ -1,11 +1,13 @@
 """Check a mounted stick before a gig, and say plainly whether it's ready.
 
-Six checks, each pass, warn or fail:
+Seven checks, each pass, warn or fail:
 
   Stick            file system, partition map, partitions (profiles.check_volume)
   rekordbox        export.pdb and exportLibrary.db (OneLibrary) are there and
                    readable, and every track they list is on the stick, the
                    size it was when the library was written
+  Engine DJ        the same for the Engine library Denon players read
+                   (Engine Library/Database2/m.db), when they're among the players
   Formats          every audio file plays on the chosen players
   Decode test      every audio file decodes from start to finish
   Names and sizes  nothing a FAT32 stick or a player can't handle
@@ -16,7 +18,7 @@ Checking the *main* stick (role=MAIN) adds one more:
 
   Main stick       a library the chosen players read is on it (rekordbox's for
                    Pioneer, Engine DJ's for Denon; either will do), and
-                   tonight's playlists are in the rekordbox one
+                   tonight's playlists are in each one Sortero can open
 
 Any fail means NOT READY. Warnings are listed but don't stop the gig.
 
@@ -28,7 +30,7 @@ import argparse, concurrent.futures, hashlib, os, re, sys, unicodedata
 from dataclasses import dataclass, field
 
 from .. import headers
-from . import disks, ffmpeg, onelibrary, pdb, profiles
+from . import disks, enginelib, ffmpeg, onelibrary, pdb, profiles
 from .probe import ProbeError, probe
 
 PASS, WARN, FAIL = "pass", profiles.WARN, profiles.FAIL
@@ -41,7 +43,13 @@ FAT32_MAX = 4 * 1024 ** 3 - 1           # largest file FAT32 can hold
 FOLDER_DISPLAY_MAX = 10000              # Pioneer players show no more files than this per folder
 # Where Engine DJ keeps the Engine database on a stick ("the Engine Library folder
 # of an external storage drive with an Engine database": PRIME guide v5.0.0 p. 43)
-ENGINE_DIR = "Engine Library"
+ENGINE_DIR = enginelib.FOLDER
+
+
+def has_engine_library(stick):
+    """Is there an Engine library on the stick (not just its folder)?"""
+    return any(os.path.isfile(os.path.join(stick, p))
+               for p in (enginelib.DATABASE, enginelib.OLD_DATABASE))
 FAT_ILLEGAL = re.compile(r'[\x00-\x1f"*:<>?\\|]')
 RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)),
             *(f"LPT{i}" for i in range(1, 10))}
@@ -363,7 +371,7 @@ def check_main(stick, profile, playlists=None):
     """
     pioneer = os.path.join(stick, "PIONEER", "rekordbox")
     has_rb = any(os.path.isfile(os.path.join(pioneer, fn)) for fn in LIBRARY_FILES.values())
-    has_engine = os.path.isdir(os.path.join(stick, ENGINE_DIR))
+    has_engine = has_engine_library(stick)
     wanted = [(profiles.reads_rekordbox(profile), has_rb, "rekordbox", "Pioneer"),
               (profiles.reads_engine(profile), has_engine, "Engine DJ", "Denon")]
     wanted = [w for w in wanted if w[0]]
@@ -378,31 +386,46 @@ def check_main(stick, profile, playlists=None):
             parts.append(f"no {app} library, so {brand} players will only browse it as "
                          "folders")
     one_path = os.path.join(pioneer, LIBRARY_FILES[profiles.ONE_LIBRARY])
-    on_stick = None                     # if neither can be read, the rekordbox check says why
-    if has_rb and playlists and os.path.isfile(os.path.join(stick, pdb.RELATIVE)):
+    engine_path = os.path.join(stick, enginelib.DATABASE)
+    # Tonight's playlists, looked for in each library that can be read; one that
+    # can't be read is the rekordbox or Engine DJ check's to explain.
+    found = []                          # (app, {playlist names in it})
+    reads = {app: has for _, has, app, _brand in wanted}
+    if reads.get("rekordbox") and playlists and os.path.isfile(os.path.join(stick, pdb.RELATIVE)):
         try:
-            on_stick = {_bare(n) for n in pdb.read(os.path.join(stick, pdb.RELATIVE)).playlists}
+            found.append(("rekordbox", {_bare(n) for n in pdb.read(
+                os.path.join(stick, pdb.RELATIVE)).playlists}))
         except pdb.ExportError:
             pass
-    elif has_rb and playlists and os.path.isfile(one_path) and onelibrary.available():
+    elif reads.get("rekordbox") and playlists and os.path.isfile(one_path) \
+            and onelibrary.available():
         try:
-            on_stick = {_bare(n) for n in onelibrary.read(one_path)[1]}
+            found.append(("rekordbox", {_bare(n) for n in onelibrary.read(one_path)[1]}))
         except onelibrary.OneLibraryError:
             pass
-    if on_stick is not None:
+    if reads.get("Engine DJ") and playlists and os.path.isfile(engine_path):
+        try:
+            found.append(("Engine DJ", {_bare(n) for n in enginelib.read(engine_path)[1]}))
+        except enginelib.EngineError:
+            pass
+    complete = []
+    for app, on_stick in found:
         missing = [n for n in playlists if _bare(n) not in on_stick]
         if len(missing) == len(playlists):
             levels.append(FAIL)
-            parts.append("none of tonight's playlists are in its rekordbox library. "
+            parts.append(f"none of tonight's playlists are in its {app} library. "
                          "Is it an older export? Put the set on it again")
         elif missing:
             levels.append(WARN)
             parts.append(f"{_plural(len(missing), 'playlist')} of tonight's set "
-                         "isn't in its rekordbox library")
-            details += [f"not in the library: {n}" for n in missing]
+                         f"isn't in its {app} library")
+            details += [f"not in the {app} library: {n}" for n in missing]
         else:
-            parts.append(f"tonight's {_plural(len(playlists), 'playlist')} are in "
-                         "its rekordbox library")
+            complete.append(app)
+    if complete:
+        parts.append(f"tonight's {_plural(len(playlists), 'playlist')} are in its "
+                     + " and ".join(complete)
+                     + (" library" if len(complete) == 1 else " libraries"))
     if not parts:
         found = [w[2] for w in wanted if w[1]]
         parts.append(f"its {' and '.join(found)} "
@@ -411,16 +434,58 @@ def check_main(stick, profile, playlists=None):
     return Check("Main stick", _worst(levels), summary, details)
 
 
-def check_engine(stick, profile=None):
-    """Is there an Engine database for Denon players? Either way the stick plays:
-    without one they browse it as folders (Library > Folder)."""
+def check_engine(stick, profile=None, entries=None):
+    """Is there an Engine library for Denon players, and is every track it lists on
+    the stick, the size it was when the library was written? Without one the
+    stick still plays: they browse it as folders (Library > Folder)."""
     who = "players" if profile and profile.brand == "Denon" else "Denon players"
-    if os.path.isdir(os.path.join(stick, ENGINE_DIR)):
-        return Check("Engine DJ", PASS, f"an Engine library is there, so {who} list its "
-                     "playlists. Sortero can't open it, so it checks the files on the "
-                     "stick, not the playlists in it.")
-    return Check("Engine DJ", PASS, f"no Engine library, so {who} will browse it as "
-                                    "folders (Library > Folder).")
+    if not os.path.isdir(os.path.join(stick, ENGINE_DIR)):
+        return Check("Engine DJ", PASS, f"no Engine library, so {who} will browse it as "
+                                        "folders (Library > Folder).")
+    path = os.path.join(stick, enginelib.DATABASE)
+    if not os.path.isfile(path):
+        if os.path.isfile(os.path.join(stick, enginelib.OLD_DATABASE)):
+            return Check("Engine DJ", WARN, "only an old Engine library (from before Engine "
+                         f"OS 4), which current firmware doesn't read, so {who} will "
+                         "browse it as folders. Put the set on it again.")
+        return Check("Engine DJ", PASS, "there's an Engine Library folder but no library "
+                     f"in it (Database2/m.db), so {who} will browse it as folders "
+                     "(Library > Folder).")
+    try:
+        tracks, lists = enginelib.read(path)
+    except enginelib.EngineError as e:
+        return Check("Engine DJ", FAIL, f"its Engine library (m.db) {e}. Write the main "
+                                        "stick again.")
+    if entries is None:
+        entries = walk(stick)
+    sizes = {name_key(e.rel): e.size for e in entries}
+    missing, changed = [], []
+    for _, at, title, size in tracks:
+        rel = (at or "").lstrip("/")
+        if not at or name_key(rel) not in sizes:
+            missing.append(f"missing: {rel or 'somewhere off the stick'}"
+                           + (f" ({title})" if title else ""))
+        elif size and sizes[name_key(rel)] != size:
+            changed.append(f"changed since export: {rel}")
+    n = len(tracks)
+    full = sum(1 for ids in lists.values() if ids)
+    details = missing + changed
+    from .usbexport import wrote_engine
+    if wrote_engine(stick):
+        details.append("Sortero wrote this Engine library. It hasn't been tried on a real "
+                       "Denon player yet, so bring a second stick you trust.")
+    if missing:
+        return Check("Engine DJ", FAIL, f"{len(missing)} of {_plural(n, 'track')} in its "
+                     "Engine library aren't on the stick. Write the main stick again, don't "
+                     "copy files by hand.", details)
+    if changed:
+        return Check("Engine DJ", WARN, f"{_plural(n, 'track')} in its Engine library, all "
+                     f"on the stick, but {len(changed)} changed after the library was "
+                     "written, so their cues and grids may be off.", details)
+    return Check("Engine DJ", PASS, f"{_plural(n, 'track')}"
+                 + (f" in {_plural(full, 'playlist')}" if full else "")
+                 + f" in its Engine library, all on the stick, so {who} list its playlists.",
+                 details)
 
 
 def _decode(path):
@@ -591,19 +656,19 @@ def verify(stick, profile=None, decode=True, sources=None, vol=None, progress=No
         report.checks.append(check_main(stick, profile, playlists))
     entries = walk(stick)
     has_pioneer = os.path.isdir(os.path.join(stick, "PIONEER"))
-    has_engine = os.path.isdir(os.path.join(stick, ENGINE_DIR))
+    has_engine = has_engine_library(stick)
     # On the main stick a missing library is the Main stick check's to report
     if has_pioneer or (profiles.reads_rekordbox(profile) and role != MAIN):
         exp, _ = check_export(stick, entries, profile)
         report.checks.append(exp)
     if profiles.reads_engine(profile) and (has_engine or role != MAIN):
-        report.checks.append(check_engine(stick, profile))
+        report.checks.append(check_engine(stick, profile, entries))
     report.checks += check_audio(stick, entries, profile, decode, progress)
     report.audio = sum(1 for e in entries if is_audio(e))
     if any(os.path.isfile(os.path.join(stick, "PIONEER", "rekordbox", fn))
            for fn in LIBRARY_FILES.values()):
         report.libraries.append("rekordbox")
-    if os.path.isdir(os.path.join(stick, ENGINE_DIR)):
+    if has_engine:
         report.libraries.append("Engine DJ")
     report.checks.append(check_names(entries, profile))
     from . import backup

@@ -71,6 +71,14 @@ class Steps(unittest.TestCase):
         st.main = stick(True)
         self.assertEqual(step(st, "main").status, K.DONE)
 
+    def test_for_denon_players_too_sortero_writes_both_libraries(self):
+        st = K.State(["Warmup"], 2, items=[item(C.READY)], apps="rekordbox or Engine DJ",
+                     direct=True)
+        self.assertIn("writes the libraries Pioneer and Denon players read",
+                      step(st, "main").text)
+        st.apps = "Engine DJ"
+        self.assertIn("writes the library Denon players read", step(st, "main").text)
+
     def test_a_backup_from_an_earlier_session_still_leaves_the_main_stick_to_write(self):
         st = K.State(["Warmup"], 2, direct=True, earlier=time.time() - 60,
                      backup_check=stick(True, "BACKUP"))

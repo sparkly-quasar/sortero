@@ -54,6 +54,20 @@ def write_one_library(path, export):
                             for t in export.tracks], lists)
 
 
+def write_engine_library(stick, export, playlists=None):
+    """An Engine library (m.db) listing what an export.pdb lists, written by Sortero's
+    enginelib, as a Denon player would find it beside the rekordbox one."""
+    from sortero.gig import devicesql, enginelib
+    tracks = [devicesql.Track(t.id, t.title, t.path, file_size=t.size) for t in export.tracks]
+    names = playlists or list(export.playlists) or ["01 Set"]
+    ids = [t.id for t in export.tracks]
+    lists = [devicesql.Playlist(i, name, tracks=ids) for i, name in enumerate(names, 1)]
+    audio = {t.id: enginelib.Audio(44100, 44100) for t in tracks}
+    path = os.path.join(stick, enginelib.DATABASE)
+    enginelib.build(path, tracks, lists, audio)
+    return path
+
+
 def mp3(path, size=None, seconds=1):
     """A real MP3, padded to an exact size when asked."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -107,11 +121,55 @@ class Stick(TempDir):
         self.assertIn("Denon players will browse it as folders", c.summary)
         self.assertEqual(r.lines()[0], f"Checking {self.stick} for every Pioneer or Denon player")
 
-    def test_an_engine_library_is_noticed(self):
+    def test_an_engine_library_is_read_and_its_tracks_checked(self):
+        write_engine_library(self.stick, pdb.read(FIXTURE))
+        r = self.run_check(P.EVERY)
+        c = self.check(r, "Engine DJ")
+        self.assertEqual(c.level, V.PASS, c.summary)
+        self.assertIn("2 tracks in 1 playlist in its Engine library, all on the stick", c.summary)
+        self.assertIn("Denon players list its playlists", c.summary)
+        self.assertEqual(r.libraries, ["rekordbox", "Engine DJ"])
+        self.assertTrue(r.ready, "\n".join(r.lines()))
+
+    def test_an_engine_library_with_a_track_missing_isnt_ready(self):
+        write_engine_library(self.stick, pdb.read(FIXTURE))
+        gone = pdb.read(FIXTURE).tracks[1]
+        os.remove(pdb.on_stick(self.stick, gone.path))
+        c = self.check(self.run_check(P.ANY_DENON), "Engine DJ")
+        self.assertEqual(c.level, V.FAIL)
+        self.assertIn("1 of 2 tracks in its Engine library aren't on the stick", c.summary)
+        self.assertEqual(c.details, [f"missing: {gone.path.lstrip('/')} ({gone.title})"])
+
+    def test_an_engine_track_changed_since_is_worth_a_look(self):
+        write_engine_library(self.stick, pdb.read(FIXTURE))
+        with open(pdb.on_stick(self.stick, pdb.read(FIXTURE).tracks[0].path), "ab") as fh:
+            fh.write(b"\0" * 10)
+        c = self.check(self.run_check(P.ANY_DENON), "Engine DJ")
+        self.assertEqual(c.level, V.WARN)
+        self.assertIn("1 changed after the library was written", c.summary)
+
+    def test_an_unreadable_engine_library_fails(self):
+        from sortero.gig import enginelib
+        path = os.path.join(self.stick, enginelib.DATABASE)
+        os.makedirs(os.path.dirname(path))
+        with open(path, "wb") as fh:
+            fh.write(b"not a database" * 100)
+        c = self.check(self.run_check(P.ANY_DENON), "Engine DJ")
+        self.assertEqual(c.level, V.FAIL)
+        self.assertIn("Write the main stick again", c.summary)
+
+    def test_an_empty_engine_folder_or_an_old_library_is_no_library(self):
+        from sortero.gig import enginelib
         os.makedirs(os.path.join(self.stick, V.ENGINE_DIR))
         c = self.check(self.run_check(P.EVERY), "Engine DJ")
         self.assertEqual(c.level, V.PASS)
-        self.assertIn("an Engine library is there", c.summary)
+        self.assertIn("no library in it", c.summary)
+        self.assertEqual(self.main(P.EVERY)[0].libraries, ["rekordbox"])
+        with open(os.path.join(self.stick, enginelib.OLD_DATABASE), "wb") as fh:
+            fh.write(b"Engine 1.x")
+        c = self.check(self.run_check(P.EVERY), "Engine DJ")
+        self.assertEqual(c.level, V.WARN)
+        self.assertIn("before Engine OS 4", c.summary)
 
     def test_denon_only_doesnt_need_rekordbox_libraries(self):
         os.remove(self.one_library)
@@ -141,7 +199,7 @@ class Stick(TempDir):
         self.assertEqual(c.level, V.WARN)
         self.assertIn("no Engine DJ library, so Denon players will only browse", c.summary)
         self.assertNotIn("Engine DJ", [x.title for x in r.checks])   # said once, here
-        os.makedirs(os.path.join(self.stick, V.ENGINE_DIR))
+        write_engine_library(self.stick, pdb.read(FIXTURE))
         r, c = self.main(P.EVERY)
         self.assertEqual(c.level, V.PASS)
         self.assertIn("rekordbox and Engine DJ libraries are there", c.summary)
@@ -156,7 +214,7 @@ class Stick(TempDir):
         self.assertEqual(r.calm_verdict, "Not ready yet: 1 thing to fix.")
         self.assertTrue(r.first_problem.startswith("Main stick: there's no"))
         # an Engine library is no use to Pioneer-only players
-        os.makedirs(os.path.join(self.stick, V.ENGINE_DIR))
+        write_engine_library(self.stick, pdb.read(FIXTURE))
         self.assertEqual(self.main(P.UNIVERSAL)[1].level, V.FAIL)
         self.assertEqual(self.main(P.ANY_DENON)[1].level, V.PASS)
 
@@ -173,10 +231,23 @@ class Stick(TempDir):
             self.assertIn("tonight's 2 playlists are in its rekordbox library", c.summary)
             c = self.main(playlists=["01 Warmup", "02 Closing"])[1]
             self.assertEqual(c.level, V.WARN)
-            self.assertEqual(c.details, ["not in the library: 02 Closing"])
+            self.assertEqual(c.details, ["not in the rekordbox library: 02 Closing"])
             c = self.main(playlists=["01 Closing"])[1]
             self.assertEqual(c.level, V.FAIL)
             self.assertIn("Is it an older export?", c.summary)
+
+    def test_main_stick_has_tonights_playlists_in_its_engine_library(self):
+        shutil.rmtree(os.path.join(self.stick, "PIONEER"))
+        write_engine_library(self.stick, pdb.read(FIXTURE), ["01 Warmup", "02 Peak"])
+        c = self.main(P.ANY_DENON, playlists=["01 Warmup", "02 Peak"])[1]
+        self.assertEqual(c.level, V.PASS, c.summary)
+        self.assertIn("tonight's 2 playlists are in its Engine DJ library", c.summary)
+        c = self.main(P.ANY_DENON, playlists=["01 Warmup", "02 Closing"])[1]
+        self.assertEqual(c.level, V.WARN)
+        self.assertEqual(c.details, ["not in the Engine DJ library: 02 Closing"])
+        c = self.main(P.ANY_DENON, playlists=["03 Encore"])[1]
+        self.assertEqual(c.level, V.FAIL)
+        self.assertIn("none of tonight's playlists are in its Engine DJ library", c.summary)
 
     def test_a_backup_check_doesnt_ask_for_a_library(self):
         shutil.rmtree(os.path.join(self.stick, "PIONEER"))

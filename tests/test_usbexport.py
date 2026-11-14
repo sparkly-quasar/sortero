@@ -325,6 +325,20 @@ class Artwork(TempDir):
                     "SELECT image_id FROM content ORDER BY content_id")], [1, 1, 2, None])
             finally:
                 con.close()
+        # The Engine DJ library: as Engine keeps it, a 256 px file named for the
+        # SHA-1 of the embedded picture, and that hash in AlbumArt
+        import hashlib, sqlite3
+        con = sqlite3.connect(os.path.join(stick, E.DATABASE))
+        rows = con.execute("SELECT t.id, a.hash, a.albumArt FROM Track t JOIN AlbumArt a "
+                           "ON a.id = t.albumArtId ORDER BY t.id").fetchall()
+        con.close()
+        red = hashlib.sha1(tagcopy.read(red1)[1][1]).digest()
+        self.assertEqual([(i, h if h else None) for i, h, _ in rows],
+                         [(1, red), (2, red), (3, rows[2][1]), (4, None)])
+        self.assertEqual({a for _, _, a in rows}, {None})
+        for _, digest, _ in rows[:3]:
+            with open(os.path.join(stick, E.art_file(digest)), "rb") as fh:
+                self.assertEqual(tagcopy.image_size(fh.read())[:2], (A.ENGINE, A.ENGINE))
 
 
 def gig_xml(path, tracks, sets):

@@ -17,9 +17,18 @@ is its create() taken statement by statement from that file, triggers and
 views included, because Denon's own note on third-party tools says Engine
 refuses a database whose schema isn't the one it expects. The blob layouts
 are libdjinterop's encoders (src/djinterop/engine/v2/*_blob.cpp); the grid's
--4 convention, the cue-to-pad policy and the artwork row follow rb2engine
-(MIT), which checked them against databases Engine DJ wrote. See
+-4 convention and the cue-to-pad policy follow rb2engine (MIT). See
 docs/research/writing-engine-library.md.
+
+Checked against a library Engine itself wrote (a Denon player's, on a stick it
+had browsed as folders, schema 3.0.2, September 2026): the same tables, views,
+triggers and indexes, differing only in line breaks; beatData, quickCues and
+loops laid out byte for byte as here. Where Engine differed from libdjinterop,
+this follows Engine: trackData has 24 more zero bytes (68 in all) and -1 for
+no key, the overview is spaced samples / 1024 and "none" is four zero bytes,
+and artwork is a 256 x 256 JPEG in Engine Library/Artwork, named for the
+SHA-1 of the picture embedded in the audio, with that hash (20 bytes) in
+AlbumArt and no image in the row.
 
 Which schema: 3.0.2, as the research recommends. It's what Engine DJ 4.5 and
 5.0 write and what current firmware (Engine OS 4.5 and later) reads as it
@@ -35,12 +44,13 @@ from libdjinterop too (it lacks Track.albumArtSourceHash).
 Not yet tried on a real Denon player. Open questions (the research's list):
 whether an SC6000 / PRIME 4 on Engine OS 4.x and 5.x accepts a 3.0.2 m.db
 Engine DJ didn't write; whether cues land on the beat on MP3s (encoder
-delay); whether artwork belongs in AlbumArt blobs (written here) or files
-on Engine 5; what currentPlayedIndiciator, the loudness values and the
-grid's unknown field must be; and whether the players need hm.db and the
-other Database2 files present or make them.
+delay); what currentPlayedIndiciator, the loudness values (Engine writes
+its own, here 0) and the grid's unknown field must be; and whether the
+players need hm.db, the other Database2 files and the per-track
+Database2/OverviewData/<library uuid>/<track id>.rgb files Engine writes,
+or make them.
 """
-import hashlib, math, os, random, re, sqlite3, struct, tempfile, time, uuid as uuidlib, zlib
+import base64, math, os, random, re, sqlite3, struct, tempfile, time, uuid as uuidlib, zlib
 from dataclasses import dataclass, field
 
 FOLDER = "Engine Library"
@@ -50,7 +60,10 @@ SCHEMA_VERSION = (3, 0, 2)
 PADS = LOOPS = 8
 OVERVIEW_POINTS = 1024
 NO_ART = 1                      # the AlbumArt row the schema makes, for "no picture"
-ART_URI = "image://planck/0"    # Track.albumArt when it has a picture, as Engine writes it (rb2engine)
+ARTWORK = os.path.join(FOLDER, "Artwork")
+NO_KEY = -1                     # trackData's key when there's none, as Engine writes it
+TRACK_DATA_EXTRA = bytes(24)    # Engine's own trackData ends with 24 zero bytes
+NO_OVERVIEW = bytes(4)          # Engine's own "no overview": an empty qCompress
 NO_NEXT = 0                     # end of a nextListId / nextEntityId chain
 EMPTY = -1.0                    # an empty pad or loop
 BEAT_DATA_EXTRA = bytes(9)      # "real beat data seems to have 9 additional zero bytes" (libdjinterop)
@@ -124,8 +137,10 @@ def compress(data):
 
 def track_data(rate, samples, key):
     """trackData: sample rate, sample count, key, then average loudness low/mid/high
-    (0, as libdjinterop writes when it doesn't know)."""
-    return compress(struct.pack(">dqiddd", rate, samples, key or 0, 0.0, 0.0, 0.0))
+    (0, as libdjinterop writes when it doesn't know), then 24 zero bytes, as in the
+    68-byte trackData Engine itself writes."""
+    return compress(struct.pack(">dqiddd", rate, samples, NO_KEY if key is None else key,
+                                0.0, 0.0, 0.0) + TRACK_DATA_EXTRA)
 
 
 @dataclass
@@ -198,16 +213,15 @@ def overview(rate, samples, columns):
     `columns` is waveform.pwv7's bytes: low, mid, high per 1/150 s, 0-127. Each
     point is the loudest of the columns it spans, so transients survive."""
     n = len(columns) // 3
-    qn = (int(rate) // 210) * 2         # libdjinterop's "quantisation number"
-    if not n or not samples or not qn:
-        return compress(struct.pack(">qqd", 0, 0, 0.0) + bytes(3))
+    if not n or not samples:
+        return NO_OVERVIEW
     points = []
     for i in range(OVERVIEW_POINTS):
         start = i * n // OVERVIEW_POINTS
         end = min(max((i + 1) * n // OVERVIEW_POINTS, start + 1), n)
         span = columns[start * 3:end * 3]
         points.append(tuple(min(255, max(span[k::3]) * 2) for k in range(3)))
-    per_point = (samples // qn) * qn / OVERVIEW_POINTS
+    per_point = samples / OVERVIEW_POINTS     # as Engine writes it (libdjinterop rounds first)
     loudest = tuple(max(p[k] for p in points) for k in range(3))
     return compress(struct.pack(">qqd", OVERVIEW_POINTS, OVERVIEW_POINTS, per_point)
                     + b"".join(bytes(p) for p in points) + bytes(loudest))
@@ -319,6 +333,7 @@ class Built:
     tracks: int = 0
     playlists: int = 0
     repeats: list = field(default_factory=list)     # (playlist, track title) left out
+    files: dict = field(default_factory=dict)       # stick path -> bytes: the artwork
     dropped_cues: list = field(default_factory=list)  # (track title, how many)
 
 
@@ -336,21 +351,26 @@ def _titles(playlists):
     return out
 
 
-def art_hash(data):
-    """AlbumArt.hash: SHA-1 hex without leading zeros, the shape Engine stores (rb2engine)."""
-    return hashlib.sha1(data).hexdigest().lstrip("0") or "0"
+def art_file(digest):
+    """Where Engine keeps a picture: Engine Library/Artwork/, named for AlbumArt.hash
+    (the SHA-1 of the picture embedded in the audio, 20 bytes) in URL-safe base64.
+    Found so on a stick Engine wrote; the AlbumArt row itself holds no image."""
+    name = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+    return os.path.join(ARTWORK, name + ".jpg")
 
 
 def build(path, tracks, playlists, audio, art=None, library_uuid=None, now=None):
     """Write m.db at `path`, all or nothing (make(), then the file whole). Returns a Built."""
     data, built = make(tracks, playlists, audio, art, library_uuid, now)
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".sortero-tmp"
-    with open(tmp, "wb") as fh:
-        fh.write(data)
-        fh.flush()
-        os.fsync(fh.fileno())
-    os.replace(tmp, path)
+    stick = os.path.dirname(os.path.dirname(os.path.dirname(path)))
+    for rel, content in list(built.files.items()) + [(os.path.relpath(path, stick), data)]:
+        dest = os.path.join(stick, rel)
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        with open(dest + ".sortero-tmp", "wb") as fh:
+            fh.write(content)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(dest + ".sortero-tmp", dest)
     return built
 
 
@@ -358,7 +378,9 @@ def make(tracks, playlists, audio, art=None, library_uuid=None, now=None):
     """m.db's bytes, and a Built saying what's in it.
 
     `tracks` and `playlists` are the devicesql lists usbexport.plan() makes,
-    `audio` {track id: Audio}, `art` {image id: JPEG} for Track.artwork_id.
+    `audio` {track id: Audio}, `art` {image id: (SHA-1 of the embedded picture,
+    256 px JPEG)} for Track.artwork_id (artwork.Collector(engine=True).engine).
+    The pictures go in Built.files, to be written beside m.db.
     `library_uuid` keeps the library's identity across rewrites, so a player's
     history stays with it.
 
@@ -389,9 +411,11 @@ def _fill(tmp, tracks, playlists, audio, art, library_uuid, now):
         con.execute("INSERT INTO AlbumArt VALUES (1, '', NULL)")
         art_rows = {}
         for image_id in sorted({t.artwork_id for t in tracks if t.artwork_id in art}):
-            cur = con.execute("INSERT INTO AlbumArt (hash, albumArt) VALUES (?, ?)",
-                              (art_hash(art[image_id]), art[image_id]))
+            digest, jpeg = art[image_id]
+            cur = con.execute("INSERT INTO AlbumArt (hash, albumArt) VALUES (?, NULL)",
+                              (digest,))
             art_rows[image_id] = cur.lastrowid
+            built.files[art_file(digest)] = jpeg
         ids = {}                        # Sortero's track id -> Engine's (1, 2, 3...)
         for t in tracks:
             a = audio[t.id]
@@ -414,7 +438,7 @@ def _fill(tmp, tracks, playlists, audio, art, library_uuid, now):
                  int(bpm) if bpm else None, t.year or None, ".." + t.file_path, name,
                  t.bitrate or None, bpm or None, art_id, t.file_size, t.title,
                  t.artist or None, t.album or None, t.genre or None, t.comment or None,
-                 k, max(0, min(5, t.rating)) * 20, ART_URI if art_id != NO_ART else None,
+                 k, max(0, min(5, t.rating)) * 20, None,
                  ext, now, now, built.uuid, ids[t.id]))
             pads, slots, main, dropped = pads_and_loops(t.cues, a.rate)
             if dropped:
@@ -424,7 +448,7 @@ def _fill(tmp, tracks, playlists, audio, art, library_uuid, now):
                 "UPDATE PerformanceData SET trackData = ?, overviewWaveFormData = ?, "
                 "beatData = ?, quickCues = ?, loops = ?, thirdPartySourceId = NULL, "
                 "activeOnLoadLoops = 0 WHERE trackId = ?",
-                (track_data(a.rate, a.samples, k), a.overview or overview(a.rate, a.samples, b""),
+                (track_data(a.rate, a.samples, k), a.overview or NO_OVERVIEW,
                  beat_data(a.rate, a.samples, beat_grid(a.grids, a.rate, a.samples)),
                  quick_cues(pads, main), loops(slots), ids[t.id]))
         built.tracks = len(ids)

@@ -176,17 +176,42 @@ about 1,000 lines. An Engine writer is DDL (long but transcribed), five
 encoders of 20–40 lines each, and a build function like onelibrary.build:
 perhaps 500 lines plus tests, with no audio analysis work left to do.
 
+## Checked against a library Engine wrote (13 November 2026)
+
+A stick that a Denon player had browsed as folders carried the library the
+player made for itself (`Engine Library/Database2/m.db`, schema 3.0.2, written
+12 September 2026, 18 tracks, no playlists), beside `hm.db`, `sm.db`, `stm.db`,
+`Database2/OverviewData/<library uuid>/<track id>.rgb` and an
+`Engine Library/Artwork/` folder. Compared with what Sortero writes:
+
+- **Schema**: the same tables, views, triggers and indexes, and the same SQL
+  apart from line breaks (libdjinterop's copy flattens them).
+- **Paths**: `../01 Folder/file.mp3`, relative to `Engine Library`, as above.
+- **beatData** (138 bytes), **quickCues** (129) and **loops** (192): byte for
+  byte the layouts above, including the 9 trailing zero bytes of beatData and
+  the -4 / past-the-end grid markers.
+- **trackData** is 68 bytes: the 44 above, then 24 zero bytes. The loudness
+  values are Engine's own (about 0.2-0.5). Its key can differ from
+  `Track.key` (the tag's), and is -1 when Engine has none.
+- **Overview**: 1024 points spaced exactly samples / 1024 (no rounding to
+  libdjinterop's "quantisation number"); a track without one has 4 zero bytes.
+- **Artwork** is answered: `AlbumArt.hash` is the SHA-1 of the picture
+  embedded in the audio file (20 bytes, a blob), `AlbumArt.albumArt` is NULL,
+  and the picture is a 256 x 256 JPEG at
+  `Engine Library/Artwork/<that hash in URL-safe base64, unpadded>.jpg`.
+  `Track.albumArt` and `albumArtSourceHash` are NULL.
+
+Sortero now writes all of these as Engine does.
+
 ## Open questions, to answer on real gear
 
 - Does an SC6000 / PRIME 4 on Engine OS 4.x and 5.x accept a 3.0.2 m.db that
   Engine DJ desktop didn't write, and does Engine DJ desktop open it?
 - Do cues placed from rekordbox times land on the beat on MP3s, or is there an
   encoder-delay offset as with some rekordbox/Serato conversions?
-- **Artwork** in Engine 5: the 3.0.2 schema adds `albumArtSourceHash`, the
-  desktop guide warns artwork may not show on firmware 4.3.4 and older, and
-  rb2engine mentions an `Engine Library/Artwork/` folder. It isn't known
-  whether art now lives in files or still in AlbumArt blobs. Ship without art
-  first.
+- ~~Artwork in Engine 5~~: answered above (files in `Engine Library/Artwork/`).
+- Whether the players need the `OverviewData/<uuid>/<id>.rgb` files Engine
+  writes for each track, or make them when they're missing.
 - What `currentPlayedIndiciator`, the loudness doubles in trackData and the
   unknown grid marker field must be for the player to be happy (libdjinterop
   writes a random number, zeroes and zeroes, and works on 4.3.3).

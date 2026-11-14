@@ -523,12 +523,13 @@ are just a title.
    once per playlist, so a set that plays a track twice loses the repeat there, and Gig
    prep says so. **The Engine DJ library hasn't been tried on a real Denon player
    yet.** Still open until it has: whether players on Engine OS 4.x and 5.x accept a
-   library Engine DJ didn't write, whether cues land on the beat on MP3s, where Engine
-   5 wants artwork, and whether the players need Engine's other database files. It
-   writes schema 3.0.2 (Engine DJ 4.5 and 5), transcribed from
-   [libdjinterop](https://github.com/xsco/libdjinterop), whose blob layouts it follows
-   too, with [rb2engine](https://pypi.org/project/rb2engine/)'s conventions for the
-   grid, the cue pads and artwork; see
+   library Engine DJ didn't write, whether cues land on the beat on MP3s, and whether
+   the players need Engine's other database files. It writes schema 3.0.2 (Engine DJ
+   4.5 and 5), transcribed from [libdjinterop](https://github.com/xsco/libdjinterop),
+   whose blob layouts it follows too, with
+   [rb2engine](https://pypi.org/project/rb2engine/)'s conventions for the grid and the
+   cue pads, and checked against a library a Denon player wrote itself: the same
+   schema, the same layouts, and artwork kept as Engine keeps it; see
    [docs/research](docs/research/writing-engine-library.md). An Engine library that
    Engine DJ wrote, or has since added to or upgraded, is never overwritten.
 

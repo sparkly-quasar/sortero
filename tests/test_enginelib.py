@@ -1,7 +1,11 @@
 """The Engine DJ library (m.db) Denon players read: schema, blobs, grids, cues, playlists.
 
 The blobs are read back with decoders written here from libdjinterop's layouts
-(src/djinterop/engine/v2/*_blob.cpp), not with enginelib's own code."""
+(src/djinterop/engine/v2/*_blob.cpp), not with enginelib's own code, and
+checked against what Engine itself wrote to a stick (a Denon player's library
+from browsing folders, schema 3.0.2): its trackData is 68 bytes, its beatData,
+quickCues and loops are laid out as here, its overview is spaced samples / 1024,
+and its pictures are files named for the embedded picture's SHA-1."""
 import os, sqlite3, struct, unittest, zlib
 
 from sortero import common
@@ -30,7 +34,9 @@ def unpack(blob):
 
 
 def read_track_data(blob):
-    return struct.unpack(">dqiddd", unpack(blob))
+    data = unpack(blob)
+    assert len(data) == 68 and data[44:] == bytes(24), len(data)   # as Engine writes it
+    return struct.unpack(">dqiddd", data[:44])
 
 
 def _read_grid(data, at):
@@ -82,6 +88,8 @@ def read_loops(blob):
 
 
 def read_overview(blob):
+    if blob == bytes(4):                                # Engine's "none"
+        return 0.0, [], (0, 0, 0)
     data = unpack(blob)
     n, n2, per_point = struct.unpack_from(">qqd", data)
     assert n == n2
@@ -188,18 +196,27 @@ class Schema(TempDir):
         self.assertEqual(lists, {"Gig": [], "01 Warmup": [3, 1, 2], "02 Peak": [2],
                                  "Gig (2)": [1], "A,B": []})
 
-    def test_artwork_goes_in_albumart(self):
+    def test_artwork_as_engine_keeps_it(self):
+        # As on a stick Engine wrote: the row holds the SHA-1 of the embedded picture
+        # and no image; the picture is a file named for that hash.
+        import hashlib
         tracks = [track(1, "a", "/Contents/a.mp3"), track(2, "b", "/Contents/b.mp3"),
                   track(3, "c", "/Contents/c.mp3")]
         tracks[0].artwork_id = tracks[1].artwork_id = 1
-        path, _ = self.build(tracks, art={1: b"\xff\xd8jpeg"})
+        digest = hashlib.sha1(b"the embedded picture").digest()
+        path, built = self.build(tracks, art={1: (digest, b"\xff\xd8jpeg")})
         con = sqlite3.connect(path)
         self.assertEqual(con.execute("SELECT id, hash, albumArt FROM AlbumArt").fetchall(),
-                         [(1, "", None), (2, E.art_hash(b"\xff\xd8jpeg"), b"\xff\xd8jpeg")])
+                         [(1, "", None), (2, digest, None)])
         self.assertEqual(con.execute("SELECT albumArtId, albumArt FROM Track").fetchall(),
-                         [(2, E.ART_URI), (2, E.ART_URI), (1, None)])
+                         [(2, None), (2, None), (1, None)])
         con.close()
-        self.assertEqual(E.art_hash(bytes(1)), "5ba93c9db0cff93f52b521d7420e43f6eda2784f")
+        name = os.path.join(E.ARTWORK, "-asau7Y6kImrA-ONmtg1Sxrqaag.jpg")
+        self.assertEqual(E.art_file(bytes.fromhex("f9ab1abbb63a9089ab03e38d9ad8354b1aea69a8")),
+                         name)                          # a file Engine wrote, and its hash
+        self.assertEqual(built.files, {E.art_file(digest): b"\xff\xd8jpeg"})
+        with open(os.path.join(self.dir, E.art_file(digest)), "rb") as fh:
+            self.assertEqual(fh.read(), b"\xff\xd8jpeg")
 
     def test_all_or_nothing(self):
         path, built = self.build([track(1, "a", "/Contents/a.mp3")])
@@ -259,18 +276,18 @@ class Blobs(TempDir):
 
         per_point, points, loudest = read_overview(ow)
         self.assertEqual(len(points), 1024)
-        self.assertEqual(per_point, (samples // 420) * 420 / 1024)
+        self.assertEqual(per_point, samples / 1024)
         self.assertEqual(loudest, (254, 40, 128))
         self.assertEqual(points[0], (254, 40, 128))
 
     def test_no_waveform_no_grid_no_cues(self):
         t = track(1, "a", "/Contents/a.mp3")
         td, bd, qc, lp, ow = self.write(t, E.Audio(48000, 48000 * 10))
-        self.assertEqual(read_track_data(td), (48000.0, 480000, 0, 0.0, 0.0, 0.0))
+        self.assertEqual(read_track_data(td), (48000.0, 480000, -1, 0.0, 0.0, 0.0))
         self.assertEqual(read_beat_data(bd)[2:5], (0, [], []))
         pads, _, _, main = read_quick_cues(qc)
         self.assertEqual((pads, main), ([("", -1.0, (0, 0, 0, 0))] * 8, 0.0))
-        self.assertEqual(read_overview(ow), (0.0, [], (0, 0, 0)))
+        self.assertEqual(ow, bytes(4))
 
     def test_a_long_label_is_cut_on_a_character(self):
         pads, _, _, _ = E.pads_and_loops([D.Cue(0, 0, None, "é" * 200)], 44100)

@@ -322,7 +322,7 @@ def write(stick, xml_path, progress=None, log=print, workers=None, cache=None, e
             res.removed.append(rel)
     for old in ("USBANLZ", "Artwork"):              # Sortero's own, from the last run
         shutil.rmtree(os.path.join(stick, "PIONEER", old), ignore_errors=True)
-    art = artwork.Collector()
+    art = artwork.Collector(engine=engine)
     total = len(p.tracks)
     cache = cache or waveform.Cache()
     workers = workers or max(1, min(4, os.cpu_count() or 1))
@@ -360,23 +360,24 @@ def write(stick, xml_path, progress=None, log=print, workers=None, cache=None, e
         pool.shutdown(wait=True, cancel_futures=True)
     cache.prune()
     engine_mark = engine_db = None
+    engine_art = {}
     if engine:
         # Made in full before any library goes on the stick: if it can't be, the
         # stick is left as it was, not with half a library and no marker.
-        big = {i: art.files[artwork.path(i, medium=True)] for i in art.ids.values()}
         try:
             # The same identity as last time, so a player's history stays with it
             engine_db, built = enginelib.make(
-                p.tracks, p.playlists, audio, art=big,
+                p.tracks, p.playlists, audio, art=art.engine,
                 library_uuid=(mark.get("engine") or {}).get("uuid"))
         except enginelib.EngineError as e:
             raise StickError(f"Sortero {e}. Nothing else on the stick was changed.")
         engine_mark = _engine_identity(built)
+        engine_art = built.files
         res.engine = True
         res.engine_repeats, res.engine_dropped_cues = built.repeats, built.dropped_cues
     # The databases last: until they're there, no player sees a half-written library.
-    for rel, data in art.files.items():
-        _put(stick, rel, data)
+    for rel, data in list(art.files.items()) + list(engine_art.items()):
+        _put(stick, rel.replace(os.sep, "/"), data)
     res.artwork = len(art.ids)
     db = devicesql.build(p.tracks, p.playlists, artwork=art.table())
     folder = os.path.join(stick, os.path.dirname(RELATIVE))

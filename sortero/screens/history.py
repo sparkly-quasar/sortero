@@ -24,6 +24,7 @@ KINDS = {
     "save-playlist": "Saved a folder as a playlist",
     "rename-playlist": "Renamed a playlist",
     "delete-playlist": "Deleted a playlist",
+    "save-set": "Saved a set as a playlist",
 }
 
 

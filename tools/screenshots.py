@@ -253,6 +253,17 @@ def main():
         idle(lambda: (shot("streaming-playlists"), go()))
 
     @step
+    def set_designer():
+        app.show("sets")
+        sd = app.screens["sets"]
+        sd.set = []
+        peak = sources.Source(sources.SORTERO, os.path.join(ROOT, "_Playlists"), "Peak")
+        sd._take_playlist(peak, replace=True)
+        sd.direction.set("build")
+        sd.set_tv.selection_set(str(len(sd.set) - 1))
+        app.after(800, lambda: (shot("set-designer"), go()))
+
+    @step
     def tidy():
         app.show("tidy")
         app.after(800, lambda: (shot("tidy-up"), go()))

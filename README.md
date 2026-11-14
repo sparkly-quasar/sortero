@@ -129,12 +129,13 @@ open.
 | **Library** | Every track in one list. The buttons above the table pick a list, each with how many tracks are in it: **All tracks**, **Needs a genre**, **Not analysed**, **No energy**, and **Other lists** for the rest (artist in the title, artist and title swapped, no artist, no BPM, low bitrate, lossless files and more). **Search** narrows it; click a column heading to sort. Select tracks and the toolbar above the table works on them: **Edit details**, **Artist & title** (swap them, take them from the title or the filename), **Genres** (look them up on Discogs, copy them from folder names, ignore tracks that never get one), **Send to analysis** and **Place one by one**. Set a genre at the bottom. **More** has the rest, including [shrinking lossless tracks to MP3](#shrinking-lossless-tracks-to-mp3). Your own set recordings are hidden unless you ask. |
 | **Your playlists** | Every playlist Sortero can see in one list: its own in `_Playlists`, any `.m3u` or `.m3u8` inside your collection, and the ones added in Gig prep from other apps or watched folders. Each shows its track count and how many files are missing; click a column heading to sort. Select one to see its tracks, missing ones marked. **Add to gig set** puts it at the end of Gig prep's set. Sortero's own can be **renamed** or **deleted** (set aside in `_Quarantine`, and History brings it back); ones from other apps are only read, but one you added can be **taken off the list**. **More** also shows a playlist in Finder or Explorer, repairs broken links in Sortero's own, or rebuilds a playlist for each folder. |
 | **Streaming playlists** | Rebuild a Spotify or TIDAL playlist against your local files from a link, a pasted tracklist or a CSV — all three offered together above the list. |
+| **Set designer** | Build a set one track at a time. Pick a track and Sortero suggests what fits after it, from key, BPM and energy and the tracks your own playlists put together, with the reasons. Choose whether energy should build, hold or drop; **Order set** puts the whole set in its smoothest order or along an energy shape. Save it as a playlist, or send it straight to Gig prep. See [Set designer](#set-designer). |
 | **Gig prep** | Get a USB stick that plays on any Pioneer or Denon player, and check it before you leave. Tick the playlists you're playing, in set order; Sortero makes gig-safe copies of any track that won't play everywhere, then checks the main and backup sticks and ends with **GIG READY**. See [Gig prep](#gig-prep). |
 | **Tidy up** | Tools for an existing collection: **Clean tags** (including which way round filenames read), **Fix wrong BPMs**, **Find duplicates**, **Place a folder's tracks by hand**, **Flatten release folders**, **Fix playlist links**, **Shrink lossless tracks to MP3** (with how much space it would save), and **Reorganise the whole collection**. Every tool previews before it changes anything. |
 | **History** | Every operation, with undo, and the **safety net**. **Show log** reveals the detailed log. |
 | **Settings** | Collection folder, update checks, Discogs token, Spotify and TIDAL accounts, and the setup guide. |
 
-`Cmd-1`…`Cmd-8` (`Ctrl` on Windows and Linux) jump between screens, `Cmd-,`
+`Cmd-1`…`Cmd-9` (`Ctrl` on Windows and Linux) jump between screens, `Cmd-,`
 opens Settings and `Cmd-R` reads the collection again. Sortero follows your
 system's light or dark appearance.
 
@@ -419,6 +420,45 @@ credential store. One-time setup is creating a free app at
 Without connecting, Spotify links fall back to a public preview capped at 50
 tracks, and TIDAL links need a connection. Pasting a tracklist as
 `Artist - Title` lines, or loading a CSV export, always works.
+
+## Set designer
+
+**Set designer** helps you build a set one track at a time. Search for a track
+to start, or use **Start from a playlist…** above your set. On the right is
+what fits after the track selected in your set, or after the last one, best first, each with its reasons: "Next on the wheel
+(8A → 9A)", "+2% tempo", "Energy 6 → 7", "You've played it next before".
+Double-click one, or press Return, to add it.
+
+What counts:
+
+- **Key**, on the Camelot wheel. The same key, one step either way and the
+  relative major or minor mix cleanly; a diagonal step, two steps up, or a
+  semitone up (+7) work with care. Anything else is a key clash.
+- **Tempo.** Within 1.5% is a free blend, and the score falls away to 8% apart.
+  Half and double time count as the same tempo.
+- **Energy**, from Mixed In Key's rating, judged against the way you choose:
+  **Any**, **Build**, **Hold** or **Drop**.
+- **Your own playlists.** Tracks you've put next to each other get a lift, and
+  a pairing you've used before is kept even when the keys clash: you've already
+  decided it works.
+
+Key clashes and tempo jumps are otherwise left out of the suggestions. Type in
+**Search** to add any track; the best fits come first. A track with no key,
+BPM or energy tag scores neither up nor down, so the suggestions are only as
+good as your [analysis](#the-analysis-loop).
+
+**Blend** marks how well each track in the set follows the one before:
+Smooth, OK, Rough or Clash. **Order set** puts the whole set in the order that
+flows best, or along a shape: **Build up**; **Build, peak, land**; or
+**Waves**. **Keep the opener** leaves your first track first, and **Undo** puts
+the old order back.
+
+**Save as playlist…** writes the set to `_Playlists`, and History can undo it.
+**More → Send to Gig prep…** saves it and adds it to the end of your gig set.
+The set you're working on is remembered between launches.
+
+Everything comes from the tags already in your files: nothing is uploaded and
+no audio is analysed.
 
 ## AIFF and WAV files with a damaged header
 

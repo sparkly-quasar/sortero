@@ -11,7 +11,7 @@ from tkinter import ttk, filedialog, messagebox
 from .. import mixxx, ui, paths, settings
 from ..common import human_size
 from ..gig import (backup, checklist, convert, cues, disks, ffmpeg, profiles, rbxml,
-                   usbexport, verify)
+                   onelibrary, usbexport, verify)
 from ..gig.checklist import DONE, NEXT, WAITING
 from .base import Screen, APP
 from .gig_set import SetPicker, short
@@ -24,11 +24,10 @@ MARK = {verify.FAIL: "✗", verify.WARN: "!", verify.PASS: "✓"}
 
 # The ways to make the main stick: (key, choice, what it means)
 ROUTES = [("sortero", "Sortero writes it",
-           "For Pioneer players. No other app needed. Denon players can still browse its "
-           "folders."),
+           "For Pioneer and Denon players. No other app needed. Its Engine DJ library "
+           "for Denon players is new and hasn't been tried on a Denon player yet."),
           ("app", "Write it with rekordbox or Engine DJ",
-           "Sortero saves the set for the app to import, and shows the steps. Denon "
-           "players need this: Sortero can't write Engine DJ's library."),
+           "Sortero saves the set for the app to import, and shows the steps."),
           ("skip", "No main stick",
            "Only the folders stick (step 5). Pioneer and Denon players browse it by "
            "folder, without playlists, cue points or beat grids. Good for a laptop "
@@ -133,8 +132,8 @@ class GigScreen(Screen):
                "against what Pioneer's and Denon's own manuals say the players read, and "
                "makes a gig-safe copy of any that won't play everywhere, in a folder next "
                "to your collection. Your originals are never changed.\n\n"
-               "Then the main stick: the set goes into rekordbox or Engine DJ and onto the "
-               "stick, and Sortero checks it: the file system, the library, every format, "
+               "Then the main stick: Sortero writes the set to it (or rekordbox or Engine "
+               "DJ does), and checks it: the file system, the library, every format, "
                "every track decoded from start to finish. A backup stick of plain folders "
                "is recommended. It ends with GIG READY.")
 
@@ -383,10 +382,14 @@ class GigScreen(Screen):
         self.picker.forget_undo()
         self.set_changed("You changed the players or the copies")
 
+    def _writes(self):
+        """Can Sortero write a library the chosen players read? (rekordbox's or Engine DJ's)"""
+        return profiles.reads_rekordbox(self.profile) or profiles.reads_engine(self.profile)
+
     def _route(self):
         """How the main stick gets made: "sortero", or "app" (rekordbox / Engine DJ),
-        which is the only way when the chosen players don't read rekordbox's library."""
-        if not profiles.reads_rekordbox(self.profile):
+        which is the only way when Sortero can't write what the chosen players read."""
+        if not self._writes():
             return "app"
         return "app" if settings.get("gig_main_route") == "app" else "sortero"
 
@@ -419,7 +422,7 @@ class GigScreen(Screen):
         st = self.state
         st.playlists, st.track_count = self.picker.names(), self.picker.track_count()
         st.apps = self._apps()
-        st.direct = profiles.reads_rekordbox(self.profile) and self._route() == "sortero"
+        st.direct = self._writes() and self._route() == "sortero"
         if st.skip_main:
             self.route_var.set("skip")
         elif self.route_var.get() != "skip":       # "skip" is only a choice until it's made
@@ -561,7 +564,7 @@ class GigScreen(Screen):
             # Sortero writing it is only a choice when the players read its library
             for key, row in self.routes.items():
                 row.pack_forget()
-                if key != "sortero" or profiles.reads_rekordbox(self.profile):
+                if key != "sortero" or self._writes():
                     row.pack(fill="x", pady=(4, 0))
             order += [(self.route_box, not (st.main and st.main.ready)),
                       (w["top"], bool(self.xml_label.cget("text") or has_how)
@@ -974,22 +977,30 @@ class GigScreen(Screen):
         stick = self._choose_stick("main")
         if not stick or not self._stick_usable(stick):
             return
-        why = usbexport.foreign(stick)
+        engine = profiles.reads_engine(self.profile)
+        why = usbexport.foreign(stick, engine)
         if why:
             self._offer_format(f"Sortero won't write to this stick: {why}.")
             return
+        libraries = ("the rekordbox libraries Pioneer players read and the Engine DJ "
+                     "library Denon players read" if engine else
+                     "the rekordbox libraries Pioneer players read")
+        untried = ("This is new: the rekordbox libraries haven't been confirmed working on "
+                   "a player yet, and the Engine DJ library hasn't been tried on a real "
+                   "Denon player at all, so bring a second stick you trust." if engine else
+                   "This is new: it hasn't been confirmed working on a player yet, so "
+                   "bring a second stick you trust.")
         if not messagebox.askokcancel(
-                APP, "Sortero will copy tonight's tracks to the stick and write the rekordbox "
-                     "libraries Pioneer players read, with your playlists, beat grids, cue "
-                     "points, waveforms and artwork. Then it checks the stick.\n\n"
-                     "This is new: it hasn't been confirmed working on a player yet, so "
-                     "bring a second stick you trust."):
+                APP, f"Sortero will copy tonight's tracks to the stick and write {libraries}, "
+                     "with your playlists, beat grids, cue points, waveforms and artwork. "
+                     f"Then it checks the stick.\n\n{untried}"):
             return
 
         def work(progress, log):
             made = make_xml(progress, log) if make_xml else None
             try:
-                return made, usbexport.write(stick, path, progress=progress, log=log), None
+                return made, usbexport.write(stick, path, progress=progress, log=log,
+                                             engine=engine), None
             except (usbexport.StickError, OSError) as e:
                 return made, None, str(e)
 
@@ -1001,11 +1012,26 @@ class GigScreen(Screen):
                 messagebox.showerror(APP, error)
                 self.refresh()
                 return
+            if not result.onelibrary:
+                m = onelibrary.MISSING
+                messagebox.showwarning(
+                    APP, f"The stick has no OneLibrary. {m[:1].upper() + m[1:]}.\n\n"
+                         "Players other than the newest read the library that was written.")
             if result.missing:
                 messagebox.showwarning(
                     APP, f"{ui.plural(len(result.missing), 'track')} in the set "
                          "couldn't be found on this computer, so they're not on the stick:\n\n"
                          + "\n".join(t for t, _ in result.missing[:10]))
+            if result.engine_repeats or result.engine_dropped_cues:
+                lines = [f"{title}: in {name} once, not twice"
+                         for name, title in result.engine_repeats[:6]]
+                lines += [f"{title}: {ui.plural(n, 'cue')} past the 8 pads and 8 loops"
+                          for title, n in result.engine_dropped_cues[:6]]
+                messagebox.showwarning(
+                    APP, "The Engine DJ library for Denon players can't hold everything in "
+                         "the set: a playlist lists each track once, and a track has 8 hot "
+                         "cue pads and 8 saved loops. The rekordbox libraries have it all."
+                         "\n\n" + "\n".join(lines))
             if result.no_waveform:
                 messagebox.showwarning(
                     APP, f"{ui.plural(len(result.no_waveform), 'track')} couldn't be decoded "

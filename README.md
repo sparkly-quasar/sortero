@@ -514,6 +514,25 @@ are just a title.
    confirmed on a real player yet**, so bring a second stick you trust until it has. (An
    XDJ-RX2 showed nothing on sticks from before v0.35.4, which left out the browse menu
    rekordbox's library carries; v0.35.4 writes it, and the stick check now looks for it.)
+
+   When Denon players are among tonight's, it also writes the Engine DJ library they
+   read (`Engine Library/Database2/m.db`), pointing at the same audio under
+   `Contents/`, so one stick carries both makers' libraries: the playlists in set order,
+   BPM, key, beat grids, up to 8 hot cues and 8 loops per track (memory cues fill the
+   pads hot cues leave free), the overview waveform and artwork. Engine lists a track
+   once per playlist, so a set that plays a track twice loses the repeat there, and Gig
+   prep says so. **The Engine DJ library hasn't been tried on a real Denon player
+   yet.** Still open until it has: whether players on Engine OS 4.x and 5.x accept a
+   library Engine DJ didn't write, whether cues land on the beat on MP3s, and whether
+   the players need Engine's other database files. It writes schema 3.0.2 (Engine DJ
+   4.5 and 5), transcribed from [libdjinterop](https://github.com/xsco/libdjinterop),
+   whose blob layouts it follows too, with
+   [rb2engine](https://pypi.org/project/rb2engine/)'s conventions for the grid and the
+   cue pads, and checked against a library a Denon player wrote itself: the same
+   schema, the same layouts, and artwork kept as Engine keeps it; see
+   [docs/research](docs/research/writing-engine-library.md). An Engine library that
+   Engine DJ wrote, or has since added to or upgraded, is never overwritten.
+
    The writers are ports of [openboxxx](https://github.com/sparkly-quasar/openboxxx)'s
    (`export.pdb`, laid out page by page like a real rekordbox export) and
    follow [rbxport](https://github.com/chrisle/rbxport)'s (OneLibrary, and
@@ -525,8 +544,8 @@ are just a title.
    Engine DJ** writes a rekordbox XML of the same set, and the step shows how
    to get it onto the stick: into rekordbox 7.2.11 or later, which writes both
    libraries; for Denon players, Engine DJ imports the same XML, cues
-   included, and its Sync Manager exports it. Sortero can't write Engine DJ's
-   library itself yet, so for Denon-only players this is the only choice.
+   included, and its Sync Manager exports it. Until Sortero's own Engine DJ
+   library has been proven on a Denon player, this is the tried way for them.
 
    *No main stick*: **Use only the folders stick** makes the folders stick
    (step 4 here) the only one: it's no longer optional, and **GIG READY** waits
@@ -540,8 +559,9 @@ are just a title.
    Then **Check the main stick…**: the file system and
    partitions (FAT32 on one MBR partition is what every player reads), that a
    library the players read is on it (either rekordbox's or Engine DJ's will
-   do; the missing one is a warning) and that tonight's playlists are in the
-   rekordbox one, every file's format, every file decoded from start to finish,
+   do; the missing one is a warning) and that tonight's playlists are in each
+   one it can open, that every track the rekordbox and Engine DJ libraries list
+   is on the stick, every file's format, every file decoded from start to finish,
    and FAT32 name and size limits. If the stick itself is the problem, the step
    offers **Format the stick as FAT32…** right there. With MP3 copies, the cue
    points window has **Move cues 25 ms later on MP3 copies**, for players that

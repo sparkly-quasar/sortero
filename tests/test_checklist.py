@@ -58,8 +58,17 @@ class Steps(unittest.TestCase):
                          ("main", "Save the set for rekordbox and Engine DJ"))
         self.assertEqual(nxt.title, "Main stick")
         # the backup can be done now, but the main stick comes first
-        self.assertEqual(statuses(st)["backup"], K.WAITING)
+        self.assertEqual(statuses(st)["backup"], K.NEXT)
         self.assertEqual(step(st, "backup").button, "Write the backup stick…")
+        self.assertEqual(K.current(K.steps(st)), "main")
+
+    def test_a_main_stick_that_fails_leaves_the_backup_open_to_write(self):
+        st = K.State(["Warmup"], 2, items=[item(C.READY)], direct=True,
+                     main=stick(False))
+        self.assertEqual(statuses(st)["main"], K.NEXT)
+        self.assertEqual(statuses(st)["backup"], K.NEXT)
+        self.assertEqual(step(st, "backup").button, "Write the backup stick…")
+        self.assertEqual(K.current(K.steps(st)), "main")
 
     def test_for_pioneer_players_sortero_writes_the_main_stick(self):
         st = K.State(["Warmup"], 2, items=[item(C.READY)], apps="rekordbox", direct=True)
@@ -70,6 +79,14 @@ class Steps(unittest.TestCase):
         self.assertNotIn("Engine DJ", nxt.text)
         st.main = stick(True)
         self.assertEqual(step(st, "main").status, K.DONE)
+
+    def test_for_denon_players_too_sortero_writes_both_libraries(self):
+        st = K.State(["Warmup"], 2, items=[item(C.READY)], apps="rekordbox or Engine DJ",
+                     direct=True)
+        self.assertIn("writes the libraries Pioneer and Denon players read",
+                      step(st, "main").text)
+        st.apps = "Engine DJ"
+        self.assertIn("writes the library Denon players read", step(st, "main").text)
 
     def test_a_backup_from_an_earlier_session_still_leaves_the_main_stick_to_write(self):
         st = K.State(["Warmup"], 2, direct=True, earlier=time.time() - 60,

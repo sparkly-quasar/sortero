@@ -13,9 +13,11 @@ Five steps, in the order a gig is prepared:
   ready   Ready to leave: GIG READY once the main stick passes
   backup  Backup stick (optional): numbered folders on a second stick, checked
 
-A step is DONE, NEXT (the one to do now) or WAITING (not yet). The backup is
-optional, so it comes last: it can be done any time after the tracks, and is
-NEXT once the main stick passes, but Ready to leave is what opens then.
+A step is DONE, NEXT (one that can be done now) or WAITING (not yet). The
+backup is optional, so it comes last, but it can be done any time after the
+tracks: it's NEXT from then on, even while the main stick isn't written or
+doesn't pass, which is when a backup matters most. The main stick is still
+the step that opens first, and once it passes, Ready to leave is.
 
 The main stick can be skipped (skip_main): then the folders stick is the only
 one, it's no longer optional, and GIG READY waits for it to pass instead.
@@ -256,7 +258,7 @@ def steps(st):
     else:
         out.append(Step("backup", title, "The set as numbered folders on a "
                         "second stick, to browse if the main stick fails.",
-                        NEXT if main_ok else WAITING, "Write the backup stick…"))
+                        NEXT, "Write the backup stick…"))
 
     return out
 

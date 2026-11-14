@@ -136,13 +136,27 @@ def cue_kind(hot):
 def build(path, tracks, playlists, device_name="", today="", artwork=()):
     """Write exportLibrary.db at `path` (devicesql.Track and Playlist lists), all or nothing.
 
-    `artwork` is [(image id, path on the stick)], as artwork.Collector.table() gives."""
+    `artwork` is [(image id, path on the stick)], as artwork.Collector.table() gives.
+
+    Made on this computer's disk and then copied whole: SQLite on a FAT32 stick
+    can refuse to write ("attempt to write a readonly database"), as macOS
+    gives a file a new inode number once it first holds data (enginelib.make)."""
+    import tempfile
+    with tempfile.TemporaryDirectory(prefix="sortero-onelibrary-") as folder:
+        local = os.path.join(folder, FILE_NAME)
+        _fill(local, tracks, playlists, device_name, today, artwork)
+        tmp = path + ".sortero-tmp"
+        with open(local, "rb") as src, open(tmp, "wb") as fh:
+            fh.write(src.read())
+            fh.flush()
+            os.fsync(fh.fileno())
+    os.replace(tmp, path)
+    return path
+
+
+def _fill(tmp, tracks, playlists, device_name, today, artwork):
     import time
     today = today or time.strftime("%Y-%m-%d")
-    tmp = path + ".sortero-tmp"
-    for p in (tmp, tmp + "-journal"):
-        if os.path.exists(p):
-            os.remove(p)
     con = _open(tmp)
     try:
         con.execute("PRAGMA journal_mode=DELETE")
@@ -214,11 +228,6 @@ def build(path, tracks, playlists, device_name="", today="", artwork=()):
         con.commit()
     finally:
         con.close()
-    with open(tmp, "rb+") as fh:
-        fh.flush()
-        os.fsync(fh.fileno())
-    os.replace(tmp, path)
-    return path
 
 
 # -------------------------------------------------------------------- read

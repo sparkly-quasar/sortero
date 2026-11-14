@@ -40,7 +40,7 @@ on Engine 5; what currentPlayedIndiciator, the loudness values and the
 grid's unknown field must be; and whether the players need hm.db and the
 other Database2 files present or make them.
 """
-import hashlib, math, os, random, re, sqlite3, struct, time, uuid as uuidlib, zlib
+import hashlib, math, os, random, re, sqlite3, struct, tempfile, time, uuid as uuidlib, zlib
 from dataclasses import dataclass, field
 
 FOLDER = "Engine Library"
@@ -342,21 +342,40 @@ def art_hash(data):
 
 
 def build(path, tracks, playlists, audio, art=None, library_uuid=None, now=None):
-    """Write m.db at `path`, all or nothing. Returns a Built.
+    """Write m.db at `path`, all or nothing (make(), then the file whole). Returns a Built."""
+    data, built = make(tracks, playlists, audio, art, library_uuid, now)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".sortero-tmp"
+    with open(tmp, "wb") as fh:
+        fh.write(data)
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(tmp, path)
+    return built
+
+
+def make(tracks, playlists, audio, art=None, library_uuid=None, now=None):
+    """m.db's bytes, and a Built saying what's in it.
 
     `tracks` and `playlists` are the devicesql lists usbexport.plan() makes,
     `audio` {track id: Audio}, `art` {image id: JPEG} for Track.artwork_id.
     `library_uuid` keeps the library's identity across rewrites, so a player's
-    history stays with it."""
+    history stays with it.
+
+    Made on this computer's disk, never on the stick: on FAT32 a file's inode
+    number changes once it first holds data (macOS makes them up, FAT has
+    none), and SQLite takes that for the database having been moved and
+    refuses to write any more ("attempt to write a readonly database")."""
+    with tempfile.TemporaryDirectory(prefix="sortero-engine-") as folder:
+        tmp = os.path.join(folder, "m.db")
+        built = _fill(tmp, tracks, playlists, audio, art or {}, library_uuid, now)
+        with open(tmp, "rb") as fh:
+            return fh.read(), built
+
+
+def _fill(tmp, tracks, playlists, audio, art, library_uuid, now):
     now = int(now if now is not None else time.time())
-    art = art or {}
     built = Built(library_uuid or str(uuidlib.uuid4()))
-    folder = os.path.dirname(path)
-    os.makedirs(folder, exist_ok=True)
-    tmp = path + ".sortero-tmp"
-    for p in (tmp, tmp + "-journal"):
-        if os.path.exists(p):
-            os.remove(p)
     con = sqlite3.connect(tmp)
     try:
         con.execute("PRAGMA journal_mode=DELETE")
@@ -441,17 +460,10 @@ def build(path, tracks, playlists, audio, art=None, library_uuid=None, now=None)
                             "nextEntityId, membershipReference) VALUES (?, ?, ?, ?, ?, 0)", rows)
         built.playlists = len(playlists)
         con.commit()
-    except BaseException as e:
+    except sqlite3.Error as e:
+        raise EngineError(f"couldn't write the Engine library ({e})") from e
+    finally:
         con.close()
-        os.remove(tmp)
-        if isinstance(e, sqlite3.Error):
-            raise EngineError(f"couldn't write the Engine library ({e})") from e
-        raise
-    con.close()
-    with open(tmp, "rb+") as fh:
-        fh.flush()
-        os.fsync(fh.fileno())
-    os.replace(tmp, path)
     return built
 
 

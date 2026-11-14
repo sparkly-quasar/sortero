@@ -423,7 +423,8 @@ def check_main(stick, profile, playlists=None):
         else:
             complete.append(app)
     if complete:
-        parts.append(f"tonight's {_plural(len(playlists), 'playlist')} are in its "
+        parts.append(f"tonight's {_plural(len(playlists), 'playlist')} "
+                     f"{'is' if len(playlists) == 1 else 'are'} in its "
                      + " and ".join(complete)
                      + (" library" if len(complete) == 1 else " libraries"))
     if not parts:

@@ -359,6 +359,21 @@ def write(stick, xml_path, progress=None, log=print, workers=None, cache=None, e
     finally:
         pool.shutdown(wait=True, cancel_futures=True)
     cache.prune()
+    engine_mark = engine_db = None
+    if engine:
+        # Made in full before any library goes on the stick: if it can't be, the
+        # stick is left as it was, not with half a library and no marker.
+        big = {i: art.files[artwork.path(i, medium=True)] for i in art.ids.values()}
+        try:
+            # The same identity as last time, so a player's history stays with it
+            engine_db, built = enginelib.make(
+                p.tracks, p.playlists, audio, art=big,
+                library_uuid=(mark.get("engine") or {}).get("uuid"))
+        except enginelib.EngineError as e:
+            raise StickError(f"Sortero {e}. Nothing else on the stick was changed.")
+        engine_mark = _engine_identity(built)
+        res.engine = True
+        res.engine_repeats, res.engine_dropped_cues = built.repeats, built.dropped_cues
     # The databases last: until they're there, no player sees a half-written library.
     for rel, data in art.files.items():
         _put(stick, rel, data)
@@ -379,18 +394,8 @@ def write(stick, xml_path, progress=None, log=print, workers=None, cache=None, e
         if os.path.exists(ol_path):
             os.remove(ol_path)      # Sortero's from an earlier run; it no longer matches
     engine_path = os.path.join(stick, enginelib.DATABASE)
-    engine_mark = None
-    if engine:
-        big = {i: art.files[artwork.path(i, medium=True)] for i in art.ids.values()}
-        try:
-            # The same identity as last time, so a player's history stays with it
-            built = enginelib.build(engine_path, p.tracks, p.playlists, audio, art=big,
-                                    library_uuid=(mark.get("engine") or {}).get("uuid"))
-        except enginelib.EngineError as e:
-            raise StickError(f"Sortero {e}.")
-        engine_mark = _engine_identity(built)
-        res.engine = True
-        res.engine_repeats, res.engine_dropped_cues = built.repeats, built.dropped_cues
+    if engine_db is not None:
+        _put(stick, enginelib.DATABASE.replace(os.sep, "/"), engine_db)
     elif mark.get("engine") and os.path.isfile(engine_path) and not engine_foreign(stick, mark):
         os.remove(engine_path)      # Sortero's, from when Denon players were chosen
     _put(stick, MARKER.replace(os.sep, "/"), json.dumps(

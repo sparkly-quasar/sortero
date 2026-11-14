@@ -611,6 +611,36 @@ class Stick(TempDir):
         with open(self.engine(), "rb") as fh:
             self.assertEqual(fh.read(), b"Engine DJ's")
 
+    def test_an_engine_library_that_cant_be_made_leaves_the_stick_as_it_was(self):
+        # It used to be made on the stick after OneLibrary, so a failure left
+        # exportLibrary.db with no marker, and the next run refused the stick.
+        with mock.patch.object(E, "make", side_effect=E.EngineError(
+                "couldn't write the Engine library (attempt to write a readonly database)")):
+            with self.assertRaises(U.StickError) as caught:
+                U.write(self.stick, self.xml, log=lambda *a: None)
+        self.assertIn("Nothing else on the stick was changed", str(caught.exception))
+        for rel in (pdb.RELATIVE, os.path.join("PIONEER", "rekordbox", O.FILE_NAME),
+                    E.DATABASE, U.MARKER):
+            self.assertFalse(os.path.exists(os.path.join(self.stick, rel)), rel)
+        self.assertIsNone(U.foreign(self.stick))
+        U.write(self.stick, self.xml, log=lambda *a: None)
+        self.assertEqual(E.info(self.engine())["tracks"], 3)
+
+    def test_the_databases_are_made_off_the_stick(self):
+        # SQLite on a FAT32 stick can fail: macOS changes an empty file's inode
+        # number once it holds data, and SQLite takes it for a moved database.
+        import sqlite3
+        made = []
+        real = sqlite3.connect
+
+        def connect(path, *a, **k):
+            made.append(path)
+            return real(path, *a, **k)
+        with mock.patch.object(E.sqlite3, "connect", connect):
+            U.write(self.stick, self.xml, log=lambda *a: None)
+        self.assertEqual(len(made), 1)
+        self.assertFalse(os.path.abspath(made[0]).startswith(os.path.abspath(self.stick)))
+
     def test_an_old_engine_library_is_never_overwritten(self):
         os.makedirs(os.path.join(self.stick, E.FOLDER))
         with open(os.path.join(self.stick, E.OLD_DATABASE), "wb") as fh:

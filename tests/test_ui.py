@@ -12,6 +12,9 @@ class ShiftArrows(unittest.TestCase):
         except tk.TclError as e:
             raise unittest.SkipTest(f"Tk can't open a window here ({e})")
         self.addCleanup(self.root.destroy)
+        # Clicks need the window on screen, but nobody needs to see it: fully
+        # transparent, it doesn't pop up while the tests run.
+        self.root.attributes("-alpha", 0.0)
         frame, self.tv = ui.tree(self.root, [("name", "Name", 200)])
         frame.pack()
         for i in range(10):

@@ -266,8 +266,8 @@ class GigScreen(Screen):
                 side="left", padx=(ui.GAP, 0))
         tools = _links(body)
         tools.pack(side="bottom", fill="x", pady=(6, 0))
-        widgets["format"] = ttk.Button(tools, text="Format the stick as FAT32…",
-                                       command=self.format_stick)
+        widgets["eject"] = _button(tools, "Eject a stick…", lambda: self.eject_stick(which))
+        widgets["format"] = _button(tools, "Format a stick as FAT32…", self.format_stick)
         widgets["quick"] = _button(tools, "Faster check (doesn't play every track)…",
                                    lambda: self.check_main(decode=False) if which == "main"
                                    else self.check_backup(decode=False))
@@ -595,22 +595,23 @@ class GigScreen(Screen):
                                                   st.backup.skipped[:verify.SHOWN]]))
             f.show_report(report, extra)
 
-        # The step's own button does the job; these are only for after a check.
-        # Formatting when the check found the stick itself is the problem, and a
-        # faster check for a stick that's been checked once already.
+        # The step's own button does the job; these are tools around it: eject the
+        # stick (this step's, when it's plugged in, or one you choose), format one,
+        # and a faster check for a stick that's been checked once already.
         from ..gig import formatting
-        stick_failed = bool(report and any(c.title == "Stick" and c.level == verify.FAIL
-                                           for c in report.checks))
-        show_format = bool(formatting.available() and stick_failed and not skipped)
+        mount = self._mount(which)
+        w["eject"].configure(text=f"Eject “{os.path.basename(os.path.normpath(mount))}”"
+                             if mount else "Eject a stick…")
+        show_format = bool(formatting.available()) and not skipped
         show_quick = bool(st.main if which == "main" else st.backup_check) and not skipped
-        for button, shown, side in ((w["format"], show_format, "left"),
+        for button, shown, side in ((w["eject"], not skipped, "left"),
+                                    (w["format"], show_format, "left"),
                                     (w["quick"], show_quick, "right")):
+            button.pack_forget()
             if shown:
-                button.pack(side=side)
-            else:
-                button.pack_forget()
+                button.pack(side=side, padx=(0, ui.GAP) if side == "left" else 0)
         order += [(f, bool(report) and not skipped),
-                  (w["tools"], show_format or show_quick)]
+                  (w["tools"], not skipped)]
 
         # Packed afresh in this order, so a part that comes back lands in its place
         # and the first one showing has no gap above it.
@@ -711,6 +712,39 @@ class GigScreen(Screen):
         if ejected:
             self.app.set_status(f"Ejected {' and '.join(ejected)}. You can unplug "
                                 f"{'it' if len(ejected) == 1 else 'them'} now.")
+        self.refresh()
+
+    def eject_stick(self, which):
+        """Eject this step's stick if it's plugged in, otherwise one the user chooses."""
+        if self.app.task.running:
+            messagebox.showinfo(APP, "Sortero is still working. Wait for it to finish "
+                                     "before you eject a stick.")
+            return
+        mount = self._mount(which)
+        if not mount:
+            start = "/Volumes" if paths.IS_MAC and os.path.isdir("/Volumes") else None
+            chosen = filedialog.askdirectory(title="Choose the stick to eject",
+                                             initialdir=start, mustexist=True)
+            if not chosen:
+                return
+            mount = disks.mount_point(chosen)
+        name = os.path.basename(os.path.normpath(mount)) or mount
+        root = self.app.root_dir.get()
+        keep = [root, paths.data_dir()]
+        if root:
+            try:
+                keep.append(convert.library_dir(root, settings.get("gig_library")))
+            except convert.LibraryError:
+                pass
+        why = disks.ejectable(mount, keep)
+        if why:
+            messagebox.showwarning(APP, f"Sortero won't eject “{name}”: {why}.")
+            return
+        why = disks.eject(mount)
+        if why:
+            messagebox.showwarning(APP, f"Couldn't eject “{name}”: {why}")
+        else:
+            self.app.set_status(f"Ejected “{name}”. You can unplug it now.")
         self.refresh()
 
     def eject_main(self):

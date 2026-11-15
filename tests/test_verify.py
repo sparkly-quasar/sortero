@@ -486,6 +486,20 @@ class DiskTools(unittest.TestCase):
                          "Music Thing has it open. Quit Music Thing, then try again.")
         self.assertEqual(disks.in_use_by("Volume GIG on disk6 failed to unmount"), "")
 
+    def test_a_stick_is_ejected_from_any_folder_on_it(self):
+        mounts = {"/", "/Volumes/GIG", "/Volumes/Music"}
+        ismount = mounts.__contains__
+        self.assertEqual(disks.mount_point("/Volumes/GIG/01 Warmup", ismount), "/Volumes/GIG")
+        self.assertEqual(disks.mount_point("/Volumes/GIG", ismount), "/Volumes/GIG")
+        self.assertEqual(disks.mount_point("/Users/dj/Music", ismount), "/")
+
+    def test_never_the_computers_disk_or_the_one_with_the_music(self):
+        ismount = {"/", "/Volumes/GIG", "/Volumes/Music"}.__contains__
+        keep = ["/Volumes/Music/Collection", "/Users/dj/Library/Sortero"]
+        self.assertEqual(disks.ejectable("/Volumes/GIG", keep, ismount), "")
+        self.assertIn("your music", disks.ejectable("/Volumes/Music", keep, ismount))
+        self.assertIn("this computer's own disk", disks.ejectable("/", keep, ismount))
+
     """Parsing each platform's tool. lsblk's layout is taken from real output;
     the macOS and Windows samples follow the tools' documented keys."""
 

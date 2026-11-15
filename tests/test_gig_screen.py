@@ -1,0 +1,79 @@
+"""Gig prep's stick steps: the Eject and Format buttons, in a real (hidden) window."""
+import os, shutil, tempfile, tkinter as tk, unittest
+from unittest import mock
+
+from sortero import settings
+from sortero.gig import convert as C, disks
+from tests.test_checklist import item
+
+
+class StickTools(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.root = tempfile.mkdtemp(prefix="sortero-gig-")
+        for key, value in (("root", cls.root), ("setup_complete", True),
+                           ("check_updates_on_launch", False)):
+            settings.set(key, value)
+        from sortero.app import Sortero
+        try:
+            cls.app = Sortero()
+        except tk.TclError as e:                  # no display to open a window on
+            raise unittest.SkipTest(f"Tk can't open a window here ({e})")
+        cls.app.withdraw()
+        cls.gig = cls.app.screens["gig"]
+        cls.gig.state.items = [item(C.READY)]
+        cls.gig.state.copied = True
+
+    @classmethod
+    def tearDownClass(cls):
+        app = getattr(cls, "app", None)
+        if app:
+            app.destroy()
+        shutil.rmtree(cls.root, ignore_errors=True)
+
+    def tools(self, which):
+        self.gig.open(which)
+        self.app.update_idletasks()
+        w = getattr(self.gig, f"{which}_w")
+        return {k: w[k].cget("text") for k in ("eject", "format", "quick")
+                if w[k].winfo_manager()}
+
+    def test_both_stick_steps_can_eject_and_format(self):
+        from sortero.gig import formatting
+        for which in ("main", "backup"):
+            shown = self.tools(which)
+            self.assertEqual(shown["eject"], "Eject a stick…", which)
+            if formatting.available():
+                self.assertEqual(shown["format"], "Format a stick as FAT32…", which)
+
+    def test_the_steps_own_stick_is_named_when_its_plugged_in(self):
+        with mock.patch.object(self.gig, "_mount", return_value="/Volumes/GIG"):
+            self.assertEqual(self.tools("backup")["eject"], "Eject “GIG”")
+            with mock.patch.object(disks, "eject", return_value="") as eject:
+                self.gig.eject_stick("backup")
+            eject.assert_called_once_with("/Volumes/GIG")
+
+    def test_not_while_sortero_is_writing(self):
+        with mock.patch.object(self.gig, "_mount", return_value="/Volumes/GIG"), \
+                mock.patch.object(self.app.task, "running", True), \
+                mock.patch("sortero.screens.gig.messagebox") as box, \
+                mock.patch.object(disks, "eject") as eject:
+            self.gig.eject_stick("main")
+        eject.assert_not_called()
+        box.showinfo.assert_called_once()
+
+    def test_never_the_drive_with_the_music(self):
+        music = disks.mount_point(self.root)
+        with mock.patch.object(self.gig, "_mount", return_value=None), \
+                mock.patch("sortero.screens.gig.filedialog.askdirectory",
+                           return_value=os.path.join(self.root, "x")), \
+                mock.patch("sortero.screens.gig.messagebox") as box, \
+                mock.patch.object(disks, "eject") as eject:
+            self.gig.eject_stick("main")
+        eject.assert_not_called()
+        self.assertIn("won't eject", box.showwarning.call_args[0][1])
+        self.assertTrue(music)
+
+
+if __name__ == "__main__":
+    unittest.main()

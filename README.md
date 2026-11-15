@@ -562,8 +562,11 @@ are just a title.
    do; the missing one is a warning) and that tonight's playlists are in each
    one it can open, that every track the rekordbox and Engine DJ libraries list
    is on the stick, every file's format, every file decoded from start to finish,
-   and FAT32 name and size limits. If the stick itself is the problem, the step
-   offers **Format the stick as FAT32…** right there. With MP3 copies, the cue
+   and FAT32 name and size limits. Both stick steps, main and backup, carry
+   **Eject** (the step's own stick by name when it's plugged in, otherwise
+   **Eject a stick…** to choose one; never while Sortero is writing, and never
+   the drive with your music) and **Format a stick as FAT32…**, which lists the
+   sticks it may erase and asks you to type the name before it does. With MP3 copies, the cue
    points window has **Move cues 25 ms later on MP3 copies**, for players that
    start an MP3 late, with how to tell whether you need it. Once a stick has
    been checked,

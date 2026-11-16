@@ -206,6 +206,29 @@ def in_use_by(text):
     return f"{app} has it open. Quit {app}, then try again."
 
 
+def mount_point(path, ismount=os.path.ismount):
+    """The volume a folder is on: where it's mounted (a stick chosen by any folder on it)."""
+    path = os.path.abspath(path)
+    while not ismount(path):
+        parent = os.path.dirname(path)
+        if parent == path:
+            break
+        path = parent
+    return path
+
+
+def ejectable(mount, keep, ismount=os.path.ismount):
+    """Why the volume at `mount` shouldn't be ejected from Gig prep, or "" if it can be:
+    not the system's, nor the one holding any of `keep` (the music, Sortero's data)."""
+    mount = os.path.abspath(mount)
+    if mount == os.path.abspath(os.sep) or mount == os.path.abspath(os.path.expanduser("~")):
+        return "that's this computer's own disk"
+    for p in keep:
+        if p and mount_point(p, ismount) == mount:
+            return "your music or Sortero's own files are on it"
+    return ""
+
+
 def eject(mount):
     """Eject the stick mounted here, as the file manager would. Returns "" when it's
     gone, otherwise why it isn't (usually: something still has a file open on it)."""

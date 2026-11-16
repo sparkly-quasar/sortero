@@ -21,6 +21,7 @@ import hashlib, os, tempfile
 from . import ffmpeg, tagcopy
 
 SMALL, MEDIUM = 80, 240
+ENGINE = 256                    # what Engine renders into Engine Library/Artwork (enginelib)
 PER_FOLDER = 20
 
 
@@ -51,9 +52,12 @@ def render(data, px):
 class Collector:
     """The images a gig's tracks carry, one id per distinct picture."""
 
-    def __init__(self):
+    def __init__(self, engine=False):
         self.ids = {}           # digest of the embedded picture -> image id
         self.files = {}         # stick path -> JPEG bytes
+        # For the Engine DJ library too: image id -> (SHA-1 of the embedded
+        # picture, a 256 x 256 JPEG of it), as Engine names and sizes its own
+        self.engine = {} if engine else None
 
     def add(self, audio_path):
         """The image id for this track's embedded artwork, or 0 if it has none."""
@@ -67,10 +71,13 @@ class Collector:
         if digest in self.ids:
             return self.ids[digest]
         small, medium = render(art[1], SMALL), render(art[1], MEDIUM)
-        if not small or not medium:
+        big = render(art[1], ENGINE) if self.engine is not None else None
+        if not small or not medium or (self.engine is not None and not big):
             return 0
         image_id = len(self.ids) + 1
         self.ids[digest] = image_id
+        if big:
+            self.engine[image_id] = (bytes.fromhex(digest), big)
         for prefix in "ab":
             self.files[path(image_id, prefix)] = small
             self.files[path(image_id, prefix, True)] = medium

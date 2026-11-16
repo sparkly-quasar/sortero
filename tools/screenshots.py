@@ -10,8 +10,9 @@ folder. Artists and titles are made up.
 
 The sticks Gig prep checks are plain folders, so there's no real file system
 to read; the script reports them as FAT32 on one MBR partition, which is what
-a stick Sortero formatted would be. The main stick gets an Engine Library
-folder holding the set, as Engine DJ's export would leave it, so it passes.
+a stick Sortero formatted would be. The main stick is made the way Gig prep
+makes it by default ("Sortero writes it"): the set copied over with its
+rekordbox and Engine DJ libraries, then checked.
 """
 import base64, json, os, shutil, subprocess, sys, tempfile, zlib
 
@@ -184,7 +185,13 @@ def main():
 
     from tkinter import messagebox, filedialog
     messagebox.askyesno = lambda *a, **k: True
+    messagebox.askokcancel = lambda *a, **k: True
     messagebox.showinfo = lambda *a, **k: None
+
+    def said(kind):
+        # A warning or error would wait for a click that never comes: say it here
+        return lambda title, message, **k: print(f"{kind}: {message}", file=sys.stderr)
+    messagebox.showwarning, messagebox.showerror = said("warning"), said("error")
     filedialog.askdirectory = lambda **k: BACKUP if "backup" in k.get("title", "") else STICK
     from sortero.gig import disks, profiles
     disks.volume = lambda mount: disks.Volume(mount, profiles.FAT32, disks.MBR, 1)
@@ -290,17 +297,11 @@ def main():
     def gig():
         app.show("gig")         # opens on step 2, which checks the tracks by itself
         g = app.screens["gig"]
-
-        def pack_main_stick():
-            # what Engine DJ's Export to Drive leaves: its library, holding the set
-            music = os.path.join(STICK, "Engine Library", "Music")
-            os.makedirs(music, exist_ok=True)
-            for it in g.state.items:
-                shutil.copy(it.playable, music)
         chain = [lambda: g.open("set"),
                  lambda: shot("gig-prep-set"),
                  g.cards["set"].button.invoke,          # Done: back to the tracks
-                 g.make_copies, g.make_xml, pack_main_stick, g.check_main,
+                 g.make_copies,
+                 g.write_main,          # "Sortero writes it": the set, its libraries, a check
                  g.write_backup]                        # writes, then checks it
 
         def next_action():

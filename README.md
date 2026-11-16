@@ -716,8 +716,11 @@ Settings.
 ## What's new in v0.35.6
 
 v0.35.6 is the free download. Compared with v0.18.0, the free download before
-it, it adds what's below. The current version, **v0.38.1**, is what
-[Supporter licence](#supporting-sortero) holders get: Library shows its lists
+it, it adds what's below. The current version, **v0.39.0**, is what
+[Supporter licence](#supporting-sortero) holders get: a new
+[Set designer](#set-designer) screen that suggests what fits after each track
+in a set, from key, BPM, energy and your own playlists, says why, and puts a
+set in the order that flows best. Library shows its lists
 as buttons with their counts, and the tools for the selected tracks above the
 table, where they used to hide in a menu. Shrink to MP3 is in Tidy up, and To
 do says how much space it would save. Gig prep's main stick step

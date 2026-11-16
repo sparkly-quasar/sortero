@@ -13,6 +13,7 @@ from .screens.tracks import LibraryScreen
 from .screens.playlist_builder import StreamingPlaylistsScreen
 from .screens.your_playlists import YourPlaylistsScreen
 from .screens.gig import GigScreen
+from .screens.set_designer import SetDesignerScreen
 from .screens.tidy import (TidyUpScreen, CleanTagsScreen, FixBpmScreen, DuplicatesScreen,
                            ReorganiseScreen)
 from .screens.history import HistoryScreen
@@ -23,11 +24,11 @@ from .version import __version__
 
 NAV = [("todo", "To do"), ("add", "Add music"), ("library", "Library"),
        ("playlists", "Your playlists"), ("streaming", "Streaming playlists"),
-       ("gig", "Gig prep"), ("tidy", "Tidy up"),
+       ("sets", "Set designer"), ("gig", "Gig prep"), ("tidy", "Tidy up"),
        ("history", "History")]
 SCREENS = {"todo": TodoScreen, "add": AddMusicScreen, "library": LibraryScreen,
            "playlists": YourPlaylistsScreen, "streaming": StreamingPlaylistsScreen,
-           "gig": GigScreen, "tidy": TidyUpScreen,
+           "sets": SetDesignerScreen, "gig": GigScreen, "tidy": TidyUpScreen,
            "tags": CleanTagsScreen, "bpm": FixBpmScreen, "dupes": DuplicatesScreen, "reorganise": ReorganiseScreen,
            "history": HistoryScreen, "settings": SettingsScreen, "pro": ProScreen,
            "shrink": ShrinkScreen}

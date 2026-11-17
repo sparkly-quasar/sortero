@@ -442,6 +442,13 @@ What counts:
   a pairing you've used before is kept even when the keys clash: you've already
   decided it works.
 
+**Listen before you add.** Click a track in either list and the player under
+them loads it, starting in the body of the track, past the intro. **Space**
+plays and pauses, and **Intro**, **Body** and **Outro** jump to the start, the
+middle and the last minute, so you can hear how your last track ends and how a
+suggestion begins. While one plays, picking another plays that one instead:
+press ↓ to go down the suggestions listening. Leaving the screen stops it.
+
 Key clashes and tempo jumps are otherwise left out of the suggestions. Type in
 **Search** to add any track; the best fits come first. A track with no key,
 BPM or energy tag scores neither up nor down, so the suggestions are only as

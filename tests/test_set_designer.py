@@ -13,7 +13,8 @@ TRACKS = [("Ana Lusk", "Harbour", "8A", 124, 5),
           ("Dagny Holt", "Fracture Line", "9A", 125, 7),
           ("Halden Voss", "Subgrid", "2B", 138, 9),
           ("Juno Farrow", "Glasshouse", "8B", 124, 6),
-          ("Kepler Vale", "Ninth Hour", "7A", 123, 4)]
+          ("Kepler Vale", "Ninth Hour", "7A", 123, 4),
+          ("Mira Sol", "Low Sun", "2A", 124, 5)]
 
 
 def write(root, artist, title, key, bpm, energy):
@@ -61,6 +62,7 @@ class SetDesigner(unittest.TestCase):
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
     def setUp(self):
+        self.wait()         # a re-read of the collection a test started, say
         # Playlists count as history, so one test's saved set mustn't lift another's
         shutil.rmtree(playlists.playlist_dir(self.root), ignore_errors=True)
         self.sd = self.app.screens["sets"]
@@ -71,7 +73,10 @@ class SetDesigner(unittest.TestCase):
         self.sd.history = None
         self.sd.player.clear()
         self.sd.listening = None
-        self.sd._changed()
+        self.sd.light_keys.set(False)
+        self.sd.journey_on.set(False)
+        self.sd.stages = None
+        self.sd._changed(keep_undo=False)
 
     # ---------------------------------------------------------- helpers
     def rec(self, artist, title):
@@ -178,7 +183,7 @@ class SetDesigner(unittest.TestCase):
         self.wait()
         energies = [r.energy for r in self.sd.set]
         self.assertEqual(energies, sorted(energies))
-        self.assertTrue(self.sd.undo_link.winfo_ismapped() or self.sd._undo is not None)
+        self.assertEqual(str(self.sd.undo_btn.cget("state")), "normal")
         self.sd.undo_order()
         self.assertEqual(self.titles(), before)
 
@@ -320,6 +325,72 @@ class SetDesigner(unittest.TestCase):
         self.sd._loaded_for = None          # as after a restart
         self.sd.shown()
         self.assertEqual(self.titles(), ["Harbour", "Glasshouse"])
+
+    def test_selecting_a_track_says_why_its_blend_is_rough(self):
+        for t in (("Ana Lusk", "Harbour"), ("Halden Voss", "Subgrid")):
+            self.sd.add(self.rec(*t))
+        self.sd.set_tv.selection_set("1")
+        self.app.update()
+        note = self.sd.blend_note.cget("text")
+        self.assertIn("Into #2 from #1: Clash", note)
+        self.assertIn("Key clash (8A → 2B)", note)
+        self.assertIn("Tempo jump (124 → 138 BPM)", note)
+        self.assertIn("Find a bridge", note)
+        self.assertIn("1 key clash, 1 tempo jump", self.sd.set_label.cget("text"))
+
+    def test_key_matters_less(self):
+        for t in (("Ana Lusk", "Harbour"), ("Mira Sol", "Low Sun")):
+            self.sd.add(self.rec(*t))
+        # 8A -> 2A is a key clash, at the same tempo
+        self.assertEqual(self.sd.set_tv.set("1", "blend"), "Clash")
+        self.sd.light_keys.set(True)
+        self.sd._style_changed()
+        self.assertNotEqual(self.sd.set_tv.set("1", "blend"), "Clash")
+
+    def test_find_a_bridge_and_add_it(self):
+        for t in (("Kepler Vale", "Ninth Hour"), ("Dagny Holt", "Fracture Line")):
+            self.sd.add(self.rec(*t))
+        # 7A -> 9A: two steps. Harbour or Slow Tide (8A) sit between.
+        self.sd.set_tv.selection_set("1")
+        self.app.update()
+        self.sd.find_bridge()
+        self.wait()
+        self.assertEqual(self.sd.bridging, 1)
+        self.assertIn("Bridges from #1 to #2", self.sd.next_label.cget("text"))
+        first = self.sd.rows["0"][0].tracks[0].title
+        self.assertIn(first, ("Harbour", "Slow Tide"))
+        self.sd.add_selected()
+        self.assertEqual(self.titles(), ["Ninth Hour", first, "Fracture Line"])
+        self.assertIsNone(self.sd.bridging)
+
+    def test_genre_journey_is_shown_and_remembered(self):
+        for t in (("Ana Lusk", "Harbour"), ("Juno Farrow", "Glasshouse")):
+            self.sd.add(self.rec(*t))
+        self.sd.journey_on.set(True)
+        self.sd._style_changed()
+        self.assertIn("Techno · 2", self.sd.journey_label.cget("text"))
+        self.sd._set_stages(None)
+        self.sd.set, self.sd._loaded_for = [], None
+        self.sd.journey_on.set(False)
+        self.sd.shown()
+        self.assertTrue(self.sd.journey_on.get())
+
+    def test_undo_order_keeps_later_edits(self):
+        for t in (("Kepler Vale", "Ninth Hour"), ("Dagny Holt", "Fracture Line"),
+                  ("Ana Lusk", "Harbour"), ("Ana Lusk", "Slow Tide")):
+            self.sd.add(self.rec(*t))
+        before = self.titles()
+        self.sd.shape_var.set("Build up")
+        self.sd.keep_first.set(False)
+        self.sd.order_set()
+        self.wait()
+        self.sd.add(self.rec("Juno Farrow", "Glasshouse"))      # after Fracture Line, last
+        self.assertEqual(str(self.sd.undo_btn.cget("state")), "normal")
+        self.sd.undo_order()
+        # Back in the old order, Glasshouse still after the track it followed
+        self.assertEqual(self.titles(), ["Ninth Hour", "Fracture Line", "Glasshouse",
+                                         "Harbour", "Slow Tide"])
+        self.assertEqual(str(self.sd.undo_btn.cget("state")), "disabled")
 
 
 if __name__ == "__main__":

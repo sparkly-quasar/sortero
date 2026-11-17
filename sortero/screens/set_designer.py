@@ -7,8 +7,20 @@ The scoring is nextup's: key, tempo and energy from the tags, plus a lift for
 pairs your own playlists put next to each other. Search the library instead
 to add any track, scored against the same track.
 
-Order set puts the whole set in its smoothest order, or along an energy shape,
-and Undo puts it back. Save as playlist writes it to _Playlists, where History
+Click a track in the set and the note under it says how it blends from the
+one before, part by part, so a clash says whether it's the key or the tempo.
+Find a bridge looks for one track, or two, to play between a pair that
+doesn't blend.
+
+Two ways to judge a set differently. Key matters less, for percussive,
+drone-led music where keys rarely fight and analysers often guess them. And
+a genre journey: the genres the set moves through, in order (minimal house,
+then minimal techno, then hypnotic techno), read from the set or set by hand
+in Stages…, so blends that move on a stage score up and ones that go back
+score down.
+
+Order set puts the whole set in its smoothest order, along an energy shape,
+or along the genre journey, and Undo order puts it back. Save as playlist writes it to _Playlists, where History
 can undo it; Send to Gig prep does that and adds it to the gig set.
 
 Below both lists, a player: whatever you last picked in either list, from
@@ -18,7 +30,7 @@ one instead, so you can go down the suggestions listening.
 
 The set is remembered between launches, for the collection it was made in.
 """
-import datetime, os
+import collections, datetime, os
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 
@@ -39,6 +51,7 @@ SEARCH_LIMIT = 200
 SETTING = "set_designer"
 SEND, START, CLEAR = "Send to Gig prep…", "Start from a playlist…", "Clear the set…"
 OUTRO = 60.0        # how far from the end Outro starts: the last minute, where you mix out
+BRIDGES = 12
 
 
 def blend_word(f):
@@ -50,6 +63,51 @@ def blend_word(f):
     if f.score >= 0.6:
         return "OK"
     return "Rough"
+
+
+def explain(f, a, b):
+    """Why a blend scored as it did, part by part, in words."""
+    bits = []
+    k = f.parts.get("key")
+    if k is None:
+        bits.append("Key: not judged, one of them has no key tag")
+    elif f.key_clash and not f.light_keys:
+        bits.append(f"{k}: the keys are far apart on the Camelot wheel, so melodies and "
+                    "basslines can fight while both play. In percussive, drone-led tracks "
+                    "this often doesn't matter; try Key matters less")
+    elif f.key_clash:
+        bits.append(f"{k}, which counts for less here")
+    else:
+        bits.append(k)
+    t = f.parts.get("tempo")
+    if t is None:
+        bits.append("Tempo: not judged, one of them has no BPM")
+    elif f.tempo_jump:
+        bits.append(f"{t}: more than {round(nextup.TEMPO_LIMIT * 100)}% apart, too far for "
+                    "a nudge of the pitch fader. If it mixes fine for you, check both "
+                    "BPM tags")
+    else:
+        bits.append(t)
+    e = f.parts.get("energy")
+    bits.append(e or "Energy: not judged, one of them has no energy rating")
+    for part in ("genre", "history"):
+        if f.parts.get(part):
+            bits.append(f.parts[part])
+    return ". ".join(bits) + "."
+
+
+def causes(fits):
+    """'7 key clashes, 2 tempo jumps' for the rough blends in a set: what made
+    each one rough, even where your playlists vouch for the pair."""
+    weak = [f for f in fits if blend_word(f) in ("Rough", "Clash")]
+    keys = sum(1 for f in weak if f.key_clash and not f.light_keys)
+    tempos = sum(1 for f in weak if f.tempo_jump)
+    out = []
+    if keys:
+        out.append(f"{keys} key {'clash' if keys == 1 else 'clashes'}")
+    if tempos:
+        out.append(f"{tempos} tempo {'jump' if tempos == 1 else 'jumps'}")
+    return ", ".join(out)
 
 
 def bpm_text(rec):
@@ -83,6 +141,23 @@ def matches(recs, query, skip=()):
     return out
 
 
+def undo_merge(before, now):
+    """The order `before`, keeping what changed since: tracks taken out stay
+    out, and a track added since goes after the one it follows now."""
+    key = lambda r: os.path.normcase(r.path)
+    present = {key(r) for r in now}
+    out = [r for r in before if key(r) in present]
+    had = {key(r) for r in out}
+    for i, r in enumerate(now):
+        if key(r) in had:
+            continue
+        prev = key(now[i - 1]) if i else None
+        at = next((j + 1 for j, x in enumerate(out) if key(x) == prev), 0)
+        out.insert(at, r)
+        had.add(key(r))
+    return out
+
+
 class SetDesignerScreen(Screen):
     title = "Set designer"
     summary = "Build a set one track at a time: Sortero suggests what fits next, and says why."
@@ -100,9 +175,21 @@ class SetDesignerScreen(Screen):
                "and Outro jump to the start, the middle and the last minute, so you can hear "
                "how one track ends and the next begins. While a track plays, picking another "
                "plays that one instead.\n\n"
-               "Blend says how well each track follows the one before it. Order set puts the "
-               "whole set in the order that flows best, or along a shape: Build up; Build, "
-               "peak, land; or Waves. Undo puts it back.\n\n"
+               "Blend says how well each track follows the one before it. Click a track in "
+               "your set to see why: the note under the set takes the blend into it part "
+               "by part. Where two tracks don't blend, Find a bridge looks for one track, "
+               "or two, to play in between.\n\n"
+               "Key matters less is for percussive, drone-led music, where keys rarely "
+               "fight and analysers often guess them: tempo and energy count for more, "
+               "and unrelated keys alone don't make a clash.\n\n"
+               "Genre journey is for a set that moves through genres, say minimal house, "
+               "then minimal techno, then hypnotic techno. Sortero reads the stages from "
+               "the order your set plays its genres; Stages… lets you set them, and put "
+               "two genres on the same stage. Blends that move on a stage score up, "
+               "going back scores down, and bridges come from the genres in between.\n\n"
+               "Order set puts the whole set in the order that flows best, or along a "
+               "shape: Build up; Build, peak, land; Waves; or Genre journey, which keeps "
+               "each genre together in the journey's order. Undo order puts it back.\n\n"
                "Save as playlist writes the set to _Playlists, and History can undo that. "
                "Send to Gig prep saves it and adds it to the end of your gig set.\n\n"
                "Suggestions come from key, BPM and energy tags, so they're only as good as "
@@ -114,6 +201,9 @@ class SetDesignerScreen(Screen):
         self.history = None             # nextup.History, read when first needed
         self._undo = None               # the order before Order set
         self._loaded_for = None         # the collection the remembered set was read for
+        self.bridging = None            # index of the track a bridge leads into, when looking
+        self.stages = None              # the journey set by hand, or None to read the set's
+        self.fits = []                  # the blends in the set, as last shown
 
         top = ttk.Frame(self)
         top.pack(fill="x", pady=(0, ui.GAP))
@@ -131,7 +221,20 @@ class SetDesignerScreen(Screen):
         for value, label in DIRECTIONS:
             ttk.Radiobutton(chips, text=label, value=value, variable=self.direction,
                             style="Chip.Toolbutton",
-                            command=self.refresh_next).pack(side="left", padx=(0, 4))
+                            command=self._leave_bridges).pack(side="left", padx=(0, 4))
+
+        opts = ttk.Frame(self)
+        opts.pack(fill="x", pady=(0, ui.GAP))
+        self.light_keys = tk.BooleanVar(value=False)
+        ttk.Checkbutton(opts, text="Key matters less", variable=self.light_keys,
+                        command=self._style_changed).pack(side="left")
+        self.journey_on = tk.BooleanVar(value=False)
+        ttk.Checkbutton(opts, text="Genre journey", variable=self.journey_on,
+                        command=self._style_changed).pack(side="left", padx=(ui.SECTION, 0))
+        self.stages_link = ui.link(opts, "Stages…", self.edit_stages)
+        self.stages_link.pack(side="left", padx=(ui.GAP, 0))
+        self.journey_label = ttk.Label(opts, style="Muted.TLabel")
+        self.journey_label.pack(side="left", fill="x", expand=True, padx=(ui.GAP, 0))
 
         # ---- listening, under both lists. Packed before the panes, which expand,
         # so the bar keeps its height in the smallest window.
@@ -192,6 +295,10 @@ class SetDesignerScreen(Screen):
         self.remove_btn = ttk.Button(edit, text="Remove", command=self.remove)
         for b in (self.up_btn, self.down_btn, self.remove_btn):
             b.pack(side="left", padx=(0, ui.GAP))
+        self.bridge_btn = ttk.Button(edit, text="Find a bridge", command=self.find_bridge)
+        self.bridge_btn.pack(side="right")
+        self.blend_note = ui.WrapLabel(left, style="Muted.TLabel")
+        self.blend_note.pack(fill="x", pady=(4, 0), padx=(0, ui.GAP))
 
         order = ttk.Frame(left)
         order.pack(fill="x", pady=(ui.GAP, 0), padx=(0, ui.GAP))
@@ -203,7 +310,9 @@ class SetDesignerScreen(Screen):
             side="left", padx=(ui.GAP, 0))
         self.order_btn = ttk.Button(order, text="Order set", command=self.order_set)
         self.order_btn.pack(side="left", padx=(ui.GAP, 0))
-        self.undo_link = ui.link(order, "Undo", self.undo_order)
+        self.undo_btn = ttk.Button(order, text="Undo order", command=self.undo_order,
+                                   state="disabled")
+        self.undo_btn.pack(side="left", padx=(ui.GAP, 0))
         self.order_note = ttk.Label(left, style="Muted.TLabel")
         self.order_note.pack(fill="x", pady=(4, 0))
 
@@ -274,12 +383,68 @@ class SetDesignerScreen(Screen):
             keep = [os.path.normcase(r.path) for r in keep]
         by_path = self._by_path()
         self.set = [by_path[p] for p in keep if p in by_path]
+        self.light_keys.set(bool(saved.get("light_keys")))
+        self.journey_on.set(bool(saved.get("journey")))
+        stages = saved.get("stages") if saved.get("root") == root else None
+        self.stages = nextup.Journey.from_list(stages) if stages else None
 
     def _remember(self):
         try:
-            settings.set(SETTING, {"root": self._root(), "paths": [r.path for r in self.set]})
+            settings.set(SETTING, {
+                "root": self._root(), "paths": [r.path for r in self.set],
+                "light_keys": self.light_keys.get(), "journey": self.journey_on.get(),
+                "stages": self.stages.to_list() if self.stages else None})
         except OSError:
             pass        # not being able to remember the set is no reason to stop
+
+    # ------------------------------------------------------------ how blends are judged
+    def journey(self):
+        """The genre journey: set by hand, or read from the set as it plays now."""
+        return self.stages or nextup.Journey.infer(self.set)
+
+    def style(self):
+        return nextup.Style(light_keys=self.light_keys.get(),
+                            journey=self.journey() if self.journey_on.get() else None)
+
+    def _style_changed(self):
+        self._remember()
+        self._show_set(self._selected_index())
+
+    def _show_journey(self):
+        if not self.journey_on.get():
+            self.journey_label.configure(text="")
+            return
+        j = self.journey()
+        counts = collections.Counter(j.stage(r) for r in self.set)
+        steps = []
+        for stage in sorted(set(j.stages.values())):
+            names = [n for n, s in j.items() if s == stage]
+            steps.append(" + ".join(names) + (f" · {counts[stage]}" if counts[stage] else ""))
+        text = " → ".join(steps) if steps else "No genre tags in the set yet."
+        if not self.stages and steps:
+            text += " (from your set)"
+        self.journey_label.configure(text=text)
+
+    def edit_stages(self):
+        genres = {}
+        for r in self.set:
+            g = nextup.genre_of(r)
+            if g:
+                genres.setdefault(fold(g).strip(), g)
+        current = self.journey()
+        for name, _ in current.items():
+            genres.setdefault(fold(name).strip(), name)
+        if not genres:
+            messagebox.showinfo(APP, "None of the tracks in your set has a genre tag, so "
+                                     "there's no journey to set. Tidy up's genre tools can "
+                                     "fill them in.")
+            return
+        StagesDialog(self, current, list(genres.values()), self._set_stages)
+
+    def _set_stages(self, stages):
+        self.stages = stages            # None: read them from the set again
+        self.journey_on.set(True)
+        self._style_changed()
 
     def _history(self):
         if self.history is None:
@@ -303,7 +468,7 @@ class SetDesignerScreen(Screen):
         tv = self.set_tv
         tv.delete(*tv.get_children())
         h = self._history() if self.set else None
-        blends = nextup.transitions(self.set, h)
+        blends = self.fits = nextup.transitions(self.set, h, self.style())
         weak = 0
         for i, r in enumerate(self.set):
             word = blend_word(blends[i - 1]) if i else ""
@@ -317,20 +482,44 @@ class SetDesignerScreen(Screen):
             if minutes(self.set):
                 parts.append(minutes(self.set))
             if weak:
-                parts.append(f"{weak} rough {'blend' if weak == 1 else 'blends'}")
+                why = causes(blends)
+                parts.append(f"{weak} rough {'blend' if weak == 1 else 'blends'}"
+                             + (f" ({why})" if why else ""))
             self.set_label.configure(text=", ".join(parts))
         else:
             self.set_label.configure(text="empty")
         if select is not None and 0 <= select < len(self.set):
             self._select_quietly(tv, str(select))
+        self._show_journey()
         self._sync()
+        self._show_blend()
         self.refresh_next()
 
     def _set_selected(self):
+        self.bridging = None
         self._sync()
+        self._show_blend()
         self._picked(self.set_tv, lambda iid: self.set[int(iid)]
                      if int(iid) < len(self.set) else None)
         self.refresh_next()
+
+    def _show_blend(self):
+        """Under the set: how the selected track blends from the one before."""
+        i = self._selected_index()
+        if i is None or i >= len(self.set):
+            self.blend_note.configure(
+                text="Click a track to see how it blends from the one before." if
+                len(self.set) > 1 else "")
+            return
+        if i == 0:
+            self.blend_note.configure(text=f"#1 opens the set.")
+            return
+        f = self.fits[i - 1]
+        word = blend_word(f)
+        text = f"Into #{i + 1} from #{i}: {word}. {explain(f, self.set[i - 1], self.set[i])}"
+        if word in ("Rough", "Clash"):
+            text += " Find a bridge looks for a track to play between them."
+        self.blend_note.configure(text=text)
 
     def _sync(self):
         i = self._selected_index()
@@ -338,18 +527,21 @@ class SetDesignerScreen(Screen):
         self.up_btn.configure(state="normal" if i else "disabled")
         self.down_btn.configure(state="normal" if i is not None and i < n - 1 else "disabled")
         self.remove_btn.configure(state="normal" if i is not None else "disabled")
+        self.bridge_btn.configure(state="normal" if i and i < n else "disabled")
         self.order_btn.configure(state="normal" if n >= 3 else "disabled")
         self.bar.set_primary("Save as playlist…", self.save,
                              state="normal" if n else "disabled")
         self.bar.enable(SEND, bool(n))
         self.bar.enable(CLEAR, bool(n))
-        if self._undo is None:
-            self.undo_link.pack_forget()
+        self.undo_btn.configure(state="disabled" if self._undo is None else "normal")
 
-    def _changed(self, select=None, keep_undo=False):
+    def _changed(self, select=None, keep_undo=True):
+        # Undo order outlives later edits: undo_order keeps what was added or
+        # taken out since. Only starting the set again forgets it.
         if not keep_undo:
             self._undo = None
-            self.order_note.configure(text="")
+        self.bridging = None
+        self.order_note.configure(text="")
         self._remember()
         self._show_set(select)
 
@@ -385,7 +577,7 @@ class SetDesignerScreen(Screen):
                      "saved."):
             return
         self.set = []
-        self._changed()
+        self._changed(keep_undo=False)
 
     # ------------------------------------------------------------ ordering
     def order_set(self):
@@ -396,9 +588,12 @@ class SetDesignerScreen(Screen):
         before = list(self.set)
         start = before[0] if self.keep_first.get() else None
         history = self._history()
+        style = self.style()
+        if shape == "journey" and style.journey is None:
+            style.journey = self.journey()
 
         def work(progress, log):
-            return nextup.order(before, shape, start=start, history=history)
+            return nextup.order(before, shape, start=start, history=history, style=style)
 
         def done(new):
             if new is None:
@@ -409,27 +604,34 @@ class SetDesignerScreen(Screen):
                 return
             self.set = new
             self._undo = before
-            self.order_note.configure(text=f"Ordered: {shape_label.lower()}.")
-            self.undo_link.pack(side="left", padx=(ui.GAP, 0))
-            self._changed(keep_undo=True)
+            self._changed()
+            self.order_note.configure(text=f"Ordered: {shape_label.lower()}. Undo order "
+                                           "puts it back.")
 
         self.app.task.run(work, done, "Ordering the set")
 
     def undo_order(self):
         if self._undo is None:
             return
-        self.set, self._undo = self._undo, None
-        self.order_note.configure(text="Back in the order you had.")
-        self._changed(keep_undo=True)
+        self.set, self._undo = undo_merge(self._undo, self.set), None
+        self._changed()
+        self.order_note.configure(text="Back in the order you had before Order set.")
 
     # ------------------------------------------------------------ what fits next
+    def _leave_bridges(self):
+        self.bridging = None
+        self.refresh_next()
+
     def _debounce(self):
+        self.bridging = None
         if self._after:
             self.after_cancel(self._after)
         self._after = self.after(200, self.refresh_next)
 
     def refresh_next(self):
         self._after = None
+        if self.bridging is not None:
+            return          # the bridges stay up until you pick something else
         tv = self.next_tv
         tv.delete(*tv.get_children())
         self.rows = {}
@@ -443,10 +645,12 @@ class SetDesignerScreen(Screen):
         direction = None if self.direction.get() == "any" else self.direction.get()
         in_set = {os.path.normcase(r.path) for r in self.set}
         history = self._history() if anchor else None
+        style = self.style()
         if query:
             found = matches(self.app.recs, query, in_set)
             if anchor:
-                scored = [(r, nextup.fit(anchor, r, direction, history)) for r in found]
+                scored = [(r, nextup.fit(anchor, r, direction, history, style))
+                          for r in found]
                 scored.sort(key=lambda rf: (-rf[1].score, rf[0].display.casefold()))
             else:
                 scored = [(r, None) for r in sorted(found, key=lambda r: r.display.casefold())]
@@ -457,7 +661,7 @@ class SetDesignerScreen(Screen):
                      + (f", best fit after “{anchor.display}” first" if anchor else ""))
         elif anchor:
             shown = nextup.suggest(anchor, self.app.recs, direction, history,
-                                   exclude=self.set, n=SUGGESTIONS)
+                                   exclude=self.set, n=SUGGESTIONS, style=style)
             self.next_label.configure(text=f"What fits after “{anchor.display}”")
         else:
             shown = []
@@ -483,13 +687,21 @@ class SetDesignerScreen(Screen):
         return (f"Nothing fits after “{anchor.display}” without a key clash or a tempo "
                 "jump. Search to add any track; the closest fits come first.")
 
+    def _row_rec(self, iid):
+        """The track a suggestion row is: the first of a bridge."""
+        got = self.rows.get(iid, (None,))[0]
+        return got.tracks[0] if isinstance(got, nextup.Bridge) else got
+
     def _next_selected(self, empty=""):
         sel = self.next_tv.selection()
         got = self.rows.get(sel[0]) if sel else None
-        self._picked(self.next_tv, lambda iid: self.rows.get(iid, (None,))[0])
+        self._picked(self.next_tv, self._row_rec)
         self.add_btn.configure(state="normal" if got else "disabled")
         if not got:
             self.why.configure(text=empty)
+            return
+        if isinstance(got[0], nextup.Bridge):
+            self.why.configure(text=self._bridge_text(got[0]))
             return
         r, f = got
         where = self._selected_index()
@@ -520,6 +732,8 @@ class SetDesignerScreen(Screen):
         got = self.rows.get(sel[0]) if sel else None
         if not got:
             return
+        if isinstance(got[0], nextup.Bridge):
+            return self._add_bridge(got[0])
         i = self._selected_index()
         if self.search_var.get():
             # Back to suggestions after what was added. Cleared first, so the
@@ -529,6 +743,82 @@ class SetDesignerScreen(Screen):
                 self.after_cancel(self._after)
                 self._after = None
         self.add(got[0], after=i if i is not None and i < len(self.set) - 1 else None)
+        return "break"
+
+    # ------------------------------------------------------------ bridges
+    def find_bridge(self):
+        """Look for a track, or two, to play between the selected track and the
+        one before it."""
+        i = self._selected_index()
+        if not i or i >= len(self.set) or not self.app.recs:
+            return
+        a, b = self.set[i - 1], self.set[i]
+        history, style, recs, exclude = self._history(), self.style(), self.app.recs, list(self.set)
+
+        def work(progress, log):
+            return nextup.bridges(a, b, recs, history, style, exclude=exclude, n=BRIDGES)
+
+        def done(found):
+            if found is None or self._selected_index() != i:
+                return
+            self._show_bridges(i, found)
+
+        self.app.task.run(work, done, "Looking for a bridge")
+
+    def _show_bridges(self, i, found):
+        self.bridging = i
+        if self.search_var.get():
+            self.search_var.set("")
+            if self._after:
+                self.after_cancel(self._after)
+                self._after = None
+        tv = self.next_tv
+        tv.delete(*tv.get_children())
+        self.rows = {}
+        a, b = self.set[i - 1], self.set[i]
+        self.next_label.configure(text=f"Bridges from #{i} to #{i + 1}, best first")
+        for n, br in enumerate(found):
+            iid = str(n)
+            self.rows[iid] = (br, None)
+            weakest = min(br.fits, key=lambda f: f.score)
+            tv.insert("", "end", iid=iid, values=(
+                min(100, round(br.score * 100)),
+                " → ".join(r.display for r in br.tracks),
+                " → ".join(r.camelot or "?" for r in br.tracks),
+                " → ".join(bpm_text(r) or "?" for r in br.tracks),
+                " → ".join("" if r.energy is None else str(r.energy) for r in br.tracks),
+                ", ".join(weakest.reasons)))
+        if found:
+            self._select_quietly(tv, "0")
+            self._next_selected()
+        else:
+            self.add_btn.configure(state="disabled")
+            self.why.configure(
+                text=f"Nothing in your collection gets from “{a.display}” to "
+                     f"“{b.display}” in one or two tracks without a key clash or a tempo "
+                     "jump. Bridges need a key and a BPM tag; Key matters less widens "
+                     "the search.")
+
+    def _bridge_text(self, br):
+        i = self.bridging
+        names = " then ".join(f"“{r.display}”" for r in br.tracks)
+        ends = [self.set[i - 1]] + list(br.tracks) + [self.set[i]]
+        steps = [f"{'. '.join(f.reasons)}" for f in br.fits]
+        labels = [f"#{i} → {ends[1].display}"] + \
+                 [f"→ {ends[k + 1].display}" for k in range(1, len(ends) - 1)]
+        detail = " ".join(f"{lab}: {st}." for lab, st in zip(labels, steps))
+        return f"Play {names} between #{i} and #{i + 1}. {detail} Add puts " \
+               f"{'it' if len(br.tracks) == 1 else 'them'} in between."
+
+    def _add_bridge(self, br):
+        i = self.bridging
+        have = {os.path.normcase(r.path) for r in self.set}
+        tracks = [r for r in br.tracks if os.path.normcase(r.path) not in have]
+        self.set[i:i] = tracks
+        self._changed(select=i + len(tracks))
+        self.order_note.configure(
+            text=f"Bridged #{i} to #{i + len(tracks) + 1} with "
+                 f"{ui.plural(len(tracks), 'track')}.")
         return "break"
 
     # ------------------------------------------------------------ listening
@@ -685,7 +975,7 @@ class SetDesignerScreen(Screen):
                 seen.add(k)
                 recs.append(r)
         self.set = recs if replace else self.set + recs
-        self._changed(select=len(self.set) - 1 if self.set else None)
+        self._changed(select=len(self.set) - 1 if self.set else None, keep_undo=not replace)
         note = f"From “{src.name}”: {ui.plural(len(recs), 'track')}"
         if missing:
             note += f", {missing} not in your collection left out"
@@ -738,3 +1028,69 @@ class PlaylistDialog(tk.Toplevel):
         src = self.found[int(sel[0])]
         self.destroy()
         self.on_pick(src, replace)
+
+
+class StagesDialog(tk.Toplevel):
+    """Set the genre journey by hand: a stage for each genre in the set.
+    Genres on the same stage are played together."""
+
+    def __init__(self, screen, journey, genres, on_done):
+        super().__init__(screen)
+        self.title("Genre journey")
+        self.transient(screen.app)
+        self.on_done = on_done
+        frame = ttk.Frame(self, padding=ui.PAD)
+        frame.pack(fill="both", expand=True)
+        ttk.Label(frame, text="Genre journey", style="Heading.TLabel").pack(anchor="w")
+        ui.WrapLabel(frame, style="Muted.TLabel",
+                     text="The stages your set moves through, 1 first. Give two genres "
+                          "the same number to play them together, or 0 to leave a genre "
+                          "out of the journey.").pack(fill="x", pady=(2, 6))
+        grid = ttk.Frame(frame)
+        grid.pack(fill="both", expand=True)
+        count = collections.Counter(fold(nextup.genre_of(r) or "").strip() for r in screen.set)
+        stage_of = {fold(n).strip(): s for n, s in journey.items()}
+        order = sorted(genres, key=lambda g: (stage_of.get(fold(g).strip(), 99), g.casefold()))
+        top = max(len(order), 1)
+        self.vars = []
+        for row, g in enumerate(order):
+            k = fold(g).strip()
+            ttk.Label(grid, text=g).grid(row=row, column=0, sticky="w", pady=2)
+            ttk.Label(grid, text=ui.plural(count.get(k, 0), "track"),
+                      style="Muted.TLabel").grid(row=row, column=1, sticky="w",
+                                                 padx=(ui.GAP, ui.GAP))
+            v = tk.IntVar(value=stage_of[k] + 1 if k in stage_of else 0)
+            ttk.Spinbox(grid, from_=0, to=top, width=4, textvariable=v).grid(
+                row=row, column=2, sticky="e")
+            self.vars.append((g, v))
+        grid.columnconfigure(0, weight=1)
+        row = ttk.Frame(frame)
+        row.pack(fill="x", pady=(ui.GAP, 0))
+        ttk.Button(row, text="Read it from the set", command=self.from_set).pack(side="left")
+        ttk.Button(row, text="Cancel", command=self.destroy).pack(side="right")
+        ttk.Button(row, text="Use these stages", default="active",
+                   command=self.done).pack(side="right", padx=(0, ui.GAP))
+        self.bind("<Escape>", lambda e: self.destroy())
+        self.bind("<Return>", lambda e: self.done())
+
+    def stages(self):
+        """The stages as entered, renumbered from 0 with no gaps."""
+        picked = []
+        for g, v in self.vars:
+            try:
+                n = int(v.get())
+            except (tk.TclError, ValueError):
+                n = 0
+            if n > 0:
+                picked.append((g, n))
+        rank = {n: i for i, n in enumerate(sorted({n for _, n in picked}))}
+        return nextup.Journey({g: rank[n] for g, n in picked})
+
+    def done(self):
+        j = self.stages()
+        self.destroy()
+        self.on_done(j if j.stages else None)
+
+    def from_set(self):
+        self.destroy()
+        self.on_done(None)

@@ -538,7 +538,10 @@ are just a title.
    and its button follows the answer: *Sortero writes it*, *Write it with
    rekordbox or Engine DJ*, or *No main stick* (the folders stick only, which
    Pioneer and Denon players browse by folder, and which also suits a laptop
-   running Serato). Below that, one line says how
+   running Serato). Under *Sortero writes it*, a line says which libraries it
+   writes for the players chosen in step 2 (rekordbox's and Engine DJ's for
+   Pioneer and Denon players, rekordbox's alone for Pioneer players), and
+   **Change players** opens step 2 to choose others. Below that, one line says how
    many tracks have cue points and beat grids, and **Change…** opens a window
    listing where they come from.
 

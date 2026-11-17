@@ -22,10 +22,9 @@ TONES = {DONE: "good", NEXT: "text", WAITING: "faint"}
 MARK = {verify.FAIL: "✗", verify.WARN: "!", verify.PASS: "✓"}
 
 
-# The ways to make the main stick: (key, choice, what it means)
-ROUTES = [("sortero", "Sortero writes it",
-           "For Pioneer and Denon players. No other app needed. Its Engine DJ library "
-           "for Denon players is new and hasn't been tried on a Denon player yet."),
+# The ways to make the main stick: (key, choice, what it means). What Sortero
+# writes follows the players chosen in step 2, so it's said when drawn (_sortero_why).
+ROUTES = [("sortero", "Sortero writes it", ""),
           ("app", "Write it with rekordbox or Engine DJ",
            "Sortero saves the set for the app to import, and shows the steps."),
           ("skip", "No main stick",
@@ -234,8 +233,14 @@ class GigScreen(Screen):
                 ui.paint(tk_radio, bg="card", fg="text", activebackground="card",
                          activeforeground="text", selectcolor="card")
                 tk_radio.pack(fill="x")
-                _label(row, why).pack(fill="x", padx=(26, 0))
+                why_label = _label(row, why)
+                why_label.pack(fill="x", padx=(26, 0))
                 self.routes[key] = row
+                if key == "sortero":
+                    # Which libraries, and for which players, with the way to change them
+                    self.sortero_why = why_label
+                    _link(row, "Change players", self.change_players).pack(
+                        anchor="w", padx=(26, 0))
 
             self.cue_row = _links(body)
             self.cue_label = _label(self.cue_row)       # what was found, or where from
@@ -374,7 +379,15 @@ class GigScreen(Screen):
         if self.options.winfo_ismapped():
             self.options.pack_forget()
         else:
-            self.options.pack(fill="x", pady=(4, 0), after=self.for_label.master)
+            self._show_options()
+
+    def _show_options(self):
+        self.options.pack(fill="x", pady=(4, 0), after=self.for_label.master)
+
+    def change_players(self):
+        """From the main stick step: the players are chosen in step 2, so open it there."""
+        self.open("tracks")
+        self._show_options()
 
     def _options_changed(self):
         settings.set("gig_profile", self.profile.key)
@@ -402,6 +415,24 @@ class GigScreen(Screen):
                 self._remember()
         self.open_key = "main"
         self.refresh()
+
+    def _libraries(self):
+        """The libraries "Sortero writes it" puts on the main stick for these players.
+        The rekordbox ones always; Engine DJ's when Denon players are among them."""
+        if profiles.reads_engine(self.profile):
+            return ("the rekordbox libraries Pioneer players read and the Engine DJ "
+                    "library Denon players read")
+        return "the rekordbox libraries Pioneer players read"
+
+    def _sortero_why(self):
+        """What "Sortero writes it" writes, and for which players (chosen in step 2)."""
+        engine = profiles.reads_engine(self.profile)
+        why = (f"{'rekordbox and Engine DJ libraries' if engine else 'rekordbox libraries'}"
+               f", for {profiles.where(self.profile)}. No other app needed.")
+        if engine:
+            why += (" The Engine DJ library is new and hasn't been tried on a Denon "
+                    "player yet.")
+        return why
 
     def _apps(self):
         """Where the main stick's library comes from: "rekordbox or Engine DJ"."""
@@ -561,6 +592,7 @@ class GigScreen(Screen):
             else:
                 self.how_toggle.pack_forget()
                 self.copy_link.pack_forget()
+            self.sortero_why.configure(text=self._sortero_why())
             # Sortero writing it is only a choice when the players read its library
             for key, row in self.routes.items():
                 row.pack_forget()
@@ -1016,9 +1048,7 @@ class GigScreen(Screen):
         if why:
             self._offer_format(f"Sortero won't write to this stick: {why}.")
             return
-        libraries = ("the rekordbox libraries Pioneer players read and the Engine DJ "
-                     "library Denon players read" if engine else
-                     "the rekordbox libraries Pioneer players read")
+        libraries = self._libraries()
         untried = ("This is new: the rekordbox libraries haven't been confirmed working on "
                    "a player yet, and the Engine DJ library hasn't been tried on a real "
                    "Denon player at all, so bring a second stick you trust." if engine else

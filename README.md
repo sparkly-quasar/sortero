@@ -535,13 +535,15 @@ are just a title.
    A file that is already lossy is decoded to AIFF rather than encoded lossy a
    second time. Copies are remembered, so the next gig only converts what's new.
 3. **Main stick.** The step asks one thing, *How do you want to make it?*,
-   and its button follows the answer: *Sortero writes it*, *Write it with
-   rekordbox or Engine DJ*, or *No main stick* (the folders stick only, which
-   Pioneer and Denon players browse by folder, and which also suits a laptop
-   running Serato). Under *Sortero writes it*, a line says which libraries it
-   writes for the players chosen in step 2 (rekordbox's and Engine DJ's for
-   Pioneer and Denon players, rekordbox's alone for Pioneer players), and
-   **Change players** opens step 2 to choose others. Below that, one line says how
+   and its button follows the answer: *Sortero writes it*, *Export it
+   yourself* from rekordbox or Engine DJ, or *No main stick* (the folders stick
+   only, which Pioneer and Denon players browse by folder, and which also suits
+   a laptop running Serato). The first two follow the players chosen in step 2:
+   *Sortero writes it* says which libraries it writes for them (rekordbox's and
+   Engine DJ's for Pioneer and Denon players, rekordbox's alone for Pioneer
+   players), *Export it yourself* names the app they need (rekordbox for
+   Pioneer, Engine DJ for Denon), and **Change players** opens step 2 to choose
+   others. Below that, one line says how
    many tracks have cue points and beat grids, and **Change…** opens a window
    listing where they come from.
 
@@ -590,8 +592,7 @@ are just a title.
    rekordbox's own). The waveforms are approximations of rekordbox's: close
    in shape and colour, not identical.
 
-   *Write it with rekordbox or Engine DJ*: **Save the set for rekordbox or
-   Engine DJ** writes a rekordbox XML of the same set, and the step shows how
+   *Export it yourself*: **Save the set for rekordbox or Engine DJ** writes a rekordbox XML of the same set, and the step shows how
    to get it onto the stick: into rekordbox 7.2.11 or later, which writes both
    libraries; for Denon players, Engine DJ imports the same XML, cues
    included, and its Sync Manager exports it. Until Sortero's own Engine DJ

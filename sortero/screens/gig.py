@@ -22,11 +22,10 @@ TONES = {DONE: "good", NEXT: "text", WAITING: "faint"}
 MARK = {verify.FAIL: "✗", verify.WARN: "!", verify.PASS: "✓"}
 
 
-# The ways to make the main stick: (key, choice, what it means). What Sortero
-# writes follows the players chosen in step 2, so it's said when drawn (_sortero_why).
+# The ways to make the main stick: (key, choice, what it means). The first two
+# follow the players chosen in step 2, so they're said when drawn (_route_text).
 ROUTES = [("sortero", "Sortero writes it", ""),
-          ("app", "Write it with rekordbox or Engine DJ",
-           "Sortero saves the set for the app to import, and shows the steps."),
+          ("app", "", ""),
           ("skip", "No main stick",
            "Only the folders stick (step 5). Pioneer and Denon players browse it by "
            "folder, without playlists, cue points or beat grids. Good for a laptop "
@@ -224,6 +223,7 @@ class GigScreen(Screen):
             _heading(self.route_box, "How do you want to make it?").pack(fill="x")
             self.route_var = tk.StringVar(value=self._route())
             self.routes = {}
+            self.route_text = {}            # key -> (its radio button, its line under it)
             for key, text, why in ROUTES:
                 row = _links(self.route_box)
                 tk_radio = tk.Radiobutton(row, text=text, value=key, variable=self.route_var,
@@ -236,9 +236,9 @@ class GigScreen(Screen):
                 why_label = _label(row, why)
                 why_label.pack(fill="x", padx=(26, 0))
                 self.routes[key] = row
+                self.route_text[key] = (tk_radio, why_label)
                 if key == "sortero":
-                    # Which libraries, and for which players, with the way to change them
-                    self.sortero_why = why_label
+                    # The way to change the players both routes depend on
                     _link(row, "Change players", self.change_players).pack(
                         anchor="w", padx=(26, 0))
 
@@ -434,12 +434,34 @@ class GigScreen(Screen):
                     "player yet.")
         return why
 
+    def _app_names(self):
+        """The DJ apps that make a library the chosen players read: ["rekordbox", ...]."""
+        return [name for reads, name in ((profiles.reads_rekordbox, "rekordbox"),
+                                         (profiles.reads_engine, "Engine DJ"))
+                if reads(self.profile)] or ["rekordbox"]
+
     def _apps(self):
         """Where the main stick's library comes from: "rekordbox or Engine DJ"."""
-        apps = [name for reads, name in ((profiles.reads_rekordbox, "rekordbox"),
-                                         (profiles.reads_engine, "Engine DJ"))
-                if reads(self.profile)]
-        return " or ".join(apps) or "rekordbox"
+        return " or ".join(self._app_names())
+
+    def _app_route(self):
+        """The choice to make the stick in rekordbox or Engine DJ, named for the players."""
+        names = self._app_names()
+        if len(names) > 1:
+            who = {"rekordbox": "Pioneer", "Engine DJ": "Denon"}
+            return "Export it yourself from " + " or ".join(f"{n} ({who[n]})" for n in names)
+        return f"Export it yourself from {names[0]}"
+
+    @staticmethod
+    def _app_why():
+        # One line: a longer one pushes the step's tools off a small window
+        return ("The tried way while Sortero's libraries are new: Sortero saves the set to "
+                "import, shows the steps, then checks the stick.")
+
+    def _route_text(self):
+        """The two routes' choices and lines, for the players chosen now."""
+        return {"sortero": ("Sortero writes it", self._sortero_why()),
+                "app": (self._app_route(), self._app_why())}
 
     # ------------------------------------------------------------ drawing
     def open(self, key):
@@ -592,7 +614,10 @@ class GigScreen(Screen):
             else:
                 self.how_toggle.pack_forget()
                 self.copy_link.pack_forget()
-            self.sortero_why.configure(text=self._sortero_why())
+            for key, (text, why) in self._route_text().items():
+                radio, label = self.route_text[key]
+                radio.configure(text=text)
+                label.configure(text=why)
             # Sortero writing it is only a choice when the players read its library
             for key, row in self.routes.items():
                 row.pack_forget()

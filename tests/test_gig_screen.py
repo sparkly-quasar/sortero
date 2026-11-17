@@ -78,8 +78,8 @@ class StickTools(GigWindow):
         self.assertTrue(music)
 
 
-class SorteroWritesIt(GigWindow):
-    """The main stick's "Sortero writes it" says what it writes, for the players chosen."""
+class MainStickRoutes(GigWindow):
+    """The main stick's ways to make it say what each means, for the players chosen."""
 
     def setUp(self):
         # A set is chosen, so steps 2 and 3 aren't waiting for one
@@ -94,20 +94,31 @@ class SorteroWritesIt(GigWindow):
         self.gig.profile_var.set(_profile_label(profile))
         self.gig.open("main")
         self.app.update_idletasks()
-        return self.gig.sortero_why.cget("text")
+        return {key: (radio.cget("text"), label.cget("text"))
+                for key, (radio, label) in self.gig.route_text.items()}
 
     def test_pioneer_and_denon_players_get_both_libraries(self):
         from sortero.gig import profiles
-        why = self.players(profiles.EVERY)
+        why = self.players(profiles.EVERY)["sortero"][1]
         self.assertTrue(why.startswith("rekordbox and Engine DJ libraries, for every "
                                        "Pioneer or Denon player."), why)
         self.assertIn("hasn't been tried", why)
 
     def test_pioneer_players_get_rekordbox_only(self):
         from sortero.gig import profiles
-        why = self.players(profiles.UNIVERSAL)
+        why = self.players(profiles.UNIVERSAL)["sortero"][1]
         self.assertTrue(why.startswith("rekordbox libraries, for every Pioneer player."), why)
         self.assertNotIn("Engine DJ", why)
+
+    def test_exporting_it_yourself_names_the_apps_for_the_players(self):
+        from sortero.gig import profiles
+        self.assertEqual(self.players(profiles.EVERY)["app"][0],
+                         "Export it yourself from rekordbox (Pioneer) or Engine DJ (Denon)")
+        self.assertEqual(self.players(profiles.UNIVERSAL)["app"][0],
+                         "Export it yourself from rekordbox")
+        choice, why = self.players(profiles.ANY_DENON)["app"]
+        self.assertEqual(choice, "Export it yourself from Engine DJ")
+        self.assertIn("checks the stick", why)
 
     def test_change_players_opens_step_2s_choice(self):
         self.gig.options.pack_forget()

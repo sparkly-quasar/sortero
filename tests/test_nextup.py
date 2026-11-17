@@ -6,10 +6,10 @@ from sortero.library import Rec
 from tests.test_tagio import TempDir
 
 
-def rec(name, key=None, bpm=None, energy=None, artist=None, folder="Techno"):
+def rec(name, key=None, bpm=None, energy=None, artist=None, folder="Techno", genre=None):
     rel = os.path.join(folder, name + ".mp3")
     return Rec(path=os.path.join(os.sep, "music", rel), rel=rel, artist=artist or name,
-               title=name, key=key, bpm=None if bpm is None else str(bpm),
+               title=name, key=key, bpm=None if bpm is None else str(bpm), genre=genre,
                energylevel=None if energy is None else str(energy))
 
 
@@ -212,6 +212,7 @@ class Shape(unittest.TestCase):
 
     def test_smooth_has_no_shape(self):
         self.assertIsNone(nextup.shape("smooth", 10, 3, 9))
+        self.assertIsNone(nextup.shape("journey", 10, 3, 9))
 
 
 class Transitions(unittest.TestCase):
@@ -222,6 +223,119 @@ class Transitions(unittest.TestCase):
         self.assertEqual(len(got), 2)
         self.assertGreater(got[0].score, got[1].score)
         self.assertTrue(got[1].clash)
+
+
+class LightKeys(unittest.TestCase):
+    def test_unrelated_keys_alone_are_no_clash(self):
+        a, b = rec("a", key="8A", bpm=140), rec("b", key="2B", bpm=140)
+        self.assertTrue(nextup.fit(a, b).clash)
+        light = nextup.fit(a, b, style=nextup.Style(light_keys=True))
+        self.assertFalse(light.clash)
+        self.assertGreater(light.score, nextup.fit(a, b).score)
+        self.assertIn("Keys unrelated (8A → 2B)", light.reasons)
+
+    def test_a_tempo_jump_still_is(self):
+        a, b = rec("a", key="8A", bpm=124), rec("b", key="8A", bpm=140)
+        self.assertTrue(nextup.fit(a, b, style=nextup.Style(light_keys=True)).clash)
+
+    def test_tempo_counts_for_more(self):
+        a = rec("a", key="8A", bpm=124)
+        same_key_far = rec("b", key="8A", bpm=131)       # +5.6%
+        other_key_near = rec("c", key="3A", bpm=124)
+        light = nextup.Style(light_keys=True)
+        self.assertGreater(nextup.fit(a, same_key_far).score, nextup.fit(a, other_key_near).score)
+        self.assertLess(nextup.fit(a, same_key_far, style=light).score,
+                        nextup.fit(a, other_key_near, style=light).score)
+
+    def test_parts_say_which_part_failed(self):
+        f = nextup.fit(rec("a", key="8A", bpm=124), rec("b", key="2B", bpm=124))
+        self.assertTrue(f.key_clash)
+        self.assertFalse(f.tempo_jump)
+        self.assertEqual(f.parts["key"], "Key clash (8A → 2B)")
+        self.assertIsNone(f.parts["energy"])
+
+
+class Journeys(unittest.TestCase):
+    SET = [("h1", "Minimal House"), ("h2", "Minimal House"), ("t1", "Minimal Techno"),
+           ("h3", "minimal house"), ("t2", "Minimal Techno"), ("y1", "Hypnotic Techno"),
+           ("y2", "Hypnotic Techno")]
+
+    def tracks(self):
+        return [rec(n, key="8A", bpm=128, genre=g) for n, g in self.SET]
+
+    def test_stages_are_read_from_where_each_genre_sits(self):
+        j = nextup.Journey.infer(self.tracks())
+        self.assertEqual(j.items(), [("Minimal House", 0), ("Minimal Techno", 1),
+                                     ("Hypnotic Techno", 2)])
+
+    def test_moving_on_beats_going_back(self):
+        j = nextup.Journey({"Minimal House": 0, "Minimal Techno": 1, "Hypnotic Techno": 2})
+        h, t, y = (rec(n, genre=g) for n, g in (("h", "Minimal House"),
+                                               ("t", "Minimal Techno"),
+                                               ("y", "Hypnotic Techno")))
+        same, on, back, skip = j.fit(h, h)[0], j.fit(h, t)[0], j.fit(t, h)[0], j.fit(h, y)[0]
+        self.assertGreater(same, on)
+        self.assertGreater(on, back)
+        self.assertGreater(on, skip)
+        self.assertEqual(j.fit(h, t)[1], "On to the next stage (Minimal House → Minimal Techno)")
+        self.assertEqual(j.fit(h, rec("x"))[0], nextup.NEUTRAL)
+
+    def test_two_genres_can_share_a_stage(self):
+        j = nextup.Journey({"Techno": 1, "Hypnotic Techno": 1})
+        f = j.fit(rec("a", genre="Techno"), rec("b", genre="Hypnotic Techno"))
+        self.assertEqual(f[0], 1.0)
+
+    def test_survives_being_remembered(self):
+        j = nextup.Journey({"Minimal House": 0, "Techno": 1, "Hypnotic Techno": 1})
+        self.assertEqual(nextup.Journey.from_list(j.to_list()).items(), j.items())
+
+    def test_order_keeps_genres_together_in_journey_order(self):
+        tracks = self.tracks()
+        got = nextup.order(tracks, "journey")
+        genres = [r.genre.casefold() for r in got]
+        self.assertEqual(genres, ["minimal house"] * 3 + ["minimal techno"] * 2
+                         + ["hypnotic techno"] * 2)
+
+    def test_order_follows_stages_set_by_hand(self):
+        j = nextup.Journey({"Hypnotic Techno": 0, "Minimal Techno": 1, "Minimal House": 2})
+        got = nextup.order(self.tracks(), "journey", style=nextup.Style(journey=j))
+        self.assertEqual(got[0].genre, "Hypnotic Techno")
+        self.assertEqual(got[-1].genre.casefold(), "minimal house")
+
+
+class Bridges(unittest.TestCase):
+    def test_one_track_between_a_key_clash(self):
+        a, b = rec("a", key="8A", bpm=128), rec("b", key="10A", bpm=128)
+        lib = [rec("mid", key="9A", bpm=128), rec("off", key="3B", bpm=128),
+               rec("nokey", bpm=128)]
+        got = nextup.bridges(a, b, lib)
+        self.assertEqual([[r.title for r in br.tracks] for br in got], [["mid"]])
+        self.assertEqual(len(got[0].fits), 2)
+
+    def test_two_tracks_for_a_tempo_climb(self):
+        a, b = rec("a", key="8A", bpm=124), rec("b", key="8A", bpm=140)    # +13%
+        lib = [rec("x", key="8A", bpm=130), rec("y", key="8A", bpm=135)]
+        got = nextup.bridges(a, b, lib)
+        self.assertEqual([r.title for r in got[0].tracks], ["x", "y"])
+        self.assertTrue(all(not f.clash for f in got[0].fits))
+
+    def test_one_track_beats_two_when_it_does_the_job(self):
+        a, b = rec("a", key="8A", bpm=128), rec("b", key="10A", bpm=128)
+        lib = [rec("mid", key="9A", bpm=128), rec("x", key="9A", bpm=128, artist="x"),
+               rec("y", key="9A", bpm=128, artist="y")]
+        self.assertEqual(len(nextup.bridges(a, b, lib)[0].tracks), 1)
+
+    def test_the_set_and_its_ends_are_left_out(self):
+        a, b = rec("a", key="8A", bpm=128), rec("b", key="10A", bpm=128)
+        mid = rec("mid", key="9A", bpm=128)
+        self.assertEqual(nextup.bridges(a, b, [a, b, mid], exclude=[mid]), [])
+
+    def test_a_shared_genre_comes_first(self):
+        a = rec("a", key="8A", bpm=128, genre="Techno")
+        b = rec("b", key="10A", bpm=128, genre="Techno")
+        lib = [rec("pop", key="9A", bpm=128, genre="Pop"),
+               rec("tech", key="9A", bpm=128, genre="Techno")]
+        self.assertEqual(nextup.bridges(a, b, lib)[0].tracks[0].title, "tech")
 
 
 if __name__ == "__main__":

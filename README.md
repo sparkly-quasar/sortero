@@ -129,7 +129,7 @@ open.
 | **Library** | Every track in one list. The buttons above the table pick a list, each with how many tracks are in it: **All tracks**, **Needs a genre**, **Not analysed**, **No energy**, and **Other lists** for the rest (artist in the title, artist and title swapped, no artist, no BPM, low bitrate, lossless files and more). **Search** narrows it; click a column heading to sort. Select tracks and the toolbar above the table works on them: **Edit details**, **Artist & title** (swap them, take them from the title or the filename), **Genres** (look them up on Discogs, copy them from folder names, ignore tracks that never get one), **Send to analysis** and **Place one by one**. Set a genre at the bottom. **More** has the rest, including [shrinking lossless tracks to MP3](#shrinking-lossless-tracks-to-mp3). Your own set recordings are hidden unless you ask. |
 | **Your playlists** | Every playlist Sortero can see in one list: its own in `_Playlists`, any `.m3u` or `.m3u8` inside your collection, and the ones added in Gig prep from other apps or watched folders. Each shows its track count and how many files are missing; click a column heading to sort. Select one to see its tracks, missing ones marked. **Add to gig set** puts it at the end of Gig prep's set. Sortero's own can be **renamed** or **deleted** (set aside in `_Quarantine`, and History brings it back); ones from other apps are only read, but one you added can be **taken off the list**. **More** also shows a playlist in Finder or Explorer, repairs broken links in Sortero's own, or rebuilds a playlist for each folder. |
 | **Streaming playlists** | Rebuild a Spotify or TIDAL playlist against your local files from a link, a pasted tracklist or a CSV — all three offered together above the list. |
-| **Set designer** | Build a set one track at a time. Pick a track and Sortero suggests what fits after it, from key, BPM and energy and the tracks your own playlists put together, with the reasons. Choose whether energy should build, hold or drop; **Order set** puts the whole set in its smoothest order or along an energy shape. Save it as a playlist, or send it straight to Gig prep. See [Set designer](#set-designer). |
+| **Set designer** | Build a set one track at a time. Pick a track and Sortero suggests what fits after it, from key, BPM and energy and the tracks your own playlists put together, with the reasons. Click a blend to see why it's rough, and **Find a bridge** for a track to play in between. Choose whether energy should build, hold or drop, follow a genre journey, or let key matter less; **Order set** puts the whole set in its smoothest order, along an energy shape, or along the journey. Save it as a playlist, or send it straight to Gig prep. See [Set designer](#set-designer). |
 | **Gig prep** | Get a USB stick that plays on any Pioneer or Denon player, and check it before you leave. Tick the playlists you're playing, in set order; Sortero makes gig-safe copies of any track that won't play everywhere, then checks the main and backup sticks and ends with **GIG READY**. See [Gig prep](#gig-prep). |
 | **Tidy up** | Tools for an existing collection: **Clean tags** (including which way round filenames read), **Fix wrong BPMs**, **Find duplicates**, **Place a folder's tracks by hand**, **Flatten release folders**, **Fix playlist links**, **Shrink lossless tracks to MP3** (with how much space it would save), and **Reorganise the whole collection**. Every tool previews before it changes anything. |
 | **History** | Every operation, with undo, and the **safety net**. **Show log** reveals the detailed log. |
@@ -455,10 +455,37 @@ BPM or energy tag scores neither up nor down, so the suggestions are only as
 good as your [analysis](#the-analysis-loop).
 
 **Blend** marks how well each track in the set follows the one before:
-Smooth, OK, Rough or Clash. **Order set** puts the whole set in the order that
-flows best, or along a shape: **Build up**; **Build, peak, land**; or
-**Waves**. **Keep the opener** leaves your first track first, and **Undo** puts
-the old order back.
+Smooth, OK, Rough or Clash. Click a track and the note under the set says why,
+part by part: "Key clash (8B → 1A): the keys are far apart on the Camelot
+wheel…", "+2% tempo", "Energy: not judged, one of them has no energy
+rating". The count above the set says how many rough blends are key clashes
+and how many are tempo jumps.
+
+**Find a bridge.** Select a track whose blend in is rough and press **Find a
+bridge**: on the right are tracks to play between it and the one before, best
+first. A bridge is judged by its weakest step, and where no single track can
+close the gap (a climb from 124 to 140 BPM, say) Sortero offers two. Tracks
+that share a genre with either end come first, and every bridge track has a
+key and a BPM tag. Double-click one to put it in.
+
+**Key matters less.** For percussive, drone-led music, where there's little
+for keys to clash with and analysers often guess them: tempo and energy count
+for more, and unrelated keys alone no longer make a clash. A tempo jump still
+does.
+
+**Genre journey.** For a set that moves through genres: minimal house, then
+minimal techno, then hypnotic techno, say. Sortero reads the stages from where
+each genre sits in your set, and shows them above the lists; **Stages…** lets
+you set them by hand, and give two genres the same stage to play them
+together. Moving on a stage scores up, going back scores down, and bridges
+come from the genres in between. It's only as good as your genre tags: Tidy
+up's genre tools fill them in from Discogs, at that level of detail.
+
+**Order set** puts the whole set in the order that flows best, or along a
+shape: **Build up**; **Build, peak, land**; **Waves**; or **Genre journey**,
+which keeps each genre together in the journey's order. **Keep the opener**
+leaves your first track first, and **Undo order** puts the old order back,
+keeping any tracks you've added or taken out since.
 
 **Save as playlist…** writes the set to `_Playlists`, and History can undo it.
 **More → Send to Gig prep…** saves it and adds it to the end of your gig set.

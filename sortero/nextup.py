@@ -15,6 +15,14 @@ Three things feed the score:
 - **Energy**: the change from one track to the next, judged against where you
   want the set to go: build, hold, drop, or anywhere smooth.
 
+Two ways to judge a set differently, in a Style. Key matters less: for
+percussive, drone-led music, tempo and energy take up most of key's weight and
+unrelated keys alone aren't a clash. And a genre Journey: the genres a set
+moves through, in order, so moving on a stage scores up and going back down.
+
+Where two tracks don't blend, bridges() finds one track, or two, to play in
+between, each step judged as any blend is.
+
 On top of that, a History of your own playlists: tracks you've put next to
 each other before get a lift. Your gig sets are the best evidence there is of
 what you think works, and the play history a player writes to a stick can be
@@ -35,6 +43,12 @@ from .common import fold
 KEY_WEIGHT = 0.45
 TEMPO_WEIGHT = 0.35
 ENERGY_WEIGHT = 0.20
+# When key matters less: percussive, drone-led music (a lot of techno) has
+# little in it to clash, and analysers often guess its key. Tempo and energy
+# take up what key gives away, and a key clash alone no longer marks a blend.
+LIGHT_KEY_WEIGHTS = (0.15, 0.55, 0.30)
+# With a genre journey, genre takes this share and the rest shrink to make room.
+GENRE_WEIGHT = 0.20
 # Added on top for a pair your playlists put next to each other, up to this.
 HISTORY_BONUS = 0.15
 # A part we can't judge (no key, no BPM, no energy) scores this: no help, no harm.
@@ -53,9 +67,13 @@ SHAPES = {
     "build": "Build up",
     "peak": "Build, peak, land",
     "waves": "Waves",
+    "journey": "Genre journey",
 }
 # How much keeping to the shape counts against a smooth blend, when ordering.
 SHAPE_WEIGHT = 0.6
+# On a genre journey, how much more a track out of its stage counts than one
+# off an energy shape: a stray genre is easier to hear than a stray energy.
+JOURNEY_WEIGHT = 2.0
 
 _WHEEL = re.compile(r"\s*(1[0-2]|[1-9])\s*([AB])\s*", re.I)
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
@@ -214,6 +232,99 @@ def _history_fit(a, b, history):
     return bonus, after + before, why
 
 
+# ------------------------------------------------------------------ genre journey
+def genre_of(rec):
+    """A track's genre tag as written, or None."""
+    g = (rec.genre or "").strip()
+    return g or None
+
+
+class Journey:
+    """The genres a set moves through, in order: minimal house, then minimal
+    techno, then hypnotic techno, say.
+
+    Each genre tag gets a stage. Two tags can share a stage ("Techno" and
+    "Hypnotic Techno" played together), and a genre with no stage is left to
+    key, tempo and energy, like a track with no genre at all.
+    """
+
+    def __init__(self, stages=None):
+        self.stages = {}            # folded genre -> stage, 0 first
+        self.names = {}             # folded genre -> the tag as written
+        for name, stage in (stages or {}).items():
+            self.set(name, stage)
+
+    def set(self, name, stage):
+        k = fold(name).strip()
+        self.stages[k] = int(stage)
+        self.names.setdefault(k, name)
+
+    def stage(self, rec):
+        g = genre_of(rec)
+        return None if g is None else self.stages.get(fold(g).strip())
+
+    @property
+    def last(self):
+        return max(self.stages.values(), default=0)
+
+    def items(self):
+        """(genre as written, stage), in stage order."""
+        return sorted(((self.names[k], s) for k, s in self.stages.items()),
+                      key=lambda ns: (ns[1], ns[0].casefold()))
+
+    def to_list(self):
+        return [[name, stage] for name, stage in self.items()]
+
+    @classmethod
+    def from_list(cls, pairs):
+        j = cls()
+        for name, stage in pairs or ():
+            j.set(name, stage)
+        return j
+
+    @classmethod
+    def infer(cls, recs):
+        """Stages in the order the set plays its genres: each genre placed by
+        where its tracks sit (the middle one), so a stray early track doesn't
+        move a whole genre to the front."""
+        where, names = collections.defaultdict(list), {}
+        for i, r in enumerate(recs):
+            g = genre_of(r)
+            if g:
+                k = fold(g).strip()
+                where[k].append(i)
+                names.setdefault(k, g)
+        ranked = sorted(where, key=lambda k: (where[k][len(where[k]) // 2],
+                                              names[k].casefold()))
+        return cls({names[k]: i for i, k in enumerate(ranked)})
+
+    def fit(self, a, b):
+        """How well b's genre follows a's on the journey: (score 0-1, reason)."""
+        sa, sb = self.stage(a), self.stage(b)
+        if sa is None or sb is None:
+            return NEUTRAL, None
+        d = sb - sa
+        ga, gb = genre_of(a), genre_of(b)
+        if d == 0:
+            if fold(ga) == fold(gb):
+                return 1.0, f"Same genre ({gb})"
+            return 1.0, f"Same stage ({ga}, {gb})"
+        if d == 1:
+            return 0.8, f"On to the next stage ({ga} → {gb})"
+        if d == -1:
+            return 0.45, f"Back a stage ({ga} → {gb})"
+        if d > 1:
+            return 0.2, f"Skips a stage ({ga} → {gb})"
+        return 0.1, f"Back {-d} stages ({ga} → {gb})"
+
+
+@dataclass
+class Style:
+    """How a set wants its blends judged, beyond the energy direction."""
+    light_keys: bool = False        # key matters less: percussive, drone-led music
+    journey: Journey = None         # the genres the set moves through, in order
+
+
 # ------------------------------------------------------------------ scoring
 @dataclass
 class Fit:
@@ -224,29 +335,63 @@ class Fit:
     energy: float
     together: float = 0      # times your playlists put them next to each other
     reasons: list = field(default_factory=list)
+    genre: float = NEUTRAL
+    light_keys: bool = False
+    # Each part's reason, or None where the tags couldn't say: key, tempo,
+    # energy, genre, history. For saying which part made a blend rough.
+    parts: dict = field(default_factory=dict)
+
+    @property
+    def key_clash(self):
+        return self.key == 0
+
+    @property
+    def tempo_jump(self):
+        return self.tempo == 0
 
     @property
     def clash(self):
-        """A key clash or a tempo jump, with no history to vouch for it."""
-        return (self.key == 0 or self.tempo == 0) and not self.together
+        """A key clash or a tempo jump, with no history to vouch for it. When
+        key matters less, only a tempo jump."""
+        bad = self.tempo_jump or (self.key_clash and not self.light_keys)
+        return bad and not self.together
 
 
-def fit(a, b, direction=None, history=None):
+def fit(a, b, direction=None, history=None, style=None):
     """How well track b follows track a, going `direction` (build/hold/drop/None)."""
     if direction not in _ENERGY:
         raise ValueError(f"direction must be one of {DIRECTIONS} or None")
+    style = style or Style()
     k, kwhy = key_fit(a.camelot, b.camelot)
+    if style.light_keys and k == 0 and kwhy:
+        kwhy = kwhy.replace("Key clash", "Keys unrelated")
     t, twhy = tempo_fit(bpm_of(a), bpm_of(b))
     e, ewhy = energy_fit(a.energy, b.energy, direction)
     bonus, together, hwhy = _history_fit(a, b, history)
-    score = KEY_WEIGHT * k + TEMPO_WEIGHT * t + ENERGY_WEIGHT * e + bonus
-    reasons = [w for w in (hwhy, kwhy, twhy, ewhy) if w]
+    kw, tw, ew = LIGHT_KEY_WEIGHTS if style.light_keys else \
+        (KEY_WEIGHT, TEMPO_WEIGHT, ENERGY_WEIGHT)
+    g, gwhy = NEUTRAL, None
+    if style.journey is not None:
+        g, gwhy = style.journey.fit(a, b)
+        scale = 1 - GENRE_WEIGHT
+        kw, tw, ew = kw * scale, tw * scale, ew * scale
+    score = kw * k + tw * t + ew * e + bonus
+    if style.journey is not None:
+        score += GENRE_WEIGHT * g
+    reasons = [w for w in (hwhy, gwhy, kwhy, twhy, ewhy) if w]
     return Fit(score=min(1.0, score), key=k, tempo=t, energy=e,
-               together=together, reasons=reasons)
+               together=together, reasons=reasons, genre=g,
+               light_keys=style.light_keys,
+               parts={"key": kwhy, "tempo": twhy, "energy": ewhy, "genre": gwhy,
+                      "history": hwhy})
+
+
+def _usable(r, skip, songs):
+    return not (r.is_recording or _norm(r.path) in skip or _song(r) in songs)
 
 
 def suggest(current, recs, direction=None, history=None, exclude=(), n=9,
-            clashes=False):
+            clashes=False, style=None):
     """The n tracks that follow `current` best, as [(rec, Fit)], best first.
 
     Leaves out `current` itself, other copies of the same song, set recordings,
@@ -254,12 +399,12 @@ def suggest(current, recs, direction=None, history=None, exclude=(), n=9,
     clashes and tempo jumps you haven't paired before.
     """
     skip = {_norm(current.path)} | {_norm(getattr(p, "path", p)) for p in exclude}
-    me = _song(current)
+    songs = {_song(current)}
     out = []
     for r in recs:
-        if r.is_recording or _norm(r.path) in skip or _song(r) == me:
+        if not _usable(r, skip, songs):
             continue
-        f = fit(current, r, direction, history)
+        f = fit(current, r, direction, history, style)
         if f.clash and not clashes:
             continue
         out.append((r, f))
@@ -267,15 +412,98 @@ def suggest(current, recs, direction=None, history=None, exclude=(), n=9,
     return out[:n]
 
 
+# ------------------------------------------------------------------ bridges
+# A bridge of two tracks has to do this much better than the best single one
+# to be offered: one track in between is the simpler set.
+PAIR_PENALTY = 0.04
+# Two-track bridges are looked for among this many of the best ways out of the
+# first track and the best ways into the second, not the whole collection.
+BRIDGE_WIDTH = 60
+# Without a genre journey, a bridge that shares a genre with either end gets
+# this much on top: a pop track can match a techno track's key and tempo.
+KIN_BONUS = 0.1
+
+
+@dataclass
+class Bridge:
+    """Tracks to play between two that don't blend, and how each step blends."""
+    tracks: tuple
+    fits: list          # len(tracks) + 1: out of the first track, ..., into the second
+    kin: float = 0      # how many of its tracks share a genre with either end
+
+    @property
+    def score(self):
+        # Judged by its weakest step: a bridge is only as good as that.
+        weakest = min(f.score for f in self.fits)
+        mean = sum(f.score for f in self.fits) / len(self.fits)
+        return (weakest + 0.1 * mean + KIN_BONUS * self.kin / len(self.tracks)
+                - PAIR_PENALTY * (len(self.tracks) - 1))
+
+
+def bridges(a, b, recs, history=None, style=None, exclude=(), n=12, width=BRIDGE_WIDTH):
+    """Tracks that get from a to b where a straight blend doesn't: one track
+    that blends out of a and into b, or two when no single one can (a tempo
+    climb of more than a nudge, say). Best first, as [Bridge]. No step is a key
+    clash or a tempo jump, as with suggest, and every track in a bridge has a
+    key and a BPM: a track the tags can't judge can't be shown to fit."""
+    skip = {_norm(a.path), _norm(b.path)} | {_norm(getattr(p, "path", p)) for p in exclude}
+    songs = {_song(a), _song(b)}
+    ends = {fold(g).strip() for g in (genre_of(a), genre_of(b)) if g}
+    use_kin = style is None or style.journey is None
+
+    def kin(*rs):
+        if not use_kin:
+            return 0
+        return sum(1 for r in rs if genre_of(r) and fold(genre_of(r)).strip() in ends)
+
+    singles, out_of_a, into_b, seen = [], [], [], set()
+    for r in recs:
+        if not _usable(r, skip, songs) or not r.camelot or bpm_of(r) is None:
+            continue
+        f1 = fit(a, r, _direction(a, r), history, style)
+        f2 = fit(r, b, _direction(r, b), history, style)
+        if not f1.clash:
+            out_of_a.append((r, f1))
+        if not f2.clash:
+            into_b.append((r, f2))
+        if not f1.clash and not f2.clash and _song(r) not in seen:
+            seen.add(_song(r))
+            singles.append(Bridge((r,), [f1, f2], kin(r)))
+    singles.sort(key=lambda br: (-br.score, br.tracks[0].display.casefold()))
+    best_single = singles[0].score if singles else float("-inf")
+
+    out_of_a.sort(key=lambda rf: -rf[1].score)
+    into_b.sort(key=lambda rf: -rf[1].score)
+    pairs = {}
+    for x, f1 in out_of_a[:width]:
+        for y, f3 in into_b[:width]:
+            if _norm(x.path) == _norm(y.path) or _song(x) == _song(y):
+                continue
+            f2 = fit(x, y, _direction(x, y), history, style)
+            if f2.clash:
+                continue
+            br = Bridge((x, y), [f1, f2, f3], kin(x, y))
+            # Only where it beats every single track, and one pair for each way
+            # out of a, so one track can't fill the list
+            if br.score > best_single and (
+                    x.path not in pairs or br.score > pairs[x.path].score):
+                pairs[x.path] = br
+    found = singles + list(pairs.values())
+    found.sort(key=lambda br: (-br.score, len(br.tracks),
+                               " ".join(t.display.casefold() for t in br.tracks)))
+    return found[:n]
+
+
 # ------------------------------------------------------------------ ordering
 def shape(name, n, lo, hi):
     """Target energy for each of n places in a set, between lo and hi.
 
-    None for "smooth", which has no shape: only the blends count.
+    None for "smooth", which has no shape: only the blends count, and for
+    "journey", whose shape is in genres, not energy (see order).
     """
     if name not in SHAPES:
         raise ValueError(f"shape must be one of {tuple(SHAPES)}")
-    if name == "smooth" or n < 2:
+    if name in ("smooth", "journey") or n < 2:
         return None
     out = []
     for i in range(n):
@@ -291,12 +519,19 @@ def shape(name, n, lo, hi):
     return out
 
 
-def order(recs, shape_name="smooth", start=None, history=None, rounds=20):
+def order(recs, shape_name="smooth", start=None, history=None, rounds=20, style=None):
     """Put a set's tracks in the order that flows best. Returns a new list.
 
-    Blends count most; with a shape other than "smooth", so does keeping each
-    track's energy near where the shape wants it. `start` pins the opener.
+    Blends count most; with an energy shape, so does keeping each track's
+    energy near where the shape wants it. On "journey", the genres keep
+    together in the journey's order instead: style.journey's, or the one the
+    set plays now. `start` pins the opener.
     """
+    style = style or Style()
+    journey = None
+    if shape_name == "journey":
+        journey = style.journey or Journey.infer(recs)
+        style = Style(light_keys=style.light_keys, journey=journey)
     tracks = list(recs)
     n = len(tracks)
     if n < 2:
@@ -307,11 +542,25 @@ def order(recs, shape_name="smooth", start=None, history=None, rounds=20):
 
     # 1 - fit for every ordered pair; the energy direction is left open here,
     # because the shape says where energy should go.
-    blend = [[0.0 if i == j else 1.0 - fit(a, b, None, history).score
+    blend = [[0.0 if i == j else 1.0 - fit(a, b, None, history, style).score
               for j, b in enumerate(tracks)] for i, a in enumerate(tracks)]
     span = max(1, hi - lo)
 
+    # On a journey, each place wants the stage it would have if the set's
+    # tracks were sorted by stage: so many minimal house tracks, then so many
+    # minimal techno ones, and so on.
+    stages = [journey.stage(r) for r in tracks] if journey else []
+    known = sorted(s for s in stages if s is not None)
+    if known and len(set(known)) > 1:
+        stage_at = [known[min(len(known) - 1, pos * len(known) // n)] for pos in range(n)]
+        stage_span = max(1, max(known) - min(known))
+    else:
+        stage_at = None
+
     def off_shape(i, pos):
+        if stage_at is not None:
+            s = stages[i]
+            return 0.3 if s is None else JOURNEY_WEIGHT * abs(s - stage_at[pos]) / stage_span
         if targets is None:
             return 0.0
         e = tracks[i].energy
@@ -376,12 +625,12 @@ def _swapped(seq, i, j):
     return s
 
 
-def transitions(seq, history=None):
+def transitions(seq, history=None, style=None):
     """The Fit of each blend in an ordered set: len(seq) - 1 of them.
 
     For showing a set with the weak links marked.
     """
-    return [fit(a, b, _direction(a, b), history) for a, b in zip(seq, seq[1:])]
+    return [fit(a, b, _direction(a, b), history, style) for a, b in zip(seq, seq[1:])]
 
 
 def _direction(a, b):

@@ -154,6 +154,19 @@ class Transport(ttk.Frame):
         if p.active:
             p.seek(t)
 
+    def seek_to(self, sec):
+        """Move to sec seconds into the track, playing or not."""
+        if not self._seekable:
+            return
+        t = min(max(0.0, float(sec)), self.duration)
+        self.pos.set(t)
+        self.elapsed.configure(text=clock(t))
+        if self.player.active:
+            try:
+                self.player.seek(t)
+            except Exception:
+                pass
+
     def _drag_start(self, e):
         if self._seekable:
             self._dragging = True

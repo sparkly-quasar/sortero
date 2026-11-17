@@ -69,6 +69,8 @@ class SetDesigner(unittest.TestCase):
         self.sd.search_var.set("")
         self.sd.direction.set("any")
         self.sd.history = None
+        self.sd.player.clear()
+        self.sd.listening = None
         self.sd._changed()
 
     # ---------------------------------------------------------- helpers
@@ -237,6 +239,79 @@ class SetDesigner(unittest.TestCase):
         self.assertIn("1 not in your collection", self.sd.order_note.cget("text"))
         self.sd._take_playlist(src, replace=False)          # nothing twice
         self.assertEqual(self.titles(), ["Harbour", "Fracture Line"])
+
+    # ---------------------------------------------------------- listening
+    def pick(self, tv, iid):
+        """Select a row as you would: by hand, not by the list itself."""
+        self.sd._by_hand(tv)
+        tv.selection_set(iid)
+        self.app.update()
+
+    def loaded(self):
+        return os.path.basename(self.sd.player.path) if self.sd.player.path else None
+
+    def test_picking_a_suggestion_loads_it_from_the_body(self):
+        r = self.rec("Ana Lusk", "Harbour")
+        for x in self.app.recs:
+            x.duration = 300.0
+        self.sd.add(r)
+        self.app.update()
+        first = self.sd.rows["0"][0]
+        # The list selected its first row by itself: nothing changes in the player
+        self.assertIsNone(self.loaded())
+        self.pick(self.sd.next_tv, "1")
+        second = self.sd.rows["1"][0]
+        self.assertEqual(self.sd.player.path, second.path)
+        self.assertIn(f"Listening to {second.display}", self.sd.listen_label.cget("text"))
+        self.assertAlmostEqual(self.sd.player.pos.get(), 90.0)    # 30% in: past the intro
+        self.pick(self.sd.next_tv, "0")
+        self.assertEqual(self.sd.player.path, first.path)
+
+    def test_picking_a_track_in_the_set_loads_it(self):
+        for t in (("Ana Lusk", "Harbour"), ("Dagny Holt", "Fracture Line")):
+            self.sd.add(self.rec(*t))
+        self.app.update()
+        self.pick(self.sd.set_tv, "0")
+        self.assertEqual(self.loaded(), "Ana Lusk - Harbour.mp3")
+        # the suggestions follow the new track, but don't take the player
+        self.assertIn("after “Ana Lusk - Harbour”", self.sd.next_label.cget("text"))
+        self.assertEqual(self.loaded(), "Ana Lusk - Harbour.mp3")
+
+    def test_adding_what_you_hear_keeps_it_playing(self):
+        self.sd.add(self.rec("Ana Lusk", "Harbour"))
+        self.app.update()
+        self.pick(self.sd.next_tv, "0")
+        heard = self.sd.player.path
+        with mock.patch.object(self.sd.player, "load") as load:
+            self.sd.add_selected()
+            self.app.update()
+        load.assert_not_called()
+        self.assertEqual(self.sd.player.path, heard)
+
+    def test_jumps_to_intro_body_and_outro(self):
+        r = self.rec("Ana Lusk", "Harbour")
+        r.duration = 400.0
+        with mock.patch("sortero.preview.can_seek", return_value=True):
+            self.sd.listen_to(r)
+        for where, at in (("outro", 340.0), ("intro", 0.0), ("body", 120.0)):
+            with self.subTest(where=where):
+                self.sd.jump_to(where)
+                self.assertAlmostEqual(self.sd.player.pos.get(), at)
+
+    def test_space_plays_and_pauses(self):
+        self.sd.listen_to(self.rec("Ana Lusk", "Harbour"))
+        with mock.patch.object(self.sd.player, "toggle") as toggle:
+            for tv in (self.sd.set_tv, self.sd.next_tv):
+                self.assertEqual(self.sd.play_pause(), "break")
+        self.assertEqual(toggle.call_count, 2)
+        self.assertIn("<Key-space>", self.sd.next_tv.bind())
+
+    def test_leaving_the_screen_stops_playing(self):
+        self.sd.listen_to(self.rec("Ana Lusk", "Harbour"))
+        with mock.patch.object(self.sd.player, "stop") as stop:
+            self.app.show("library")
+        stop.assert_called()
+        self.app.show("sets")
 
     def test_the_set_is_remembered(self):
         for t in (("Ana Lusk", "Harbour"), ("Juno Farrow", "Glasshouse")):

@@ -11,15 +11,21 @@ Order set puts the whole set in its smoothest order, or along an energy shape,
 and Undo puts it back. Save as playlist writes it to _Playlists, where History
 can undo it; Send to Gig prep does that and adds it to the gig set.
 
+Below both lists, a player: whatever you last picked in either list, from
+the body of the track, with jumps to the intro and the outro, so a fit is
+heard and not only read. Picking the next track while one plays plays that
+one instead, so you can go down the suggestions listening.
+
 The set is remembered between launches, for the collection it was made in.
 """
 import datetime, os
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 
-from .. import journal, nextup, playlists, settings, ui
+from .. import journal, nextup, playlists, settings, tempo, ui
 from ..common import fold
 from ..gig import sources
+from ..transport import Transport
 from .base import Screen, APP
 
 SET_COLUMNS = [("n", "#", 32), ("track", "Track", 150), ("key", "Key", 42),
@@ -32,6 +38,7 @@ SUGGESTIONS = 15
 SEARCH_LIMIT = 200
 SETTING = "set_designer"
 SEND, START, CLEAR = "Send to Gig prep…", "Start from a playlist…", "Clear the set…"
+OUTRO = 60.0        # how far from the end Outro starts: the last minute, where you mix out
 
 
 def blend_word(f):
@@ -88,6 +95,11 @@ class SetDesignerScreen(Screen):
                "you've paired them before.\n\n"
                "Double-click a suggestion, or press Return, to add it after the selected "
                "track. Type in Search to add any track instead; the best fits come first.\n\n"
+               "Listen before you add: click a track in either list and the player below "
+               "loads it, from the body of the track. Space plays and pauses. Intro, Body "
+               "and Outro jump to the start, the middle and the last minute, so you can hear "
+               "how one track ends and the next begins. While a track plays, picking another "
+               "plays that one instead.\n\n"
                "Blend says how well each track follows the one before it. Order set puts the "
                "whole set in the order that flows best, or along a shape: Build up; Build, "
                "peak, land; or Waves. Undo puts it back.\n\n"
@@ -121,6 +133,28 @@ class SetDesignerScreen(Screen):
                             style="Chip.Toolbutton",
                             command=self.refresh_next).pack(side="left", padx=(0, 4))
 
+        # ---- listening, under both lists. Packed before the panes, which expand,
+        # so the bar keeps its height in the smallest window.
+        listen = ttk.Frame(self)
+        listen.pack(side="bottom", fill="x", pady=(ui.GAP, 0))
+        row = ttk.Frame(listen)
+        row.pack(fill="x")
+        jumps = ttk.Frame(row)
+        jumps.pack(side="right")
+        ttk.Label(jumps, text="Jump to", style="Muted.TLabel").pack(side="left")
+        for label, where in (("Intro", "intro"), ("Body", "body"), ("Outro", "outro")):
+            ui.link(jumps, label, lambda w=where: self.jump_to(w)).pack(side="left",
+                                                                        padx=(ui.GAP, 0))
+        self.listen_label = ttk.Label(row, style="Muted.TLabel")
+        self.listen_label.pack(side="left", fill="x", expand=True)
+        self.player = Transport(listen)
+        self.player.tap_btn.pack_forget()       # tap tempo belongs to Fix wrong BPMs
+        self.player.pack(fill="x", pady=(2, 0))
+        self.listening = None                   # the record in the player
+        # A list selecting a row by itself (after a refresh, an add, a move)
+        # mustn't change what you're listening to: only your own pick does.
+        self._auto = {}
+
         panes = self.panes = ttk.Panedwindow(self, orient="horizontal")
         panes.pack(fill="both", expand=True)
         # Each table asks for the sum of its columns, and the pane gives the set
@@ -149,6 +183,7 @@ class SetDesignerScreen(Screen):
             self.set_tv.bind(seq, lambda e: self.remove())
         self.set_tv.bind("<Alt-Up>", lambda e: self.move(-1) or "break")
         self.set_tv.bind("<Alt-Down>", lambda e: self.move(1) or "break")
+        self._listens(self.set_tv)
 
         edit = ttk.Frame(left)
         edit.pack(fill="x", pady=(ui.GAP, 0), padx=(0, ui.GAP))
@@ -181,6 +216,7 @@ class SetDesignerScreen(Screen):
         self.next_tv.bind("<<TreeviewSelect>>", lambda e: self._next_selected())
         self.next_tv.bind("<Double-1>", lambda e: self.add_selected())
         self.next_tv.bind("<Return>", lambda e: self.add_selected())
+        self._listens(self.next_tv)
         add = ttk.Frame(right)
         add.pack(fill="x", pady=(ui.GAP, 0), padx=(ui.GAP, 0))
         self.add_btn = ttk.Button(add, text="Add to set", command=self.add_selected)
@@ -192,6 +228,7 @@ class SetDesignerScreen(Screen):
         self.bar.set_more([(SEND, self.send_to_gig), None,
                            (START, self.start_from_playlist), (CLEAR, self.clear)])
         self._after = None
+        self._show_listening()
         self._show_set()
 
     # ------------------------------------------------------------ lifecycle
@@ -200,9 +237,15 @@ class SetDesignerScreen(Screen):
         self._show_set()
         self.search.focus_set()
 
+    def hidden(self):
+        self.player.stop()          # nothing keeps playing behind another screen
+
     def invalidate(self):
         # The collection was read again: point the set at the fresh records,
         # and read the playlists again next time they're needed.
+        self.player.clear()
+        self.listening = None
+        self._show_listening()
         self.history = None
         self._loaded_for = None
         if self.app.current is self:
@@ -279,14 +322,14 @@ class SetDesignerScreen(Screen):
         else:
             self.set_label.configure(text="empty")
         if select is not None and 0 <= select < len(self.set):
-            tv.selection_set(str(select))
-            tv.focus(str(select))
-            tv.see(str(select))
+            self._select_quietly(tv, str(select))
         self._sync()
         self.refresh_next()
 
     def _set_selected(self):
         self._sync()
+        self._picked(self.set_tv, lambda iid: self.set[int(iid)]
+                     if int(iid) < len(self.set) else None)
         self.refresh_next()
 
     def _sync(self):
@@ -428,8 +471,7 @@ class SetDesignerScreen(Screen):
                 bpm_text(r), r.energy if r.energy is not None else "",
                 "" if f is None else ", ".join(f.reasons)))
         if shown:
-            tv.selection_set("0")
-            tv.focus("0")
+            self._select_quietly(tv, "0")
         self._next_selected(empty=self._empty_text(anchor, query))
 
     def _empty_text(self, anchor, query):
@@ -444,6 +486,7 @@ class SetDesignerScreen(Screen):
     def _next_selected(self, empty=""):
         sel = self.next_tv.selection()
         got = self.rows.get(sel[0]) if sel else None
+        self._picked(self.next_tv, lambda iid: self.rows.get(iid, (None,))[0])
         self.add_btn.configure(state="normal" if got else "disabled")
         if not got:
             self.why.configure(text=empty)
@@ -463,6 +506,7 @@ class SetDesignerScreen(Screen):
     def _into_suggestions(self):
         kids = self.next_tv.get_children()
         if kids:
+            self._by_hand(self.next_tv)
             self.next_tv.focus_set()
             self.next_tv.selection_set(kids[0])
             self.next_tv.focus(kids[0])
@@ -486,6 +530,72 @@ class SetDesignerScreen(Screen):
                 self._after = None
         self.add(got[0], after=i if i is not None and i < len(self.set) - 1 else None)
         return "break"
+
+    # ------------------------------------------------------------ listening
+    def _listens(self, tv):
+        """Your clicks and keys in a list pick what to listen to; Space plays."""
+        # The keys the tables bind for themselves (ui.keyboard_ranges) are named
+        # too: a binding for one key comes before <KeyPress>, which would miss them.
+        for seq in ("<ButtonPress-1>", "<KeyPress>",
+                    *(f"<KeyPress-{k}>" for k in ("Up", "Down", "Home", "End", "Prior",
+                                                  "Next"))):
+            tv.bind(seq, lambda e, t=tv: self._by_hand(t), add="+")
+        tv.bind("<space>", lambda e: self.play_pause())
+
+    def _by_hand(self, tv):
+        self._auto.pop(str(tv), None)
+
+    def _select_quietly(self, tv, iid):
+        """Select a row without loading it into the player."""
+        self._auto[str(tv)] = iid
+        tv.selection_set(iid)
+        tv.focus(iid)
+        tv.see(iid)
+
+    def _picked(self, tv, rec_of):
+        """A row was selected: load it, unless the list chose it by itself."""
+        sel = tv.selection()
+        if len(sel) != 1 or self._auto.get(str(tv)) == sel[0]:
+            return
+        rec = rec_of(sel[0])
+        if rec is not None:
+            self.listen_to(rec)
+
+    def listen_to(self, rec):
+        """Put a track in the player, from the body of the track. If one is
+        playing, this one plays instead; the same track carries on."""
+        same = (self.player.path and
+                os.path.normcase(self.player.path) == os.path.normcase(rec.path))
+        self.listening = rec
+        if not same:
+            start, _ = tempo._span(rec.duration)
+            self.player.load(rec.path, rec.duration, start)
+        self._show_listening()
+
+    def play_pause(self):
+        if self.player.path:
+            self.player.toggle()
+        return "break"
+
+    def jump_to(self, where):
+        rec = self.listening
+        if rec is None or not rec.duration:
+            return
+        d = rec.duration
+        at = {"intro": 0.0, "body": tempo._span(d)[0],
+              "outro": max(0.0, d - OUTRO)}[where]
+        self.player.seek_to(at)
+
+    def _show_listening(self):
+        rec = self.listening
+        if rec is None:
+            self.listen_label.configure(
+                text="Click a track in either list to listen to it. Space plays and pauses.")
+            return
+        details = [x for x in (rec.camelot, bpm_text(rec) and bpm_text(rec) + " BPM",
+                               rec.energy is not None and f"energy {rec.energy}") if x]
+        self.listen_label.configure(
+            text=f"Listening to {rec.display}" + (f" ({', '.join(details)})" if details else ""))
 
     # ------------------------------------------------------------ saving
     def save(self):

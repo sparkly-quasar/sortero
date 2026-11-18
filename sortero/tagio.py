@@ -2,7 +2,8 @@
 import base64, binascii, json, os
 
 import mutagen
-from mutagen.id3 import ID3, TKEY, TIT1, TCON, TPE1, TIT2, TBPM, TALB, COMM, ID3NoHeaderError
+from mutagen.id3 import (ID3, TKEY, TIT1, TCON, TPE1, TIT2, TBPM, TALB, TPE2, TPUB,
+                         TCMP, TRCK, COMM, ID3NoHeaderError)
 from mutagen.aiff import AIFF
 from mutagen.flac import FLAC
 from mutagen.mp3 import MP3
@@ -15,14 +16,27 @@ from . import headers
 
 # logical field -> per-format tag name
 ID3_FRAMES = {"key": TKEY, "grouping": TIT1, "genre": TCON,
-              "artist": TPE1, "title": TIT2, "bpm": TBPM, "album": TALB}
+              "artist": TPE1, "title": TIT2, "bpm": TBPM, "album": TALB,
+              "albumartist": TPE2, "label": TPUB, "compilation": TCMP,
+              "tracknumber": TRCK}
 # Mixed In Key writes its 1-10 rating to ENERGYLEVEL. Note it also writes a
 # base64 JSON blob to plain KEY/ENERGY - read INITIALKEY, never KEY.
 VORBIS_KEYS = {"key": "INITIALKEY", "grouping": "GROUPING", "genre": "GENRE",
                "artist": "ARTIST", "title": "TITLE", "bpm": "BPM",
-               "comment": "COMMENT", "energylevel": "ENERGYLEVEL", "album": "ALBUM"}
+               "comment": "COMMENT", "energylevel": "ENERGYLEVEL", "album": "ALBUM",
+               "albumartist": "ALBUMARTIST", "label": "LABEL",
+               "compilation": "COMPILATION", "tracknumber": "TRACKNUMBER"}
+# Other names taggers give the same Vorbis field. Read when the usual one is
+# missing; a write goes to the usual one only.
+VORBIS_ALSO = {"albumartist": ("ALBUM ARTIST",), "label": ("ORGANIZATION", "PUBLISHER")}
 MP4_KEYS = {"grouping": "\xa9grp", "genre": "\xa9gen", "artist": "\xa9ART",
-            "title": "\xa9nam", "comment": "\xa9cmt", "album": "\xa9alb"}
+            "title": "\xa9nam", "comment": "\xa9cmt", "album": "\xa9alb",
+            "albumartist": "aART"}
+MP4_LABEL_ATOM = "----:com.apple.iTunes:LABEL"
+# The fields that say which release a track belongs to. Music servers such as
+# Navidrome make one album of the tracks sharing an Album Artist and Album.
+# Compilation is "1" when set; a track number is "3" or "3/12".
+RELEASE_FIELDS = ("albumartist", "label", "compilation", "tracknumber")
 MP4_KEY_ATOM = "----:com.apple.iTunes:initialkey"
 MP4_ENERGY_ATOM = "----:com.apple.iTunes:EnergyLevel"
 ID3_ENERGY_DESCS = ("energylevel", "energy")
@@ -33,7 +47,8 @@ MIK_GRID_MP4 = "----:com.mixedinkey.mixedinkey:beatgrid"
 
 
 class Track:
-    """Thin wrapper exposing key/grouping/genre/artist/title/bpm/comment."""
+    """Thin wrapper exposing key/grouping/genre/artist/title/bpm/comment/album,
+    and the release fields: album artist, label, compilation and track number."""
 
     def __init__(self, path):
         self.path = path
@@ -115,9 +130,14 @@ class Track:
                 if not frame:
                     return None
                 vals = self.audio.getall(frame.__name__)
-                return str(vals[0].text[0]) if vals and vals[0].text else None
+                v = str(vals[0].text[0]) if vals and vals[0].text else None
+                return _compilation(v) if field == "compilation" else v
             if self.kind == "vorbis":
                 v = self.audio.get(VORBIS_KEYS.get(field, field.upper()))
+                for other in VORBIS_ALSO.get(field, ()):
+                    v = v or self.audio.get(other)
+                if field == "compilation":
+                    return _compilation(v[0] if v else None)
                 return v[0] if v else None
             if self.kind == "mp4":
                 if field == "key":
@@ -129,6 +149,17 @@ class Track:
                 if field == "bpm":
                     v = self.audio.get("tmpo")
                     return str(v[0]) if v else None
+                if field == "label":
+                    v = self.audio.get(MP4_LABEL_ATOM)
+                    return bytes(v[0]).decode("utf-8", "ignore") if v else None
+                if field == "compilation":
+                    return "1" if self.audio.get("cpil") else None
+                if field == "tracknumber":
+                    v = self.audio.get("trkn")
+                    if not v or not v[0][0]:
+                        return None
+                    n, of = v[0]
+                    return f"{n}/{of}" if of else str(n)
                 v = self.audio.get(MP4_KEYS.get(field))
                 return v[0] if v else None
         except Exception:
@@ -181,11 +212,20 @@ class Track:
             frame = ID3_FRAMES.get(field)
             if not frame:
                 return
+            if field == "compilation":
+                value = _compilation(value)
             self.audio.delall(frame.__name__)
             if value:
                 self.audio.add(frame(encoding=3, text=[str(value)]))
         elif self.kind == "vorbis":
             k = VORBIS_KEYS.get(field, field.upper())
+            if field == "compilation":
+                value = _compilation(value)
+            # the other names would be read back in its place: a cleared or
+            # changed field has to go from under them too
+            for other in VORBIS_ALSO.get(field, ()):
+                if other in self.audio:
+                    del self.audio[other]
             if value:
                 self.audio[k] = [str(value)]
             elif k in self.audio:
@@ -203,6 +243,26 @@ class Track:
                     self.audio["tmpo"] = [int(round(float(value)))]
                 elif "tmpo" in self.audio:
                     del self.audio["tmpo"]
+                return
+            if field == "label":
+                if value:
+                    from mutagen.mp4 import MP4FreeForm
+                    self.audio[MP4_LABEL_ATOM] = [MP4FreeForm(str(value).encode())]
+                elif MP4_LABEL_ATOM in self.audio:
+                    del self.audio[MP4_LABEL_ATOM]
+                return
+            if field == "compilation":
+                if _compilation(value):
+                    self.audio["cpil"] = True
+                elif "cpil" in self.audio:
+                    del self.audio["cpil"]
+                return
+            if field == "tracknumber":
+                got = _track_number(value)
+                if got:
+                    self.audio["trkn"] = [got]
+                elif "trkn" in self.audio:
+                    del self.audio["trkn"]
                 return
             k = MP4_KEYS.get(field)
             if not k:
@@ -225,3 +285,23 @@ class Track:
             return True
         except Exception:
             return False
+
+
+def _compilation(value):
+    """A compilation flag as "1", or None when it isn't one ("0", empty)."""
+    v = str(value or "").strip().lower()
+    return "1" if v and v not in ("0", "false", "no") else None
+
+
+def _track_number(value):
+    """(number, of) from "3" or "3/12", or None when there's no number."""
+    n, _, of = str(value or "").strip().partition("/")
+    try:
+        n = int(n)
+    except ValueError:
+        return None
+    try:
+        of = int(of)
+    except ValueError:
+        of = 0
+    return (n, of) if n > 0 else None

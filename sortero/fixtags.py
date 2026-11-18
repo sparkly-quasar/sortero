@@ -1,9 +1,9 @@
 """Tag repair: spam removal, artist/title inference, genre normalisation,
 and promoting Mixed In Key data out of the comment field into sortable tags."""
-import os, re, collections, unicodedata
-from .common import (ARTIST_TITLE, is_spam, clean_stem, fold, split_artist_title,
-                     parse_mik, to_camelot)
-from .tagio import Track
+import os, re, collections, dataclasses, unicodedata
+from .common import (ARTIST_TITLE, VERSION_WORDS, is_spam, clean_stem, fold,
+                     split_artist_title, parse_mik, to_camelot)
+from .tagio import Track, RELEASE_FIELDS
 from .journal import Journal
 from .organize import canon_genre, _strip_artist_prefix
 
@@ -35,7 +35,8 @@ FIX_SHORT = {
 FIELD_LABELS = {
     "grouping": "Key + energy (Grouping)", "key": "Key", "genre": "Genre",
     "comment": "Comment", "artist": "Artist", "title": "Title", "bpm": "BPM",
-    "album": "Album",
+    "album": "Album", "albumartist": "Album artist", "label": "Label",
+    "compilation": "Compilation", "tracknumber": "Track number",
 }
 
 
@@ -220,6 +221,287 @@ def credit_from_title(recs, order=ARTIST_TITLE):
         if artist:
             ch["artist"] = (tagged_names(r)[0], artist)
         out.append((r, ch))
+    return out
+
+
+# --- an artist tag naming the release, not the artist --------------------------
+# Label compilations and Bandcamp label downloads often come tagged with the
+# label ("Rayzeh"), a placeholder ("Various Artists") or the release's whole
+# artist list as the artist, and the real artist at the front of the title:
+# "Rayzeh" / "RamouQ - Shifty Distant". The filename is no help (a Bandcamp
+# label download is "Label - Album - 01 Artist - Title.mp3"), so the evidence
+# is the release: the tracks sharing an artist tag and an album.
+LABEL = "label"             # a record label: Rayzeh, Fur:ther Sessions
+PLACEHOLDER_ARTIST = "placeholder"   # Various Artists, V/A, Compilation
+LISTED = "listed"           # the release's artist list: "Polygonia / Dycide / Latmos"
+ALBUM_NAME = "album"        # no credit in the title, but the album names the artist
+SAME_RELEASE = "release"    # credited right already, but part of a release fixed here
+RELEASE_KINDS = (LABEL, PLACEHOLDER_ARTIST, LISTED, ALBUM_NAME, SAME_RELEASE)
+
+VARIOUS = "Various Artists"
+PLACEHOLDER_NAMES = {"variousartists", "variousartist", "various", "va", "compilation",
+                     "unknownartist", "unknown"}
+# The dash between an artist and a title, never the one inside a name ("Jean-Luc")
+_DASH = re.compile(r"\s+[-–—]\s+")
+# A tail that is only a version ("Ipanema - Extended Mix"), so the head is the
+# song, not an artist. A bracketed version ("Shifty Distant (Original Mix)")
+# is part of a title and doesn't count.
+_VERSION_ONLY = re.compile(rf"(?i)^[^()\[\]]*\b(?:{VERSION_WORDS})$")
+# A head that numbers a part of a work, not an artist: "Part 1 - The Beginning"
+_NOT_A_NAME = re.compile(r"(?i)^(?:\d+|(?:part|pt\.?|chapter|act|side|track|movement|"
+                         r"episode|op\.?|no\.?)\s*\w{0,4})$")
+# A catalogue number in an album tag: "Pulsar EP [RZH018]"
+_CATALOGUE = re.compile(r"[\[(]\s*[A-Za-z]{2,}[\s._-]?\d{2,}[A-Za-z]?\s*[\])]")
+_BANDCAMP = re.compile(r"(?i)\b([a-z0-9-]+)\.bandcamp\.com")
+# The track number in a Bandcamp download's name: "Label - Album - 03 Artist - Title"
+_BANDCAMP_NUMBER = re.compile(r" - (\d{1,3}) \S")
+
+
+@dataclasses.dataclass
+class ReleaseCredit:
+    """What one track's tags become when its release is credited properly."""
+    kind: str
+    artist: str = None          # the artist tag's new value; None keeps it
+    title: str = None           # the title's new value; None keeps it
+    # every (artist, title) a title with more than one " - " could be read as,
+    # for the user to pick from: "Haze - C - Can't Sleep" is by "Haze - C"
+    splits: tuple = ()
+    albumartist: str = None
+    compilation: bool = False
+    label: str = None           # the label that was in the artist tag
+    sure: bool = True           # whether to select it for the user
+
+    @property
+    def ambiguous(self):
+        return len(self.splits) > 1
+
+
+def _splits(title):
+    """Every way to read this title as "Artist - Title", leaving out readings
+    whose title would only be a version ("Ipanema - Extended Mix")."""
+    out = []
+    for m in _DASH.finditer(title or ""):
+        head, tail = title[:m.start()].strip(), title[m.end():].strip()
+        if (head and tail and len(head) < 80 and not _VERSION_ONLY.match(tail)
+                and not _NOT_A_NAME.match(head)):
+            out.append((head, tail))
+    return out
+
+
+def _list_parts(artist):
+    """{plain name} for an artist tag listing a release's artists, or set().
+
+    "A / B", "A, B" and "A, B & C" are lists. Plain "A & B" isn't: that's a
+    duo as often as a split EP, and a split EP crediting each side in its
+    titles is right enough as it is.
+    """
+    if not artist:
+        return set()
+    if "/" in artist or "," in artist:
+        parts = re.split(r"\s*(?:/|,|\s&\s)\s*", artist)
+    else:
+        parts = re.split(r"\s+&\s+", artist)
+        if len(parts) < 3:
+            return set()
+    parts = {_plain(_core(p)) for p in parts}
+    parts.discard("")
+    return parts if len(parts) >= 2 else set()
+
+
+def _album_artist_name(r, artist):
+    """The artist an album tag like "DOJAS - Pulsar EP [RZH018]" names, when
+    it isn't the tagged artist and the release looks like a label's: a
+    catalogue number in the album, or the artist's own Bandcamp page in the
+    comment."""
+    album = r.album or ""
+    m = _DASH.search(album)
+    if not m:
+        return None
+    name = album[:m.start()].strip()
+    if (not name or _plain(name) in (_plain(artist), "") or _plain(name) in PLACEHOLDER_NAMES
+            or not album[m.end():].strip()):
+        return None
+    sub = _BANDCAMP.search(r.comment or "")
+    if _CATALOGUE.search(album) or (sub and _plain(sub.group(1)) == _plain(artist)):
+        return name
+    return None
+
+
+def release_credits(recs):
+    """{path: ReleaseCredit} for tracks whose artist tag holds a label, a
+    placeholder or the release's artist list, with the real artist in the
+    title, plus the other tracks of those releases that need the same Album
+    Artist to stay one album.
+
+    The evidence is the release, never the filename:
+      * two or more tracks of one release (artist tag and album) start their
+        titles with different artists, none of them the tagged one: the tag
+        names a label. One is enough when other tracks have it as their Label.
+      * the artist tag is a placeholder like "Various Artists" or "V/A".
+      * the artist tag is a list ("A / B / C") and the title starts with one.
+      * less sure, so never selected for you: no artist in the title, but the
+        album starts with one ("DOJAS - Pulsar EP [RZH018]") and the release
+        has a catalogue number or the label's Bandcamp page in the comment.
+
+    Tracks you said to leave alone are still here; see release_artist_flagged.
+    """
+    live = [r for r in recs if not r.protected]
+    known_labels = {_plain(r.label) for r in live if r.label}
+    groups = collections.defaultdict(list)
+    for r in live:
+        a, _ = tagged_names(r)
+        if a and _plain(a):
+            groups[(_plain(a), _plain(r.album or ""))].append(r)
+
+    out = {}
+    releases = []       # (flagged tracks, album artist, compilation, plain names)
+    for (pa, palb), grp in groups.items():
+        artist = tagged_names(grp[0])[0]
+        parts = _list_parts(artist)
+        placeholder = pa in PLACEHOLDER_NAMES
+        listed, others, plain = [], [], []
+        for r in grp:
+            sp = _splits(tagged_names(r)[1])
+            if not sp:
+                plain.append(r)
+                continue
+            if any(_plain(h) == pa for h, _ in sp):
+                continue                            # the "repeat" fix's job
+            named = [(h, t) for h, t in sp if _plain(h) in parts]
+            if named:
+                listed.append((r, named))
+            elif not (_names(artist) & _names(sp[0][0])) or placeholder:
+                others.append((r, sp))
+
+        for r, sp in listed:
+            h, t = sp[0]
+            out[r.path] = ReleaseCredit(LISTED, h, t, tuple(sp), albumartist=artist)
+        flagged = [r for r, _ in listed]
+
+        heads = {_plain(sp[0][0]) for _, sp in others}
+        kind = (PLACEHOLDER_ARTIST if placeholder else
+                LABEL if palb and (len(heads) >= 2 or (heads and pa in known_labels))
+                else None)
+        if kind and others:
+            label = None if placeholder else artist
+            for r, sp in others:
+                h, t = sp[0]
+                out[r.path] = ReleaseCredit(kind, h, t, tuple(sp), albumartist=VARIOUS,
+                                            compilation=True, label=label,
+                                            sure=len(sp) == 1)
+                flagged.append(r)
+            # the rest of the release, whose titles don't say who it's by
+            for r in plain:
+                out[r.path] = ReleaseCredit(SAME_RELEASE, albumartist=VARIOUS,
+                                            compilation=True, label=label)
+                flagged.append(r)
+            releases.append((flagged, VARIOUS, True, {pa} | heads))
+        elif flagged:
+            releases.append((flagged, artist, False, {pa} | parts))
+        if kind and others:
+            continue
+
+        for r in plain:
+            name = _album_artist_name(r, artist)
+            if name and not placeholder and not parts:
+                out[r.path] = ReleaseCredit(ALBUM_NAME, name, None, albumartist=name,
+                                            label=artist, sure=False)
+
+    # Every track of a release fixed here gets its Album Artist, including
+    # those already credited to one artist, or a music server splits the
+    # release in two. Same album, and the same folder or one of its artists.
+    by_album = collections.defaultdict(list)
+    for r in live:
+        if r.album and _plain(r.album):
+            by_album[_plain(r.album)].append(r)
+    for flagged, albumartist, compilation, names in releases:
+        album = _plain(flagged[0].album or "")
+        if not album:
+            continue
+        folders = {os.path.dirname(r.path) for r in flagged}
+        for r in by_album[album]:
+            if r.path in out:
+                continue
+            a = tagged_names(r)[0]
+            if not (os.path.dirname(r.path) in folders or _plain(a or "") in names
+                    or _names(a) & names):
+                continue
+            if _plain(r.albumartist or "") != _plain(albumartist) or (
+                    compilation and not r.compilation):
+                out[r.path] = ReleaseCredit(SAME_RELEASE, albumartist=albumartist,
+                                            compilation=compilation)
+    return out
+
+
+# Tracks whose artist tag is right as it is, so they stop being listed. By
+# filename, like LEFT_ALONE.
+RELEASE_LEFT_ALONE = "release_artist_ignored"
+_release_left_alone_cache = None
+
+
+def _release_left_alone():
+    global _release_left_alone_cache
+    if _release_left_alone_cache is None:
+        from . import settings
+        _release_left_alone_cache = set(settings.get(RELEASE_LEFT_ALONE) or [])
+    return _release_left_alone_cache
+
+
+def leave_release_artist(recs, on=True):
+    """Stop (or start again) listing these tracks' artist tags as a label or
+    placeholder."""
+    global _release_left_alone_cache
+    from . import settings
+    keys = {_left_alone_key(r) for r in recs}
+    _release_left_alone_cache = ((_release_left_alone() | keys) if on
+                                 else (_release_left_alone() - keys))
+    settings.set(RELEASE_LEFT_ALONE, sorted(_release_left_alone_cache))
+
+
+def release_artist_flagged(recs, credits=None):
+    """release_credits, leaving out the tracks you said to leave alone."""
+    credits = release_credits(recs) if credits is None else credits
+    gone = _release_left_alone()
+    by_path = {r.path: r for r in recs}
+    return {p: c for p, c in credits.items()
+            if p in by_path and _left_alone_key(by_path[p]) not in gone}
+
+
+def release_changes(recs, credits, picks=None):
+    """Planned changes for these tracks' release credits: [(rec, {field: (old, new)})].
+
+    `picks` is {path: (artist, title)} for titles with more than one " - ",
+    chosen from ReleaseCredit.splits; one with none picked keeps its artist
+    and title, though its release still gets its Album Artist. Filenames are
+    never touched: music servers like Navidrome keep play counts by path.
+    """
+    picks = picks or {}
+    out = []
+    for r in recs:
+        c = credits.get(r.path)
+        if not c or r.protected:
+            continue
+        old_a, old_t = tagged_names(r)
+        artist, title = c.artist, c.title
+        if c.ambiguous:
+            artist, title = picks.get(r.path, (None, None))
+        ch = {}
+        if artist and artist != old_a:
+            ch["artist"] = (old_a, artist)
+        if title and title != old_t:
+            ch["title"] = (old_t, title)
+        if c.albumartist and (r.albumartist or "") != c.albumartist:
+            ch["albumartist"] = (r.albumartist, c.albumartist)
+        if c.compilation and not r.compilation:
+            ch["compilation"] = (r.compilation, "1")
+        if c.label and not r.label and (old_a or "") == c.label:
+            ch["label"] = (r.label, c.label)
+        if not r.tracknumber:
+            m = _BANDCAMP_NUMBER.search(os.path.splitext(os.path.basename(r.path))[0])
+            if m and int(m.group(1)) and ch:
+                ch["tracknumber"] = (None, str(int(m.group(1))))
+        if ch:
+            out.append((r, ch))
     return out
 
 
@@ -543,10 +825,17 @@ def apply(root, changes, log=print, progress=None, kind="fixtags"):
         if not t.ok:
             failed += 1
             continue
+        done = {}
         for field, (old, new) in ch.items():
+            # The release fields are journalled as the file has them: a scan
+            # can come from a tag cache older than the fields, and an undo
+            # has to put back what was really there.
+            if field in RELEASE_FIELDS:
+                old = t.get(field)
+            done[field] = {"old": old, "new": new}
             t.set(field, new)
         if t.save():
-            j.tagged(r.path, {f: {"old": o, "new": n} for f, (o, n) in ch.items()})
+            j.tagged(r.path, done)
         else:
             failed += 1
     if progress:

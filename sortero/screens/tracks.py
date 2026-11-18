@@ -22,6 +22,7 @@ FILTERS = [
     ("artist", "No artist", lambda r: not r.artist),
     ("repeat", "Artist in the title", None),
     ("title_artist", "Title names a different artist", None),
+    ("release_artist", "Artist tag names a label or 'Various Artists'", None),
     ("swapped", "Artist and title look swapped", None),
     ("bpm", "No BPM", lambda r: not r.bpm),
     ("bitrate", "Low bitrate (under 192 kbps)",
@@ -36,11 +37,13 @@ LABELS = {k: label for k, label, _ in FILTERS}
 CHIPS = {"all": "All tracks", "genre": "Needs a genre", "key": "Not analysed",
          "energy": "No energy"}
 OTHER = {"repeat": "Artist in title", "title_artist": "Another artist",
+         "release_artist": "Label as artist",
          "swapped": "Swapped", "artist": "No artist", "bpm": "No BPM",
          "genre_ignored": "Ignored", "bitrate": "Low bitrate", "lossless": "Lossless"}
 
 COLUMNS = [("artist", "Artist", 160), ("title", "Title", 230),
            ("new_artist", "New artist", 160), ("new_title", "New title", 230),
+           ("new_albumartist", "New album artist", 160),
            ("key", "Key", 46),
            ("bpm", "BPM", 46), ("energy", "Energy", 54), ("genre", "Genre", 130),
            ("suggested", "Discogs suggests", 140), ("folder", "Folder", 180)]
@@ -55,6 +58,14 @@ GUIDES = {
                     "the button at the bottom right. For any that are right as they "
                     "are, such as a remix credited to the original artist, select them "
                     "and choose Leave as they are, so they stop being listed.",
+    "release_artist": "The artist tag on these holds a record label, 'Various Artists' "
+                      "or a release's whole artist list, and the real artist is at the "
+                      "front of the title. Each release also gets one Album Artist, so "
+                      "music servers like Navidrome keep it as one album. Filenames "
+                      "stay as they are. The ones Sortero is sure of are selected: "
+                      "check the New columns and press the button at the bottom right. "
+                      "A New artist ending in '?' is yours to pick. For any that are "
+                      "right as they are, select them and choose Leave as they are.",
     "repeat": "These titles have the artist in them. Clean tags fixes them all at "
               "once: press the button at the bottom right to preview the changes "
               "first. The New artist and New title columns show what each one "
@@ -70,8 +81,8 @@ GUIDES = {
 if not paths.IS_MAC:
     GUIDES["title_artist"] = GUIDES["title_artist"].replace("⌘A", "Ctrl+A")
 # Lists that show what a track's artist and title will be after their fix
-BECOMES = ("title_artist", "repeat", "swapped")
-NEW_COLUMNS = ("new_artist", "new_title")
+BECOMES = ("title_artist", "repeat", "swapped", "release_artist")
+NEW_COLUMNS = ("new_artist", "new_title", "new_albumartist")
 
 
 def _num(v):
@@ -155,7 +166,9 @@ class LibraryScreen(Screen):
                 ("Read artist and title from the filename…", self.names_from_file),
                 None,
                 ("Leave as they are (the title names another artist)",
-                 self.leave_title_artist)):
+                 self.leave_title_artist),
+                ("Leave as they are (the artist tag is right)",
+                 self.leave_release_artist)):
             self._add(self.names_menu, item)
         self.names_btn.configure(menu=self.names_menu)
         self.names_btn.pack(side="left", padx=(ui.GAP, 0))
@@ -192,7 +205,7 @@ class LibraryScreen(Screen):
         self.guide_lab = ui.WrapLabel(self.guide)
         self.guide_lab.pack(side="left", fill="x", expand=True)
         self.leave_link = ui.link(self.guide, "Leave selected as they are",
-                                  self.leave_title_artist)
+                                  self.leave_as_they_are)
 
         self.table, self.tv = ui.tree(self, COLUMNS, height=14)
         self.table.pack(fill="both", expand=True)
@@ -239,6 +252,8 @@ class LibraryScreen(Screen):
         ])
 
         self.rows, self.suggested, self._becomes = [], {}, {}
+        self._release = {}          # fixtags.release_artist_flagged, from the last listing
+        self._listed_key = None
         self.sort_col, self.sort_desc = "artist", False
         self._stop = threading.Event()
         self._looking = False
@@ -290,10 +305,17 @@ class LibraryScreen(Screen):
         if key == "swapped":
             suspect = {r.path for r in (self.app.health or {}).get("swapped", ())}
             return lambda r: r.path in suspect
-        if key in ("repeat", "title_artist"):
+        if key == "release_artist":
+            self._release = fixtags.release_artist_flagged(self.app.recs or [])
+            flagged = self._release
+            return lambda r: r.path in flagged
+        if key == "title_artist":
+            # a label's compilation is its own list, which fixes the release too
+            order, release = self._order(), fixtags.release_artist_flagged(self.app.recs or [])
+            return lambda r: fixtags.names_other_artist(r, order) and r.path not in release
+        if key == "repeat":
             order = self._order()
-            test = fixtags.artist_in_title if key == "repeat" else fixtags.names_other_artist
-            return lambda r: test(r, order)
+            return lambda r: fixtags.artist_in_title(r, order)
         return dict((k, fn) for k, _, fn in FILTERS)[key]
 
     def set_filter(self, key):
@@ -327,6 +349,8 @@ class LibraryScreen(Screen):
             "new_artist": lambda r: (self._becomes.get(r.path, ("~", ""))[0].lower(),
                                      self._becomes.get(r.path, ("", ""))[1].lower()),
             "new_title": lambda r: self._becomes.get(r.path, ("", "~"))[1].lower(),
+            "new_albumartist": lambda r: (tuple(self._becomes.get(r.path, ()))
+                                          + ("~",) * 3)[2].lower(),
             "key": _camelot,
             "bpm": lambda r: _num(r.bpm),
             "energy": lambda r: r.energy if r.energy is not None else -1,
@@ -357,20 +381,29 @@ class LibraryScreen(Screen):
                 sug = self.suggested.get(r.path, (None, []))[0] or ""
                 self.tv.insert("", "end", iid=str(i), values=(
                     r.artist or "—", r.title or os.path.basename(r.path),
-                    *self._becomes.get(r.path, ("", "")),
+                    *(tuple(self._becomes.get(r.path, ("", "")))
+                      + ("",) * 3)[:3],
                     r.camelot or r.key or "—", r.bpm or "—",
                     r.energy if r.energy is not None else "—",
                     r.genre or "—", sug, os.path.dirname(r.rel) or "(top level)"))
                 if r.path in keep:
                     reselect.append(str(i))
+            if self.filter_key() == "release_artist" and \
+                    self._listed_key != "release_artist":
+                # what Sortero is sure of starts selected; the rest is yours
+                reselect = [str(i) for i, r in enumerate(rows)
+                            if self._release.get(r.path) and self._release[r.path].sure]
             if reselect:
                 self.tv.selection_set(reselect)
+        self._listed_key = self.filter_key()
         shown = [c for c, _, _ in COLUMNS]
         if not any(self.suggested.get(r.path, (None,))[0] for r in self.rows):
             shown.remove("suggested")
         if self.filter_key() not in BECOMES:
             for c in NEW_COLUMNS:
                 shown.remove(c)
+        elif self.filter_key() != "release_artist":
+            shown.remove("new_albumartist")
         self.tv.configure(displaycolumns=shown)
         for cid, heading, _ in COLUMNS:
             arrow = (" ▼" if self.sort_desc else " ▲") if cid == self.sort_col else ""
@@ -393,6 +426,17 @@ class LibraryScreen(Screen):
         elif key == "swapped":
             for r in rows:
                 out[r.path] = (r.title or "—", r.artist or "—")
+        elif key == "release_artist":
+            for r in rows:
+                c = self._release.get(r.path)
+                if not c:
+                    continue
+                if c.ambiguous:
+                    artist = " or ".join(a for a, _ in c.splits) + "?"
+                    title = r.title or "—"
+                else:
+                    artist, title = c.artist or r.artist or "—", c.title or r.title or "—"
+                out[r.path] = (artist, title, c.albumartist or r.albumartist or "")
         return out
 
     def _update_guide(self):
@@ -401,7 +445,7 @@ class LibraryScreen(Screen):
             self.guide.pack_forget()
             return
         self.guide_lab.configure(text=text)
-        if self.filter_key() == "title_artist":
+        if self.filter_key() in ("title_artist", "release_artist"):
             self.leave_link.pack(side="right", anchor="n", padx=(ui.SECTION, 0))
         else:
             self.leave_link.pack_forget()
@@ -438,6 +482,10 @@ class LibraryScreen(Screen):
                 f"Use the title's artist for {ui.plural(n, 'track')}…" if n
                 else "Select tracks to fix",
                 self.credit_from_title, state="normal" if n else "disabled")
+        elif key == "release_artist":
+            self.bar.set_primary(
+                f"Fix {ui.plural(n, 'track')}…" if n else "Select tracks to fix",
+                self.fix_release_artist, state="normal" if n else "disabled")
         elif key == "repeat":
             self.bar.set_primary(f"Fix all {len(self.rows):,} in Clean tags…",
                                  lambda: self.app.clean_tags("repeat"),
@@ -674,6 +722,66 @@ class LibraryScreen(Screen):
         self.refresh()
         self.app.refresh_todo()
 
+    def leave_release_artist(self):
+        recs = self._selected()
+        if not recs:
+            messagebox.showinfo(APP, "Select the tracks that are right as they are first.")
+            return
+        fixtags.leave_release_artist(recs)
+        self._update_counts()
+        self.refresh()
+        self.app.refresh_todo()
+
+    def leave_as_they_are(self):
+        """The guide's link: leave alone whatever the list on screen is about."""
+        if self.filter_key() == "release_artist":
+            self.leave_release_artist()
+        else:
+            self.leave_title_artist()
+
+    def fix_release_artist(self):
+        """Take the artist out of the title where the artist tag held a label,
+        a placeholder or the release's artist list, and give the release one
+        Album Artist. Titles with more than one " - " are asked about first."""
+        recs = [r for r in self._selected() if r.path in self._release]
+        if not recs:
+            messagebox.showinfo(APP, "Select the tracks to fix first.\n\nShow 'Artist "
+                                     "tag names a label' to see the ones Sortero found.")
+            return
+        unsure = [r for r in recs if self._release[r.path].ambiguous]
+        if unsure:
+            PickSplits(self, unsure, self._release,
+                       lambda picks: self._write_release(recs, picks))
+        else:
+            self._write_release(recs, {})
+
+    def _write_release(self, recs, picks):
+        changes = fixtags.release_changes(recs, self._release, picks)
+        if not changes:
+            messagebox.showinfo(APP, "Nothing to change on these tracks.")
+            return
+        lines = fixtags.overview_lines(changes)
+        shown = fixtags.example_lines(
+            [(r, ch) for r, ch in changes if "artist" in ch or "title" in ch], 3)
+        if not messagebox.askyesno(
+                APP, f"Fix the credits on {ui.plural(len(changes), 'track')}?\n\n"
+                     + "\n".join(lines) + ("\n\n" + "\n".join(shown) if shown else "")
+                     + "\n\nFilenames stay as they are. You can undo this from History."):
+            return
+        root = self.app.root_dir.get()
+
+        def work(progress, log):
+            return fixtags.apply(root, changes, log=log, progress=progress,
+                                 kind="release-artist")
+
+        def done(res):
+            _, n, failed = res
+            messagebox.showinfo(APP, f"Updated {ui.plural(n, 'track')}."
+                                     + (f"\n{failed} couldn't be written." if failed else ""))
+            self.app.changed()
+
+        self.app.task.run(work, done, "Writing tags")
+
     def credit_from_title(self):
         """For titles shaped "Artist - Title": the artist tag takes the credit
         and the title keeps the rest. Hraach - Una Mattina, tagged as by Dalal."""
@@ -843,7 +951,8 @@ class EditDetails(tk.Toplevel):
     Only fields that end up different from what was shown are written, so with
     several tracks a field left blank keeps each track's own value.
     """
-    FIELDS = (("artist", "Artist"), ("title", "Title"), ("album", "Album"))
+    FIELDS = (("artist", "Artist"), ("title", "Title"), ("album", "Album"),
+              ("albumartist", "Album artist"), ("label", "Label"))
 
     def __init__(self, screen, recs, on_save):
         super().__init__(screen)
@@ -895,11 +1004,7 @@ class EditDetails(tk.Toplevel):
 
     @staticmethod
     def _current(r, field):
-        if field == "artist":
-            return r.artist
-        if field == "title":
-            return r.title
-        return r.album
+        return getattr(r, field)
 
     @staticmethod
     def _tagged(r, field):
@@ -907,7 +1012,7 @@ class EditDetails(tk.Toplevel):
         if field in ("artist", "title"):
             a, t = fixtags.tagged_names(r)
             return a if field == "artist" else t
-        return r.album
+        return getattr(r, field)
 
     def save(self):
         edits = {}
@@ -927,3 +1032,64 @@ class EditDetails(tk.Toplevel):
         self.destroy()
         if changes:
             self.on_save(changes)
+
+
+class PickSplits(tk.Toplevel):
+    """For titles with more than one " - ": which part is the artist?
+
+    "Haze - C - Can't Sleep" is by "Haze - C", which no rule can tell from a
+    title by "Haze". Each track can also keep its artist and title, though its
+    release still gets its Album Artist.
+    """
+    KEEP = "Keep the artist and title as they are"
+
+    def __init__(self, screen, recs, credits, on_done):
+        super().__init__(screen)
+        self.on_done = on_done
+        self.title("Which part is the artist?")
+        self.transient(screen.winfo_toplevel())
+        self.resizable(True, False)
+        pad = ttk.Frame(self, padding=ui.PAD)
+        pad.pack(fill="both", expand=True)
+        pad.columnconfigure(1, weight=1)
+        ui.WrapLabel(pad, text="These titles have more than one ' - ', so the artist "
+                               "could end at either. Choose how to read each one.").grid(
+            row=0, column=0, columnspan=2, sticky="ew", pady=(0, ui.GAP))
+        self.boxes = {}
+        for i, r in enumerate(recs[:30], start=1):
+            c = credits[r.path]
+            ttk.Label(pad, text=r.title).grid(row=i, column=0, sticky="w",
+                                              padx=(0, ui.GAP), pady=3)
+            readings = {f"{a}  ·  {t}": (a, t) for a, t in c.splits}
+            box = ttk.Combobox(pad, state="readonly", width=48,
+                               values=list(readings) + [self.KEEP])
+            box.set(self.KEEP)
+            box.grid(row=i, column=1, sticky="ew", pady=3)
+            self.boxes[r.path] = (box, readings)
+        if len(recs) > 30:
+            ttk.Label(pad, style="Muted.TLabel",
+                      text=f"…and {len(recs) - 30:,} more, which keep their artist "
+                           "and title for now.").grid(row=99, column=0, columnspan=2,
+                                                       sticky="w")
+        buttons = ttk.Frame(pad)
+        buttons.grid(row=100, column=0, columnspan=2, sticky="e", pady=(ui.SECTION, 0))
+        ttk.Button(buttons, text="Cancel", command=self.destroy).pack(side="right")
+        ttk.Button(buttons, text="Continue…", default="active",
+                   command=self.done).pack(side="right", padx=(0, ui.GAP))
+        self.bind("<Escape>", lambda e: self.destroy())
+        self.update_idletasks()
+        self.geometry(f"+{screen.winfo_rootx() + 80}+{screen.winfo_rooty() + 60}")
+        self.grab_set()
+
+    def picks(self):
+        out = {}
+        for path, (box, readings) in self.boxes.items():
+            got = readings.get(box.get())
+            if got:
+                out[path] = got
+        return out
+
+    def done(self):
+        picks = self.picks()
+        self.destroy()
+        self.on_done(picks)

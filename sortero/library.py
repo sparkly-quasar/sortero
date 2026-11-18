@@ -33,6 +33,12 @@ class Rec:
     comment: str = None
     energylevel: str = None
     album: str = None
+    # What makes one release of many tracks: music servers like Navidrome show
+    # the tracks sharing an Album Artist and Album as one album.
+    albumartist: str = None
+    label: str = None
+    compilation: str = None     # "1" when set
+    tracknumber: str = None
     duration: float = 0.0
     bitrate: int = 0
     protected: bool = False
@@ -128,6 +134,8 @@ def scan(root, progress=None, order=None):
         except OSError:
             st = None
         got = cache.get(p, st) if st else None
+        if got is not None and got["tags"] and any(f not in got["tags"] for f in TAG_FIELDS):
+            got = None          # read before a scan kept this many tags
         if got is None:
             got = _read(p)
             if st:
@@ -154,7 +162,7 @@ def scan(root, progress=None, order=None):
 
 # The tags a scan keeps on each Rec, as tagcache stores them.
 TAG_FIELDS = ("artist", "title", "genre", "key", "bpm", "grouping", "comment",
-              "energylevel", "album")
+              "energylevel", "album", "albumartist", "label", "compilation", "tracknumber")
 
 
 def _read(path):

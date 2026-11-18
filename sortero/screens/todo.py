@@ -170,7 +170,22 @@ class TodoScreen(Screen):
                         "You'll see every change before anything is written.",
                       "Clean them…", lambda: app.clean_tags("repeat"))
 
-        others = [r for r, c in credits if c and c[0] == fixtags.OTHER]
+        release = fixtags.release_artist_flagged(app.recs or [])
+        labelled = [r for r in live if r.path in release
+                    and release[r.path].kind != fixtags.SAME_RELEASE]
+        if labelled:
+            r = next((r for r in labelled if release[r.path].kind == fixtags.LABEL),
+                     labelled[0])
+            self._job(f"{ui.plural(len(labelled), 'track')} whose artist tag names a "
+                      "label or 'Various Artists'",
+                      f"Like “{r.title}”, tagged as by {r.artist}. The real artist is "
+                      "in the title. Sortero can move it to the artist tag and give "
+                      "each release one Album Artist, so music servers keep it as one "
+                      "album. Filenames stay as they are.",
+                      "Show them", lambda: app.show_library("release_artist"))
+
+        others = [r for r, c in credits if c and c[0] == fixtags.OTHER
+                  and r.path not in release]
         if others:
             r = others[0]
             self._job(f"{ui.plural(len(others), 'track')} whose title names a "

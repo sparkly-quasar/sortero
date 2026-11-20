@@ -4,14 +4,14 @@ One column of five steps (gig/checklist.py). Only the open step shows its
 content and its one button; done steps are a tick and a line, steps not
 reached yet just a title. Each step's results stay inside that step.
 """
-import dataclasses, hashlib, json, os, time
+import dataclasses, hashlib, json, os, threading, time
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 from .. import mixxx, ui, paths, settings
 from ..common import human_size
 from ..gig import (backup, checklist, convert, cues, disks, ffmpeg, profiles, rbxml,
-                   onelibrary, usbexport, verify)
+                   onelibrary, stickstate, usbexport, verify)
 from ..gig.checklist import DONE, NEXT, WAITING
 from .base import Screen, APP
 from .gig_set import SetPicker, short
@@ -138,8 +138,11 @@ class GigScreen(Screen):
     def build(self):
         self.bar.pack_forget()          # each step carries its own button
         self.notice = ui.WrapLabel(self, style="Warn.TLabel", text="")
-        self.steps_frame = ttk.Frame(self)
-        self.steps_frame.pack(fill="both", expand=True)
+        # Scrolls in a small window: otherwise the open step squeezes the
+        # findings and pushes the later steps out of sight.
+        self.scroll = ui.ScrollFrame(self, stretch=True)
+        self.scroll.pack(fill="both", expand=True)
+        self.steps_frame = self.scroll.body
         self.cards = {}
         for key in checklist.KEYS:
             card = ui.StepCard(self.steps_frame, on_open=lambda k=key: self.open(k))
@@ -164,6 +167,8 @@ class GigScreen(Screen):
         self.state = checklist.State()
         self.open_key = None
         self.reports = {}               # "main" / "backup" -> the last verify.Report
+        self.sticks = {}                # "main" / "backup" -> where that stick is mounted
+        self.stick_states = {}          # "main" / "backup" -> stickstate.State, once looked at
         self.auto_checked = None        # the set the tracks were last checked for, unasked
         self.unreadable = []            # playlists that couldn't be read at the last check
         self.notice_text = ""
@@ -206,7 +211,32 @@ class GigScreen(Screen):
                                           ("why", "Why", 360)], height=3, selectmode="none")
         self.track_box = f
 
+    def _build_stick_panel(self, body, which):
+        """Which stick, what's on it, and what writing will do to it: before anything's
+        written, so a stick that needs formatting or holds someone else's library
+        is found out now, not after pressing Write."""
+        w = {"row": _links(body)}
+        head = _links(w["row"])
+        head.pack(fill="x")
+        _heading(head, "The stick").pack(side="left")
+        w["name"] = _label(head, tone="text", font=ui.STRONG)
+        w["name"].pack(side="left", padx=(ui.GAP, 0))
+        w["choose"] = _link(head, "Choose…", lambda: self.pick_stick(which))
+        w["choose"].pack(side="left", padx=(ui.GAP, 0))
+        w["again"] = _link(head, "Look again", lambda: self.look_at_stick(which))
+        w["what"] = _label(w["row"])
+        w["what"].pack(fill="x", pady=(2, 0))
+        w["plan"] = _label(w["row"], tone="text")
+        w["acts"] = _links(w["row"])
+        w["format"] = _button(w["acts"], "Format it as FAT32…", self.format_stick)
+        if which == "main":
+            w["replace"] = _button(w["acts"], "Replace it with tonight's set…",
+                                   self.write_main)
+        return w
+
     def _build_stick(self, body, which):
+        self.stick_panel = getattr(self, "stick_panel", {})
+        self.stick_panel[which] = self._build_stick_panel(body, which)
         top = _links(body)
         top.pack(fill="x")
         widgets = {"top": top}
@@ -276,7 +306,7 @@ class GigScreen(Screen):
         widgets["quick"] = _button(tools, "Faster check (doesn't play every track)…",
                                    lambda: self.check_main(decode=False) if which == "main"
                                    else self.check_backup(decode=False))
-        widgets["findings"] = Findings(body)
+        widgets["findings"] = Findings(body, height=7)
         widgets["tools"] = tools
         setattr(self, f"{which}_w", widgets)
 
@@ -538,9 +568,12 @@ class GigScreen(Screen):
         for key, card in self.cards.items():
             grows = key == self.open_key and self._grows(key)
             card.pack_configure(fill="both" if grows else "x", expand=grows)
+        if self.open_key != getattr(self, "_seen_key", None):
+            self._seen_key = self.open_key
+            self._show_open()
         if self.notice_text:
             self.notice.configure(text=self.notice_text)
-            self.notice.pack(fill="x", pady=(0, ui.GAP), before=self.steps_frame)
+            self.notice.pack(fill="x", pady=(0, ui.GAP), before=self.scroll)
         else:
             self.notice.pack_forget()
         n = checklist.KEYS.index(self.open_key) + 1
@@ -551,6 +584,10 @@ class GigScreen(Screen):
             self.header.set_summary(f"Step {n} of {len(checklist.KEYS)}: "
                                     f"{by_key[self.open_key].title}.")
         self._maybe_auto_check()
+
+    def _show_open(self):
+        """Bring the open step into view once it's laid out (in a small window)."""
+        self.after_idle(lambda: self.scroll.see(self.cards[self.open_key]))
 
     def _grows(self, key):
         if key == "set":
@@ -586,7 +623,49 @@ class GigScreen(Screen):
         else:
             self.track_box.pack_forget()
 
+    def _draw_stick_panel(self, which):
+        from ..gig import formatting
+        p, path = self.stick_panel[which], self.sticks.get(which)
+        state = self.stick_states.get(which)
+        there = bool(path and os.path.isdir(path))
+        for part in (p["again"], p["plan"], p["acts"], p["format"], p.get("replace")):
+            if part is not None:
+                part.pack_forget()
+        if not path:
+            p["name"].configure(text="none chosen yet")
+            p["choose"].configure(text="Choose…")
+            p["what"].configure(text="Choose the stick, and Sortero says what's on it and "
+                                     "what writing will do, before anything is written.")
+            return
+        name = os.path.basename(os.path.normpath(path)) or path
+        p["name"].configure(text=name)
+        p["choose"].configure(text="Change…")
+        if not there:
+            p["what"].configure(text=f"“{name}” isn't plugged in. Plug it in, then Look "
+                                     "again.")
+            p["again"].pack(side="left", padx=(ui.GAP, 0))
+            return
+        p["again"].pack(side="left", padx=(ui.GAP, 0))
+        if not state:
+            p["what"].configure(text="Looking at what's on it…")
+            return
+        p["what"].configure(text=" ".join(state.lines()))
+        engine = profiles.reads_engine(self.profile)
+        p["plan"].configure(text=state.main_plan(engine) if which == "main"
+                            else state.backup_plan())
+        p["plan"].pack(fill="x", pady=(4, 0))
+        shown = []
+        if state.needs_format and formatting.available():
+            shown.append(p["format"])
+        elif which == "main" and state.foreign(engine):
+            shown.append(p["replace"])
+        for b in shown:
+            b.pack(side="left", padx=(0, ui.GAP))
+        if shown:
+            p["acts"].pack(fill="x", pady=(ui.GAP, 0))
+
     def _draw_stick(self, which):
+        self._draw_stick_panel(which)
         st, w = self.state, getattr(self, f"{which}_w")
         report = self.reports.get(which)
         skipped = which == "main" and st.skip_main
@@ -624,6 +703,7 @@ class GigScreen(Screen):
                 if key != "sortero" or self._writes():
                     row.pack(fill="x", pady=(4, 0))
             order += [(self.route_box, not (st.main and st.main.ready)),
+                      (self.stick_panel["main"]["row"], st.direct and not choosing_skip),
                       (w["top"], bool(self.xml_label.cget("text") or has_how)
                        and not choosing_skip),
                       (self.again_row, st.direct and bool(st.main) and not choosing_skip),
@@ -642,7 +722,8 @@ class GigScreen(Screen):
                 "Each playlist becomes a numbered folder (01 Warmup/01 Artist - "
                 "Title.mp3), so a Pioneer or Denon player browsing folders, or a laptop "
                 "running Serato or other DJ software, finds the next track fast."))
-            order += [(w["top"], True), (self.eject_row, bool(mount))]
+            order += [(self.stick_panel["backup"]["row"], True),
+                      (w["top"], True), (self.eject_row, bool(mount))]
         f = w["findings"]
         if report and not skipped:
             extra = []
@@ -1004,9 +1085,62 @@ class GigScreen(Screen):
         gig_cues.open_for(self.app, self.target == convert.MP3, changed)
 
     def _choose_stick(self, which):
+        """The stick chosen for this step, if it's still plugged in, else ask."""
+        path = self.sticks.get(which)
+        if path and os.path.isdir(path):
+            return path
+        return self._ask_stick(which)
+
+    def _ask_stick(self, which):
         start = "/Volumes" if paths.IS_MAC and os.path.isdir("/Volumes") else None
-        return filedialog.askdirectory(title=f"Choose the {which} stick", initialdir=start,
+        path = filedialog.askdirectory(title=f"Choose the {which} stick", initialdir=start,
                                        mustexist=True)
+        if path:
+            self.sticks[which] = path
+            self.stick_states.pop(which, None)
+        return path
+
+    def pick_stick(self, which):
+        if self._ask_stick(which):
+            self.look_at_stick(which)
+
+    def look_at_stick(self, which):
+        """Read what's on the stick (a second or so: every file, both libraries)."""
+        path = self.sticks.get(which)
+        if not path or not os.path.isdir(path):
+            self.refresh()
+            return
+        self.stick_states.pop(which, None)
+        self.refresh()
+        profile, box = self.profile, {}
+
+        # Its own thread, not the app's task: a quiet read that shouldn't wait for,
+        # or get in the way of, a scan or a write
+        def work():
+            try:
+                box["state"] = stickstate.read(path, profile)
+            except Exception as e:          # pulled out part way, say
+                box["error"] = e
+
+        def poll():
+            if t.is_alive():
+                self.after(100, poll)
+                return
+            if self.sticks.get(which) == path and "state" in box:
+                self.stick_states[which] = box["state"]
+            self.refresh()
+
+        t = threading.Thread(target=work, daemon=True)
+        t.start()
+        self.after(100, poll)
+
+    def _stick_state_now(self, which, stick):
+        """What's on the stick, read now unless it was just looked at."""
+        state = self.stick_states.get(which)
+        if not state or state.stick != stick:
+            state = stickstate.read(stick, self.profile)
+            self.stick_states[which] = state
+        return state
 
     def _stick_usable(self, stick):
         """Before writing: a stick the players can't read at all is worth formatting
@@ -1069,9 +1203,24 @@ class GigScreen(Screen):
         if not stick or not self._stick_usable(stick):
             return
         engine = profiles.reads_engine(self.profile)
-        why = usbexport.foreign(stick, engine)
-        if why:
-            self._offer_format(f"Sortero won't write to this stick: {why}.")
+        state = self._stick_state_now("main", stick)
+        theirs = state.foreign(engine)
+        if theirs:
+            what = " and ".join(f"a {lib.app} library" for lib in theirs)
+            if not messagebox.askyesno(
+                    APP, f"“{state.name}” has {what} Sortero didn't write.\n\n"
+                         + "\n".join(line for line in state.lines()
+                                     if "didn't write" in line)
+                         + f"\n\nReplace it with tonight's set? Doing so "
+                           f"{stickstate.replace_summary(theirs)[5:]}\n\n"
+                         f"To keep it, use another stick, or export from {theirs[0].app} "
+                         "yourself (How do you want to make it?), which adds tonight's "
+                         "playlists to it.", icon="warning", default="no"):
+                return
+        elif usbexport.foreign(stick, engine):
+            # Something Sortero couldn't make sense of: leave it be
+            self._offer_format(f"Sortero won't write to this stick: "
+                               f"{usbexport.foreign(stick, engine)}.")
             return
         libraries = self._libraries()
         untried = ("This is new: the rekordbox libraries haven't been confirmed working on "
@@ -1082,12 +1231,15 @@ class GigScreen(Screen):
         if not messagebox.askokcancel(
                 APP, f"Sortero will copy tonight's tracks to the stick and write {libraries}, "
                      "with your playlists, beat grids, cue points, waveforms and artwork. "
-                     f"Then it checks the stick.\n\n{untried}"):
+                     "Then it checks the stick.\n\n"
+                     + ("" if theirs else state.main_plan(engine) + "\n\n") + untried):
             return
 
         def work(progress, log):
             made = make_xml(progress, log) if make_xml else None
             try:
+                if theirs:
+                    stickstate.replace(state, engine, log=log)
                 return made, usbexport.write(stick, path, progress=progress, log=log,
                                              engine=engine), None
             except (usbexport.StickError, OSError) as e:
@@ -1205,6 +1357,10 @@ class GigScreen(Screen):
                 self.open_key = role
                 self.notice_text = ""
                 self.refresh()
+            self._show_open()               # the findings, even in a small window
+            # What's on it changed if it was just written: look again, quietly
+            self.sticks[role] = stick
+            self.after_idle(lambda: self.look_at_stick(role))
 
         self.app.task.run(work, done, f"Checking the {role} stick")
 

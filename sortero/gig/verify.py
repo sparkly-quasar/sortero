@@ -489,14 +489,44 @@ def check_engine(stick, profile=None, entries=None):
                  details)
 
 
+# ffmpeg reads a file's cover art even when only the audio is decoded; a picture
+# it can't read (a JPEG labelled PNG is common) says nothing about the audio.
+_PICTURE = re.compile(r"^\[(png|mjpeg|jpeg2000|jpegls|bmp|gif|tiff|webp|image2) @")
+
+
 def _decode(path):
-    """'' if the file decodes cleanly from start to finish, else the first error."""
+    """'' if the audio decodes cleanly from start to finish, else the first error."""
     r = ffmpeg.run([ffmpeg.require("ffmpeg"), "-v", "error", "-xerror", "-nostdin", "-i", path,
                     "-map", "0:a:0", "-f", "null", "-"])
-    msg = r.stderr.decode("utf-8", "replace").strip()
-    if r.returncode != 0 or msg:
-        return msg.splitlines()[0] if msg else "ffmpeg stopped part way"
+    lines = [ln for ln in r.stderr.decode("utf-8", "replace").strip().splitlines()
+             if ln and not _PICTURE.match(ln)]
+    if r.returncode != 0 or lines:
+        # "[mp3float @ 0x7f…] Header missing" -> "Header missing"
+        return re.sub(r"^(\[[^\]]*\]\s*)+", "", lines[0]) if lines else "ffmpeg stopped part way"
     return ""
+
+
+def _again(stick):
+    """How to put fresh copies on this stick, as an instruction."""
+    from .backup import MANIFEST
+    from .usbexport import MARKER
+    if os.path.isfile(os.path.join(stick, MARKER)) or os.path.isfile(os.path.join(stick, MANIFEST)):
+        return "write this stick again in Sortero's Gig prep"
+    return "export the stick again"
+
+
+def _damaged(rel, error, original, again):
+    """What to say about a file that doesn't decode, having tried its original."""
+    if original and os.path.isfile(original):
+        if _decode(original):
+            return (f"{rel}: {error}. The original on this computer is damaged in the "
+                    "same way, so copying it again won't help: get a fresh copy from "
+                    "where you bought or downloaded it, or leave the track out of the set")
+        return (f"{rel}: {error}. The original plays cleanly, so only the copy is "
+                f"damaged: delete it from the stick, then {again}")
+    return (f"{rel}: {error}. Play the original to the end on this computer; if it "
+            "skips too, get a fresh copy from where you bought it. If it doesn't, "
+            f"delete this one from the stick, then {again}")
 
 
 def _inspect(e, profile, decode):
@@ -514,7 +544,10 @@ def _inspect(e, profile, decode):
     return problems, (_decode(e.path) if decode else None), unknown
 
 
-def check_audio(stick, entries, profile, decode=True, progress=None, workers=None):
+def check_audio(stick, entries, profile, decode=True, progress=None, workers=None,
+                originals=None):
+    """`originals` ({stick path: original}) lets the decode test say whether a
+    damaged file was damaged before it was copied."""
     audio = [e for e in entries if is_audio(e)]
     formats, broken, unknown = [], [], False
     workers = workers or max(1, min(4, os.cpu_count() or 1))
@@ -526,11 +559,13 @@ def check_audio(stick, entries, profile, decode=True, progress=None, workers=Non
             unknown = unknown or unk
             formats += problems
             if error:
-                broken.append(f"{e.rel}: {error}")
+                broken.append((e.rel, error))
             if progress:
                 progress(i, len(audio))
     formats.sort()
-    broken.sort()
+    again = _again(stick)
+    broken = [_damaged(rel, err, (originals or {}).get(rel), again)
+              for rel, err in sorted(broken)]
     n = len(audio)
     if unknown:
         fmt = Check("Formats", WARN, f"the {profile.name}'s manual has no format table, so "
@@ -547,14 +582,15 @@ def check_audio(stick, entries, profile, decode=True, progress=None, workers=Non
     if not decode:
         dec = Check("Decode test", WARN, "skipped. Run the full check before you leave.")
     elif broken:
-        dec = Check("Decode test", FAIL, f"{len(broken)} of {_plural(n, 'file')} don't "
-                    "play cleanly to the end. Copy them again from the originals.", broken)
+        dec = Check("Decode test", FAIL, f"{len(broken)} of {_plural(n, 'file')} have "
+                    "damaged audio that may skip or stop. What to do is under each one.",
+                    broken)
     else:
         dec = Check("Decode test", PASS, f"{_all(n, 'file')} play start to finish.")
     return fmt, dec
 
 
-def check_names(entries, profile):
+def check_names(entries, profile, stick=None):
     fails, warns = [], []
     depth = profile.folder_depth    # None: the maker states no limit
     per_folder, splits = {}, {}
@@ -589,9 +625,12 @@ def check_names(entries, profile):
                          f"{FOLDER_DISPLAY_MAX:,}")
     dots = [e.rel for e in entries if is_appledouble(e.rel)]
     if dots:
-        warns.append(f"{_plural(len(dots), 'macOS “._” file')} (e.g. {dots[0]}). Players "
-                     "browsing folders may list them as tracks that won't load. Sortero's "
-                     "backup step removes them.")
+        fix = ("Write this stick again in Sortero's Gig prep and it removes them" if ours
+               or (stick and os.path.isfile(os.path.join(stick, ".sortero-backup.json")))
+               else f"In Terminal, “dot_clean -m {stick or 'the stick'}” removes them")
+        warns.append(f"{_plural(len(dots), 'macOS “._” file')} (e.g. {dots[0]}), left by "
+                     "copying with Finder. Players browsing folders may list them as tracks "
+                     f"that won't load. {fix}.")
     if fails:
         return Check("Names and sizes", FAIL, f"{_plural(len(fails), 'problem')}.",
                      sorted(fails) + warns)
@@ -611,31 +650,49 @@ def _sha(path):
     return h.hexdigest()
 
 
-def check_checksums(entries, sources, progress=None):
+def match_sources(entries, sources):
+    """{stick path: original}. `sources` is that already, or a list of originals
+    matched to stick files by name and size."""
+    if isinstance(sources, dict):
+        return sources
+    by_key = {(os.path.basename(p).lower(), os.path.getsize(p)): p
+              for p in sources if os.path.isfile(p)}
+    return {e.rel: by_key[(os.path.basename(e.rel).lower(), e.size)]
+            for e in entries if is_audio(e)
+            and (os.path.basename(e.rel).lower(), e.size) in by_key}
+
+
+def check_checksums(entries, sources, progress=None, stick=None):
     """Compare stick files with the originals they were copied from.
 
     `sources` maps a stick path (relative, "/"-separated) to its original, or is
     a list of originals matched to stick files by name and size.
     """
-    if not isinstance(sources, dict):
-        by_key = {(os.path.basename(p).lower(), os.path.getsize(p)): p
-                  for p in sources if os.path.isfile(p)}
-        sources = {e.rel: by_key[(os.path.basename(e.rel).lower(), e.size)]
-                   for e in entries if is_audio(e)
-                   and (os.path.basename(e.rel).lower(), e.size) in by_key}
+    sources = match_sources(entries, sources)
     on_stick = {e.rel: e for e in entries}
-    bad, same = [], 0
+    changed, damaged, same = [], [], 0
     pairs = [(rel, src) for rel, src in sources.items() if rel in on_stick]
     for i, (rel, src) in enumerate(pairs, 1):
-        if not os.path.isfile(src) or _sha(on_stick[rel].path) != _sha(src):
-            bad.append(f"{rel}: differs from {src}")
+        if not os.path.isfile(src):
+            damaged.append(f"{rel}: its original ({src}) isn't there any more")
+        elif _sha(on_stick[rel].path) != _sha(src):
+            # Newer than the copy: edited since (new tags, most often), not damage
+            if os.path.getmtime(src) > os.path.getmtime(on_stick[rel].path) + 2:
+                changed.append(f"{rel}: the original has changed since it was copied "
+                               "(new tags, most likely)")
+            else:
+                damaged.append(f"{rel}: the copy differs from the original ({src}), so "
+                               "it's damaged. Delete it from the stick before you write "
+                               "the stick again")
         else:
             same += 1
         if progress:
             progress(i, len(pairs))
+    bad = changed + damaged
     if bad:
+        again = _again(stick) if stick else "copy them again"
         return Check("Checksums", FAIL, f"{len(bad)} of {_plural(len(pairs), 'file')} "
-                     "don't match their originals. Copy them again.", bad)
+                     f"don't match their originals. To fix: {again}.", bad)
     if not pairs:
         return Check("Checksums", WARN, "no file on the stick could be matched to an "
                                         "original.")
@@ -664,20 +721,22 @@ def verify(stick, profile=None, decode=True, sources=None, vol=None, progress=No
         report.checks.append(exp)
     if profiles.reads_engine(profile) and (has_engine or role != MAIN):
         report.checks.append(check_engine(stick, profile, entries))
-    report.checks += check_audio(stick, entries, profile, decode, progress)
+    from . import backup
+    # A stick Sortero wrote knows exactly where each file came from, which beats
+    # matching by name and size.
+    sources = backup.sources(stick) or sources
+    originals = match_sources(entries, sources) if sources else {}
+    report.checks += check_audio(stick, entries, profile, decode, progress,
+                                 originals=originals)
     report.audio = sum(1 for e in entries if is_audio(e))
     if any(os.path.isfile(os.path.join(stick, "PIONEER", "rekordbox", fn))
            for fn in LIBRARY_FILES.values()):
         report.libraries.append("rekordbox")
     if has_engine:
         report.libraries.append("Engine DJ")
-    report.checks.append(check_names(entries, profile))
-    from . import backup
-    # A stick Sortero wrote knows exactly where each file came from, which beats
-    # matching by name and size.
-    sources = backup.sources(stick) or sources
+    report.checks.append(check_names(entries, profile, stick))
     if sources:
-        report.checks.append(check_checksums(entries, sources))
+        report.checks.append(check_checksums(entries, originals, stick=stick))
     return report
 
 

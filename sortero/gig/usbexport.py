@@ -40,7 +40,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 
 from . import anlz, artwork, devicesql, enginelib, onelibrary, probe, waveform
-from .backup import TMP, _copy, fat_name
+from .backup import TMP, _copy, fat_name, sweep_appledouble
 from .cues import Grid, Mark, location_path, _float
 from .pdb import EXTRA, RELATIVE
 from ..version import __version__
@@ -77,6 +77,7 @@ class Result:
     engine: bool = False                            # wrote the Engine DJ library
     engine_repeats: list = field(default_factory=list)  # (playlist, title) Engine can't repeat
     engine_dropped_cues: list = field(default_factory=list)  # (title, n) past 8 pads / loops
+    appledouble: int = 0                            # macOS "._" files removed
 
 
 def _int(v):
@@ -254,12 +255,23 @@ def _put(stick, rel, data):
     os.replace(tmp, path)
 
 
+def up_to_date(src, dest):
+    """True if the stick's copy can stay: same size, and the original hasn't
+    changed since it was copied. Size alone isn't enough: retagging a track
+    often keeps its size (the tags have room to spare) and changes its bytes."""
+    try:
+        d, s = os.stat(dest), os.stat(src)
+    except OSError:
+        return False
+    # FAT32 keeps times to 2 seconds
+    return d.st_size == s.st_size and s.st_mtime <= d.st_mtime + 2
+
+
 def needed_space(p, stick):
     total = 0
     for t in p.tracks:
         dest = os.path.join(stick, *t.file_path.strip("/").split("/"))
-        if not (os.path.isfile(dest) and os.path.getsize(dest) == os.path.getsize(
-                p.sources[t.id])):
+        if not up_to_date(p.sources[t.id], dest):
             total += os.path.getsize(p.sources[t.id])
     return total
 
@@ -340,7 +352,7 @@ def write(stick, xml_path, progress=None, log=print, workers=None, cache=None, e
             queue(i + ahead)
             rel, src = t.file_path.strip("/"), p.sources[t.id]
             dest = os.path.join(stick, *rel.split("/"))
-            if os.path.isfile(dest) and os.path.getsize(dest) == os.path.getsize(src):
+            if up_to_date(src, dest):
                 res.unchanged.append(rel)
             else:
                 _copy(src, dest)
@@ -405,6 +417,7 @@ def write(stick, xml_path, progress=None, log=print, workers=None, cache=None, e
          "audio": sorted(wanted)},
         indent=1).encode("utf-8"))
     _put(stick, RELATIVE.replace(os.sep, "/"), db)
+    res.appledouble = sweep_appledouble(stick)
     log(f"Wrote {res.tracks} tracks and {res.playlists} playlists to {stick}"
         + (", with an Engine DJ library for Denon players" if res.engine else "")
         + f": {len(res.copied)} copied, {len(res.unchanged)} already there.")

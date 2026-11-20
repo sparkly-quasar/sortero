@@ -350,6 +350,26 @@ class Stick(TempDir):
         self.assertEqual(c.level, V.FAIL)
         self.assertIn("broken.mp3", c.details[0])
 
+    def test_damaged_original_says_copying_again_wont_help(self):
+        originals = self.path("originals")
+        os.makedirs(originals)
+        p = mp3(os.path.join(self.stick, "Sets", "broken.mp3"), seconds=4)
+        with open(p, "r+b") as fh:
+            fh.seek(os.path.getsize(p) // 2)
+            fh.write(os.urandom(4000))
+        shutil.copy(p, os.path.join(originals, "broken.mp3"))
+        c = self.check(self.run_check(sources=[os.path.join(originals, "broken.mp3")]),
+                       "Decode test")
+        self.assertEqual(c.level, V.FAIL)
+        self.assertIn("won't help", c.details[0])
+        self.assertNotIn(" @ 0x", c.details[0])
+
+    def test_unreadable_cover_art_isnt_damaged_audio(self):
+        err = subprocess.CompletedProcess([], 0, b"", b"[png @ 0xb02c30a80] Invalid PNG "
+                                                       b"signature 0xFFD8FFE000104A46.\n")
+        with mock.patch.object(V.ffmpeg, "run", return_value=err):
+            self.assertEqual(V._decode("x.mp3"), "")
+
     def test_quick_check_skips_decoding_and_says_so(self):
         r = self.run_check(decode=False)
         self.assertEqual(self.level(r, "Decode test"), V.WARN)
@@ -389,6 +409,13 @@ class Stick(TempDir):
                                          os.path.join(originals, "Demo Track 1.mp3")}),
                        "Checksums")
         self.assertEqual(c.level, V.FAIL)
+        self.assertIn("damaged", c.details[0])
+        later = os.path.getmtime(on) + 60
+        os.utime(os.path.join(originals, "Demo Track 1.mp3"), (later, later))
+        c = self.check(V.verify(self.stick, vol=GOOD, decode=False,
+                                sources=[os.path.join(originals, "Demo Track 1.mp3")]),
+                       "Checksums")
+        self.assertIn("changed since it was copied", c.details[0])
 
     def test_command_line(self):
         out = io.StringIO()

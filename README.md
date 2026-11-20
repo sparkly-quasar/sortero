@@ -587,9 +587,11 @@ are just a title.
    checks the stick. Cues come
    from your rekordbox library if you add an XML export of it in the cue points
    window (Mixed In Key's `rekordbox.xml` works too), then from Mixed In Key's
-   analysis in the files themselves, then from Mixxx. It
-   refuses a stick that already holds a library Sortero didn't write, and
-   running it again replaces only what Sortero put there. **This is new and hasn't been
+   analysis in the files themselves, then from Mixxx. A stick that already
+   holds a rekordbox or Engine DJ library Sortero didn't write isn't written
+   over unasked: **Replace it with tonight's set…** deletes that library and the
+   music it lists, and nothing else, once you've said yes. Running it again
+   replaces only what Sortero put there. **This is new and hasn't been
    confirmed on a real player yet**, so bring a second stick you trust until it has. (An
    XDJ-RX2 showed nothing on sticks from before v0.35.4, which left out the browse menu
    rekordbox's library carries; v0.35.4 writes it, and the stick check now looks for it.)
@@ -610,7 +612,8 @@ are just a title.
    cue pads, and checked against a library a Denon player wrote itself: the same
    schema, the same layouts, and artwork kept as Engine keeps it; see
    [docs/research](docs/research/writing-engine-library.md). An Engine library that
-   Engine DJ wrote, or has since added to or upgraded, is never overwritten.
+   Engine DJ wrote, or has since added to or upgraded, is only replaced when you
+   ask (see above).
 
    The writers are ports of [openboxxx](https://github.com/sparkly-quasar/openboxxx)'s
    (`export.pdb`, laid out page by page like a real rekordbox export) and
@@ -630,9 +633,13 @@ are just a title.
    for it instead. Open the step again to choose another way after all.
 
    Either stick, the main one or the folders one, is looked at as soon as you
-   choose it: one the players can't read (exFAT, say) is offered **Format it as
-   FAT32** before anything is copied, and so is a main stick holding a library
-   Sortero didn't write.
+   choose it, under *The stick* in its step: what's on it (empty, a set Sortero
+   wrote and when, with its playlists, a library Sortero didn't write, the
+   folders backup, other files, free space) and what writing will do to it. One
+   the players can't read (exFAT, say) is offered **Format it as FAT32** before
+   anything is copied; a main stick holding a library Sortero didn't write is
+   offered **Replace it with tonight's set…**, or *Export it yourself* to add
+   tonight's playlists to that library instead.
 
    Then **Check the main stick…**: the file system and
    partitions (FAT32 on one MBR partition is what every player reads), that a
@@ -777,8 +784,14 @@ Settings.
 ## What's new in v0.35.6
 
 v0.35.6 is the free download. Compared with v0.18.0, the free download before
-it, it adds what's below. The current version, **v0.38.1**, is what
-[Supporter licence](#supporting-sortero) holders get: Library shows its lists
+it, it adds what's below. The current version, **v0.39.0**, is what
+[Supporter licence](#supporting-sortero) holders get: a new
+[Set designer](#set-designer) screen that suggests what fits after each track
+in a set, from key, BPM, energy and your own playlists, says why, and puts a
+set in the order that flows best. Gig prep's main stick now carries an Engine
+DJ library for Denon players alongside rekordbox's, says what's on a stick and
+what writing will do before anything is written, can replace a library
+Sortero didn't write, and names each stage while it writes. Library shows its lists
 as buttons with their counts, and the tools for the selected tracks above the
 table, where they used to hide in a menu. Shrink to MP3 is in Tidy up, and To
 do says how much space it would save. Gig prep's main stick step

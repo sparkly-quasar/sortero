@@ -702,6 +702,20 @@ class Stick(TempDir):
         self.assertEqual(a.samples, 30 * 44100)
         self.assertTrue(a.overview)
 
+    def test_every_stage_says_what_its_doing(self):
+        # A long write with nothing on screen looks frozen
+        seen = []
+        U.write(self.stick, self.xml, log=lambda *a: None,
+                progress=lambda i, total, what=None: seen.append(what))
+        stages = list(dict.fromkeys(seen))
+        self.assertNotIn(None, stages)
+        for want in ("reading the set", "copying tracks and writing their analysis",
+                     "making the Engine DJ library", "writing the rekordbox library",
+                     "finishing"):
+            self.assertIn(want, stages)
+        self.assertLess(stages.index("reading the set"),
+                        stages.index("copying tracks and writing their analysis"))
+
     def test_a_retagged_original_the_same_size_is_copied_again(self):
         U.write(self.stick, self.xml, log=lambda *a: None)
         on = os.path.join(self.stick, "Contents", "Alpha", "Promo", "Opener.wav")

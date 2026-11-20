@@ -1066,8 +1066,11 @@ class GigScreen(Screen):
         shift = bool(settings.get("gig_mp3_cue_shift"))
 
         def work(progress, log):
+            progress(0, 0, "getting the set ready")
             finder = cues.Finder(source_xml, db, log=log)
-            tree, counts = rbxml.build(items, sets, rbxml.gig_name(), finder, shift)
+            tree, counts = rbxml.build(items, sets, rbxml.gig_name(), finder, shift,
+                                       progress=progress)
+            progress(0, 0, "saving the playlists file")
             os.makedirs(os.path.dirname(path), exist_ok=True)
             total = int(tree.getroot().find("COLLECTION").get("Entries"))
             return rbxml.write(path, tree), counts, total
@@ -1239,6 +1242,7 @@ class GigScreen(Screen):
             made = make_xml(progress, log) if make_xml else None
             try:
                 if theirs:
+                    progress(0, 0, "removing the old library")
                     stickstate.replace(state, engine, log=log)
                 return made, usbexport.write(stick, path, progress=progress, log=log,
                                              engine=engine), None

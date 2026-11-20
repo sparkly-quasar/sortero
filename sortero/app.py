@@ -51,10 +51,12 @@ class Task:
             return
         self.running = True
         self.app.set_status(f"{label}…")
-        self.app.progress.configure(value=0, maximum=100)
+        self._bar(busy=False)
 
-        def progress(i, total):
-            self.q.put(("progress", (i, total)))
+        def progress(i, total, what=None):
+            """i of total done. `what` names the stage, so a long job says what
+            it's doing; total=0 means it can't count, and the bar just moves."""
+            self.q.put(("progress", (i, total, what)))
 
         def log(msg):
             self.q.put(("log", msg))
@@ -69,25 +71,42 @@ class Task:
         threading.Thread(target=worker, daemon=True).start()
         self._poll(done, label)
 
+    def _bar(self, busy):
+        """A moving bar while a stage can't count, a filling one while it can."""
+        bar = self.app.progress
+        if busy and str(bar.cget("mode")) != "indeterminate":
+            bar.configure(mode="indeterminate", value=0)
+            bar.start(15)
+        elif not busy:
+            if str(bar.cget("mode")) == "indeterminate":
+                bar.stop()
+            bar.configure(mode="determinate", value=0, maximum=100)
+
     def _poll(self, done, label):
         try:
             while True:
                 kind, payload = self.q.get_nowait()
                 if kind == "progress":
-                    i, total = payload
-                    self.app.progress.configure(value=i, maximum=max(total, 1))
-                    self.app.set_status(f"{label}… {i:,} of {total:,}")
+                    i, total, what = payload
+                    head = f"{label}: {what}…" if what else f"{label}…"
+                    if total:
+                        self._bar(busy=False)
+                        self.app.progress.configure(value=i, maximum=total)
+                        self.app.set_status(f"{head} {i:,} of {total:,}")
+                    else:
+                        self._bar(busy=True)
+                        self.app.set_status(head)
                 elif kind == "log":
                     self.app.log(payload)
                 elif kind == "done":
                     self.running = False
-                    self.app.progress.configure(value=0)
+                    self._bar(busy=False)
                     self.app.set_status("Ready")
                     done(payload)
                     return
                 elif kind == "error":
                     self.running = False
-                    self.app.progress.configure(value=0)
+                    self._bar(busy=False)
                     self.app.set_status("Something went wrong")
                     self.app.log(payload)
                     self.app.refresh_todo()

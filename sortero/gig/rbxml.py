@@ -89,13 +89,16 @@ def _track_attrs(track_id, path, info):
     return {k: v for k, v in attrs.items() if v != ""}
 
 
-def build(items, sets, gig_name, finder=None, shift_mp3_copies=False):
+def build(items, sets, gig_name, finder=None, shift_mp3_copies=False, progress=None):
     """The XML tree, and how many tracks got cues and grids from where (cues.tally).
 
     `sets` is [(playlist name, [original paths in order])]; `items` the
-    checked tracks, which say what file plays for each original.
+    checked tracks, which say what file plays for each original. Reading each
+    track's cues means opening it, so `progress(i, total, what)` hears of each.
     """
     by_src = _usable(items)
+    total = len({cues.key(src) for _, originals in sets for src in originals
+                 if cues.key(src) in by_src})
     root = ET.Element("DJ_PLAYLISTS", Version="1.0.0")
     ET.SubElement(root, "PRODUCT", Name="Sortero", Version=__version__, Company="Sortero")
     collection = ET.SubElement(root, "COLLECTION")
@@ -107,6 +110,8 @@ def build(items, sets, gig_name, finder=None, shift_mp3_copies=False):
             return ids[k]
         tid = len(ids) + 1
         ids[k] = tid
+        if progress:
+            progress(tid, total, "reading cue points and beat grids")
         el = ET.SubElement(collection, "TRACK", _track_attrs(tid, it.playable, it.info))
         marks = finder.find(it.src) if finder else None
         if marks:

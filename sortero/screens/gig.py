@@ -32,6 +32,44 @@ ROUTES = [("sortero", "Sortero writes it", ""),
            "running Serato or other DJ software too.")]
 
 
+def _more(lines, shown, total):
+    return lines + ([f"…and {total - shown} more"] if total > shown else [])
+
+
+def written_notes(result):
+    """What's worth knowing about a main stick just written, a paragraph each,
+    saying which players it affects and what they'll show."""
+    notes = []
+    if result.missing:
+        n = len(result.missing)
+        notes.append("\n".join(_more(
+            [f"{ui.plural(n, 'track')} in the set couldn't be found on this computer, so "
+             f"{'it isn' if n == 1 else 'they aren'}'t on the stick:"]
+            + [f"  • {t}" for t, _ in result.missing[:6]], min(n, 6), n)))
+    if not result.onelibrary:
+        m = onelibrary.MISSING
+        notes.append(f"The stick has no OneLibrary ({m}). The newest Pioneer players "
+                     "read the older rekordbox library on it instead.")
+    repeats, dropped = result.engine_repeats, result.engine_dropped_cues
+    if repeats or dropped:
+        lines = ["On Denon players (Engine DJ) a few things won't show: Engine DJ lists a "
+                 "track once per playlist, and holds 8 hot cues and 8 loops a track. "
+                 "Pioneer players (rekordbox) have it all."]
+        lines += [f"  • {title} is in “{name}” twice; Denon players list it once"
+                  for name, title in repeats[:6]]
+        lines += [f"  • {title}: {ui.plural(n, 'cue')} won't show"
+                  for title, n in dropped[:6]]
+        shown = min(len(repeats), 6) + min(len(dropped), 6)
+        notes.append("\n".join(_more(lines, shown + 1, len(repeats) + len(dropped) + 1)))
+    if result.no_waveform:
+        n = len(result.no_waveform)
+        notes.append("\n".join(_more(
+            [f"{ui.plural(n, 'track')} couldn't be read for a waveform, so the players "
+             f"show none for {'it' if n == 1 else 'them'}. Beat grids and cues are there:"]
+            + [f"  • {t}: {why}" for t, why in result.no_waveform[:6]], min(n, 6), n)))
+    return notes
+
+
 def _profile_label(p):
     return f"{p.name} (safest)" if p.key == profiles.EVERY.key else p.name
 
@@ -1257,33 +1295,15 @@ class GigScreen(Screen):
                 messagebox.showerror(APP, error)
                 self.refresh()
                 return
-            if not result.onelibrary:
-                m = onelibrary.MISSING
-                messagebox.showwarning(
-                    APP, f"The stick has no OneLibrary. {m[:1].upper() + m[1:]}.\n\n"
-                         "Players other than the newest read the library that was written.")
-            if result.missing:
-                messagebox.showwarning(
-                    APP, f"{ui.plural(len(result.missing), 'track')} in the set "
-                         "couldn't be found on this computer, so they're not on the stick:\n\n"
-                         + "\n".join(t for t, _ in result.missing[:10]))
-            if result.engine_repeats or result.engine_dropped_cues:
-                lines = [f"{title}: in {name} once, not twice"
-                         for name, title in result.engine_repeats[:6]]
-                lines += [f"{title}: {ui.plural(n, 'cue')} past the 8 pads and 8 loops"
-                          for title, n in result.engine_dropped_cues[:6]]
-                messagebox.showwarning(
-                    APP, "The Engine DJ library for Denon players can't hold everything in "
-                         "the set: a playlist lists each track once, and a track has 8 hot "
-                         "cue pads and 8 saved loops. The rekordbox libraries have it all."
-                         "\n\n" + "\n".join(lines))
-            if result.no_waveform:
-                messagebox.showwarning(
-                    APP, f"{ui.plural(len(result.no_waveform), 'track')} couldn't be decoded "
-                         "for a waveform, so the players will show none for "
-                         f"{'it' if len(result.no_waveform) == 1 else 'them'} (the grid and "
-                         "cues are there):\n\n"
-                         + "\n".join(f"{t}: {why}" for t, why in result.no_waveform[:10]))
+            # One message, not one after another, and it says the check is next:
+            # a warning on its own read as if the job had finished
+            notes = written_notes(result)
+            if notes:
+                messagebox.showinfo(
+                    APP, "The stick is written. Worth knowing before you play it:\n\n"
+                         + "\n\n".join(notes)
+                         + "\n\nClick OK and Sortero checks the stick. It plays every track, "
+                           "so that takes a few minutes.")
             self._verify(stick, verify.MAIN, True,
                          rbxml.playlist_names(sets) if sets else None)
 

@@ -244,3 +244,19 @@ class CuePoints(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WrittenNotes(unittest.TestCase):
+    def test_denon_limits_say_which_players_and_what_wont_show(self):
+        from sortero.gig.usbexport import Result
+        from sortero.screens.gig import written_notes
+        r = Result(3, 1, onelibrary=True)
+        r.engine_repeats = [("05 Deep", "Electro Machine")]
+        r.engine_dropped_cues = [(f"T{i}", 8) for i in range(8)]
+        [note] = written_notes(r)
+        self.assertIn("On Denon players (Engine DJ)", note)
+        self.assertIn("Pioneer players (rekordbox) have it all", note)
+        self.assertIn("Electro Machine is in “05 Deep” twice", note)
+        self.assertIn("T0: 8 cues won't show", note)
+        self.assertIn("…and 2 more", note)      # 8 tracks over, 6 shown
+        self.assertEqual(written_notes(Result(1, 1, onelibrary=True)), [])

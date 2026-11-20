@@ -309,8 +309,13 @@ def write(stick, xml_path, progress=None, log=print, workers=None, cache=None, e
     Waveforms come from the copy on this computer, not the stick (no reading every
     track back over USB), a few tracks ahead of the copying, and are remembered
     (waveform.Cache), so writing the stick again only analyses what changed."""
+    def stage(what, i=0, total=0):
+        if progress:
+            progress(i, total, what)
+
     if not os.path.isdir(stick):
         raise StickError(f"{stick} isn't there")
+    stage("reading the set")
     mark = _marker(stick) or {}
     why = foreign(stick, engine)
     if why:
@@ -327,13 +332,26 @@ def write(stick, xml_path, progress=None, log=print, workers=None, cache=None, e
     res = Result(len(p.tracks), sum(1 for x in p.playlists if not x.folder),
                  missing=p.missing)
     wanted = {t.file_path.strip("/") for t in p.tracks}
+    stage("removing tracks that aren't in tonight's set")
     for rel in _manifest(stick):                    # our old copies not in this gig
         path = os.path.join(stick, *rel.split("/"))
         if rel not in wanted and os.path.isfile(path):
             os.remove(path)
             res.removed.append(rel)
-    for old in ("USBANLZ", "Artwork"):              # Sortero's own, from the last run
-        shutil.rmtree(os.path.join(stick, "PIONEER", old), ignore_errors=True)
+    # Sortero's own, from the last run: thousands of small files, slow on FAT32
+    old = [os.path.join(dirpath, fn)
+           for sub in ("USBANLZ", "Artwork")
+           for dirpath, _, files in os.walk(os.path.join(stick, "PIONEER", sub))
+           for fn in files]
+    for i, path in enumerate(old, 1):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        if i % 50 == 0 or i == len(old):
+            stage("clearing last time's analysis files", i, len(old))
+    for sub in ("USBANLZ", "Artwork"):
+        shutil.rmtree(os.path.join(stick, "PIONEER", sub), ignore_errors=True)
     art = artwork.Collector(engine=engine)
     total = len(p.tracks)
     cache = cache or waveform.Cache()
@@ -366,14 +384,14 @@ def write(stick, xml_path, progress=None, log=print, workers=None, cache=None, e
                 _put(stick, base + ext, data)
             if engine:
                 audio[t.id] = _engine_audio(t, src, p.grids.get(t.id, []), columns)
-            if progress:
-                progress(i, total)
+            stage("copying tracks and writing their analysis", i, total)
     finally:
         pool.shutdown(wait=True, cancel_futures=True)
     cache.prune()
     engine_mark = engine_db = None
     engine_art = {}
     if engine:
+        stage("making the Engine DJ library")
         # Made in full before any library goes on the stick: if it can't be, the
         # stick is left as it was, not with half a library and no marker.
         try:
@@ -388,8 +406,12 @@ def write(stick, xml_path, progress=None, log=print, workers=None, cache=None, e
         res.engine = True
         res.engine_repeats, res.engine_dropped_cues = built.repeats, built.dropped_cues
     # The databases last: until they're there, no player sees a half-written library.
-    for rel, data in list(art.files.items()) + list(engine_art.items()):
+    pictures = list(art.files.items()) + list(engine_art.items())
+    for i, (rel, data) in enumerate(pictures, 1):
         _put(stick, rel.replace(os.sep, "/"), data)
+        if i % 20 == 0 or i == len(pictures):
+            stage("writing artwork", i, len(pictures))
+    stage("writing the rekordbox library")
     res.artwork = len(art.ids)
     db = devicesql.build(p.tracks, p.playlists, artwork=art.table())
     folder = os.path.join(stick, os.path.dirname(RELATIVE))
@@ -397,6 +419,7 @@ def write(stick, xml_path, progress=None, log=print, workers=None, cache=None, e
     ol_path = os.path.join(folder, onelibrary.FILE_NAME)
     ol_size = None
     if onelibrary.available():
+        stage("writing OneLibrary for the newest players")
         name = os.path.basename(os.path.normpath(stick))
         onelibrary.build(ol_path, p.tracks, p.playlists, device_name=name,
                          artwork=art.table())
@@ -406,6 +429,7 @@ def write(stick, xml_path, progress=None, log=print, workers=None, cache=None, e
         log(f"  ! No OneLibrary: {onelibrary.MISSING}.")
         if os.path.exists(ol_path):
             os.remove(ol_path)      # Sortero's from an earlier run; it no longer matches
+    stage("finishing")
     engine_path = os.path.join(stick, enginelib.DATABASE)
     if engine_db is not None:
         _put(stick, enginelib.DATABASE.replace(os.sep, "/"), engine_db)

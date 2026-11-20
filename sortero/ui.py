@@ -210,10 +210,15 @@ class ScrollFrame(ttk.Frame):
     and Tidy up use it: a big collection can have more cards than a small window
     has room for, and the ones that didn't fit used to be cut off with no sign
     they were there.
+
+    stretch=True keeps the content at least as tall as the window, so a part
+    packed to expand still takes the spare room when everything fits, and the
+    page scrolls only when it doesn't (Gig prep).
     """
 
-    def __init__(self, parent, **kw):
+    def __init__(self, parent, stretch=False, **kw):
         super().__init__(parent, **kw)
+        self.stretch = stretch
         self.canvas = tk.Canvas(self, highlightthickness=0, bd=0, yscrollincrement=20)
         paint(self.canvas, bg="window")
         self.bar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
@@ -228,8 +233,11 @@ class ScrollFrame(ttk.Frame):
             self.bind_all(seq, self._wheel, add="+")
 
     def _fit(self):
-        self.canvas.configure(scrollregion=(0, 0, self.body.winfo_reqwidth(),
-                                            self.body.winfo_reqheight()))
+        h = self.body.winfo_reqheight()
+        if self.stretch:
+            h = max(h, self.canvas.winfo_height())
+            self.canvas.itemconfigure(self._win, height=h)
+        self.canvas.configure(scrollregion=(0, 0, self.body.winfo_reqwidth(), h))
 
     def _moved(self, first, last):
         self.bar.set(first, last)
@@ -246,6 +254,8 @@ class ScrollFrame(ttk.Frame):
             return
         if over is None or not str(over).startswith(str(self)):
             return
+        if over.winfo_class() in ("Text", "Treeview", "Listbox"):
+            return                                  # it scrolls itself
         if self.body.winfo_reqheight() <= self.canvas.winfo_height():
             return
         if e.num == 4:
@@ -260,6 +270,20 @@ class ScrollFrame(ttk.Frame):
 
     def to_top(self):
         self.canvas.yview_moveto(0)
+
+    def see(self, widget):
+        """Scroll so `widget` (inside .body) shows, from its top if it's taller
+        than the window. Leaves the scroll alone if it's already in view."""
+        self.update_idletasks()
+        total = max(self.body.winfo_height(), 1)
+        top = widget.winfo_rooty() - self.body.winfo_rooty()
+        bottom = top + widget.winfo_height()
+        first, last = (float(x) * total for x in self.canvas.yview())
+        if top >= first and bottom <= last:
+            return
+        view = last - first
+        y = top if bottom - top > view or top < first else bottom - view
+        self.canvas.yview_moveto(max(0, y) / total)
 
 
 def link(parent, text, command, style="Link.TLabel"):

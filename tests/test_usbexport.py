@@ -702,6 +702,26 @@ class Stick(TempDir):
         self.assertEqual(a.samples, 30 * 44100)
         self.assertTrue(a.overview)
 
+    def test_a_retagged_original_the_same_size_is_copied_again(self):
+        U.write(self.stick, self.xml, log=lambda *a: None)
+        on = os.path.join(self.stick, "Contents", "Alpha", "Promo", "Opener.wav")
+        with open(self.files[0], "r+b") as fh:     # new bytes, same size
+            fh.seek(-4, 2)
+            fh.write(b"\x01\x02\x03\x04")
+        later = os.path.getmtime(on) + 60
+        os.utime(self.files[0], (later, later))
+        res = U.write(self.stick, self.xml, log=lambda *a: None)
+        self.assertIn("Contents/Alpha/Promo/Opener.wav", res.copied)
+        with open(on, "rb") as a, open(self.files[0], "rb") as b:
+            self.assertEqual(a.read(), b.read())
+
+    def test_writing_clears_macos_dot_files(self):
+        with open(os.path.join(self.stick, "._Contents"), "wb") as fh:
+            fh.write(b"\0\x05\x16\x07" + b"\0" * 100)
+        res = U.write(self.stick, self.xml, log=lambda *a: None)
+        self.assertEqual(res.appledouble, 1)
+        self.assertFalse(os.path.exists(os.path.join(self.stick, "._Contents")))
+
     def test_tracks_missing_on_this_computer_are_reported(self):
         os.remove(self.files[1])
         res = U.write(self.stick, self.xml, log=lambda *a: None)

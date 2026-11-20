@@ -256,6 +256,141 @@ class LibraryNextSteps(unittest.TestCase):
         self.assertNotIn("new_title", lib.tv.cget("displaycolumns"))
 
 
+
+class LabelAsArtist(unittest.TestCase):
+    """Labels and 'Various Artists' in the artist tag: To do and Clean tags say
+    so, and Library lists them for review with what each becomes."""
+
+    @classmethod
+    def setUpClass(cls):
+        from mutagen.id3 import ID3, TPE1, TIT2, TALB
+        cls.root = tempfile.mkdtemp(prefix="sortero-release-")
+        album = "Rayzeh Selects 004"
+        for name, artist, title, alb in (
+                (f"Rayzeh - {album} - 01 RamouQ - Shifty Distant", "Rayzeh",
+                 "RamouQ - Shifty Distant", album),
+                (f"Rayzeh - {album} - 02 Paul Ursin - Atlas", "Rayzeh",
+                 "Paul Ursin - Atlas", album),
+                (f"Rayzeh - {album} - 03 Haze - C - Can't Sleep", "Rayzeh",
+                 "Haze - C - Can't Sleep", album),
+                ("Soundstream - Live Your Life", "Soundstream", "Live Your Life",
+                 "Soundstream")):
+            p = os.path.join(cls.root, "Psytrance", name + ".mp3")
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            tags = ID3()
+            tags.add(TPE1(encoding=3, text=[artist]))
+            tags.add(TIT2(encoding=3, text=[title]))
+            tags.add(TALB(encoding=3, text=[alb]))
+            tags.save(p)
+        for key, value in (("root", cls.root), ("setup_complete", True),
+                           ("check_updates_on_launch", False),
+                           ("release_artist_ignored", [])):
+            settings.set(key, value)
+        from sortero import fixtags
+        fixtags._release_left_alone_cache = None
+        from sortero.app import Sortero
+        try:
+            cls.app = Sortero()
+        except tk.TclError as e:
+            raise unittest.SkipTest(f"Tk can't open a window here ({e})")
+        cls.app.withdraw()
+        cls.app.recs = library.scan(cls.root)
+        cls.app.health = library.health(cls.app.recs)
+
+    @classmethod
+    def tearDownClass(cls):
+        from sortero import fixtags
+        settings.set("release_artist_ignored", [])
+        fixtags._release_left_alone_cache = None
+        app = getattr(cls, "app", None)
+        if app:
+            app.destroy()
+        shutil.rmtree(cls.root, ignore_errors=True)
+
+    def setUp(self):
+        from sortero import fixtags
+        settings.set("release_artist_ignored", [])
+        fixtags._release_left_alone_cache = None
+
+    def test_to_do_and_clean_tags_point_at_the_list(self):
+        todo = self.app.screens["todo"]
+        todo.refresh()
+        text = " | ".join(_texts(todo.cards, []))
+        self.assertIn("3 tracks whose artist tag names a label", text)
+        self.assertIn("tagged as by Rayzeh", text)
+        tags = self.app.screens["tags"]
+        tags.invalidate()
+        self.assertIn("Show the 3 tracks", " | ".join(_texts(tags.release_wrap, [])))
+
+    def test_listed_for_review(self):
+        app = self.app
+        app.show_library("all")
+        app.show_library("release_artist")
+        app.update()
+        lib = app.screens["library"]
+        self.assertEqual(len(lib.rows), 3)
+        self.assertIn("Album Artist", lib.guide_lab.cget("text"))
+        self.assertIn("new_albumartist", lib.tv.cget("displaycolumns"))
+        rows = {lib.rows[int(i)].title: i for i in lib.tv.get_children()}
+        ramouq = rows["RamouQ - Shifty Distant"]
+        self.assertEqual([lib.tv.set(ramouq, c) for c in
+                          ("new_artist", "new_title", "new_albumartist")],
+                         ["RamouQ", "Shifty Distant", "Various Artists"])
+        self.assertEqual(lib.tv.set(rows["Haze - C - Can't Sleep"], "new_artist"),
+                         "Haze or Haze - C?")
+        # the sure ones start selected; "Haze - C" is the user's to pick
+        selected = sorted(lib.rows[int(i)].title for i in lib.tv.selection())
+        self.assertEqual(selected, ["Paul Ursin - Atlas", "RamouQ - Shifty Distant"])
+        self.assertEqual(lib.bar.primary.cget("text"), "Fix 2 tracks…")
+
+        lib.tv.selection_set(rows["Haze - C - Can't Sleep"])
+        lib.leave_as_they_are()
+        self.assertEqual(sorted(r.title for r in lib.rows),
+                         ["Paul Ursin - Atlas", "RamouQ - Shifty Distant"])
+        # other lists don't show the album artist column
+        app.show_library("title_artist")
+        self.assertNotIn("new_albumartist", lib.tv.cget("displaycolumns"))
+
+    def test_fixing_asks_where_haze_c_ends(self):
+        from unittest import mock
+        from sortero.screens import tracks
+        from sortero.tagio import Track
+        app = self.app
+        app.show_library("all")
+        app.show_library("release_artist")
+        app.update()
+        lib = app.screens["library"]
+        lib.tv.selection_set(lib.tv.get_children())
+        picked = []
+
+        def pick(screen, recs, credits, on_done):
+            picked.extend(credits[r.path].splits for r in recs)
+            on_done({recs[0].path: ("Haze - C", "Can't Sleep")})
+        written = []
+        with mock.patch.object(tracks, "PickSplits", pick), \
+                mock.patch.object(tracks.messagebox, "askyesno", lambda *a: True), \
+                mock.patch.object(tracks.messagebox, "showinfo", lambda *a: None), \
+                mock.patch.object(app.task, "run",
+                                  lambda work, done, label: written.append(
+                                      work(lambda *a: None, lambda m: None))), \
+                mock.patch.object(app, "changed", lambda *a, **k: None):
+            lib.fix_release_artist()
+        self.assertEqual(picked, [(("Haze", "C - Can't Sleep"), ("Haze - C", "Can't Sleep"))])
+        self.assertEqual(written[0][1:], (3, 0))
+        names = sorted(os.listdir(os.path.join(self.root, "Psytrance")))
+        haze = next(n for n in names if "Haze" in n)
+        self.assertTrue(haze.startswith("Rayzeh - Rayzeh Selects 004 - 03"))   # not renamed
+        t = Track(os.path.join(self.root, "Psytrance", haze))
+        self.assertEqual((t.get("artist"), t.get("title"), t.get("albumartist"),
+                          t.get("label"), t.get("compilation"), t.get("tracknumber")),
+                         ("Haze - C", "Can't Sleep", "Various Artists", "Rayzeh", "1", "3"))
+        from sortero.journal import revert
+        revert(written[0][0], log=lambda m: None)
+        t = Track(os.path.join(self.root, "Psytrance", haze))
+        self.assertEqual((t.get("artist"), t.get("title"), t.get("albumartist")),
+                         ("Rayzeh", "Haze - C - Can't Sleep", None))
+
+
 class SpellingsWindow(unittest.TestCase):
     def setUp(self):
         from sortero import fixtags

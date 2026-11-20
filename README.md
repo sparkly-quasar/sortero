@@ -814,10 +814,18 @@ originals wait in an archive outside your collection until you're sure.
 - Titles that name a different artist from the tag ("Hraach - Una Mattina",
   tagged as by Dalal), listed with the result shown, so you fix the ones you
   pick.
+- Artist tags holding a record label, "Various Artists" or a release's whole
+  artist list, with the real artist in the title ("Rayzeh" / "RamouQ - Shifty
+  Distant"). Sortero spots them from the release, not the filename, moves the
+  artist out of the title, keeps the label as Label, and gives every track of
+  the release one Album Artist so music servers like Navidrome keep it as one
+  album. Filenames are never changed. A title like "Haze - C - Can't Sleep" is
+  yours to pick.
 - Artists spelled more than one way (Schwarzwalder and Schwarzwälder) spelled
   one way everywhere, with a window to check and correct the spelling Sortero
   picks.
-- Right-click a track in Library to edit its artist, title or album.
+- Right-click a track in Library to edit its artist, title, album, album
+  artist or label.
 - AIFF and WAV tags written inside the file, with a repair for files written
   the old way, and MusicBrainz and AcoustID IDs written into MP3s the way
   Picard does.

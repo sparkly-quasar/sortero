@@ -168,6 +168,9 @@ class CleanTagsScreen(ToolScreen):
         # things.
         self.card_wrap = ttk.Frame(self)
         self.card_wrap.pack(fill="x", pady=(ui.SECTION, ui.SECTION))
+        # labels and "Various Artists" in the artist tag: a review of its own,
+        # like the titles naming another artist, so it lists them in Library
+        self.release_wrap = ttk.Frame(self)
 
         self.pending = ttk.Label(self)
         self.pending.pack(anchor="w")
@@ -184,11 +187,13 @@ class CleanTagsScreen(ToolScreen):
         self.changes = None
         self.job = "fixes"
         self._build_card()
+        self._build_release_card()
         self._reset()
 
     def invalidate(self):
         self._show_detected()
         self._build_card()
+        self._build_release_card()
         self._reset(clear=True)
 
     # -- the artist/title panel -------------------------------------------
@@ -238,6 +243,24 @@ class CleanTagsScreen(ToolScreen):
                            link_command=(lambda: self.app.show_library("swapped"))
                            if n else None)
         card.pack(fill="x")
+
+    def _build_release_card(self):
+        for w in self.release_wrap.winfo_children():
+            w.destroy()
+        release = fixtags.release_artist_flagged(self.app.recs or [])
+        n = sum(1 for c in release.values() if c.kind != fixtags.SAME_RELEASE)
+        if not n:
+            self.release_wrap.pack_forget()
+            return
+        ui.Card(self.release_wrap, "Labels and 'Various Artists' in the artist tag",
+                f"{ui.plural(n, 'track')} {'has' if n == 1 else 'have'} a record label, "
+                "a placeholder like 'Various Artists' or a release's whole artist list "
+                "as the artist, with the real artist in the title. Check them and fix "
+                "the ones Sortero gets right; each release also gets one Album Artist.",
+                "Show it" if n == 1 else f"Show the {n:,} tracks",
+                lambda: self.app.show_library("release_artist")).pack(fill="x")
+        if not self.release_wrap.winfo_manager():
+            self.release_wrap.pack(fill="x", pady=(0, ui.SECTION), after=self.card_wrap)
 
     def check_spellings(self):
         """Show the spelling each artist will get, and let it be changed."""
